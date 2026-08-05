@@ -12,6 +12,7 @@ const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=
 const identities = { buyer: 'local-buyer', seller: 'local-seller', resolver: 'local-resolver' };
 const sessionRoles = new Set(['buyer', 'seller', 'resolver', 'guest', 'invitee']);
 const localAgreementId = 'local-demo-agreement';
+const sessionLifetimeMs = 8 * 60 * 60 * 1_000;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
@@ -65,15 +66,21 @@ function agreementFor(role, demo) {
 function participantSession(session) {
   return Boolean(session && ['buyer', 'seller'].includes(session.role) && session.agreementId === localAgreementId);
 }
+function activeSession(request, sessions, now) {
+  const id = cookie(request).pactflow_session;
+  const session = sessions.get(id);
+  if (session && now() - session.createdAt > sessionLifetimeMs) { sessions.delete(id); return undefined; }
+  return session;
+}
 
-export function createApp() {
+export function createApp({ now = () => Date.now() } = {}) {
   const sessions = new Map();
   const invitations = new Map();
   const participantTokens = new Map();
   const demo = createLocalDemo();
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
-    const session = sessions.get(cookie(request).pactflow_session);
+    const session = activeSession(request, sessions, now);
     try {
       if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'local-only', network: 'none', funds: 'no funds or external wallets' });
       if (url.pathname === '/api/session' && request.method === 'POST') {
@@ -85,7 +92,7 @@ export function createApp() {
           if (participantToken && rejoinToken !== participantToken) return respond(response, 403, { error: 'A valid local participant rejoin token is required.' });
           if (!participantToken) { participantToken = randomUUID(); participantTokens.set(role, participantToken); }
         }
-        const id = randomUUID(); sessions.set(id, { id, role, agreementId: participantToken ? localAgreementId : null, createdAt: Date.now() });
+        const id = randomUUID(); sessions.set(id, { id, role, agreementId: participantToken ? localAgreementId : null, createdAt: now() });
         return respond(response, 201, { role, ...(participantToken ? { rejoinToken: participantToken } : {}), mode: 'local-only' }, { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
       }
       if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, { role: session.role, mode: 'local-only' }) : respond(response, 401, { error: 'No local session.' });
@@ -99,7 +106,7 @@ export function createApp() {
         if (!participantSession(session)) return respond(response, 403, { error: 'Only an invited buyer or seller can invite a counterparty.' });
         const invitedRole = session.role === 'buyer' ? 'seller' : 'buyer';
         const id = randomUUID();
-        invitations.set(id, { id, agreementId: localAgreementId, invitedRole, inviter: session.role, status: 'pending', createdAt: Date.now() });
+        invitations.set(id, { id, agreementId: localAgreementId, invitedRole, inviter: session.role, status: 'pending', createdAt: now() });
         return respond(response, 201, { id, agreementId: localAgreementId, invitedRole, status: 'pending', mode: 'local-only' });
       }
       const invitationMatch = url.pathname.match(/^\/api\/agreement\/invitations\/([\w-]+)\/accept$/);
@@ -110,7 +117,7 @@ export function createApp() {
         if (!invitation || invitation.status !== 'pending') throw new RuleError('This invitation is invalid, expired, or already accepted.');
         const rejoinToken = randomUUID(); participantTokens.set(invitation.invitedRole, rejoinToken);
         session.role = invitation.invitedRole; session.agreementId = invitation.agreementId;
-        invitation.status = 'accepted'; invitation.acceptedAt = Date.now(); invitation.acceptedBy = session.id;
+        invitation.status = 'accepted'; invitation.acceptedAt = now(); invitation.acceptedBy = session.id;
         return respond(response, 200, { role: session.role, rejoinToken, invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status }, mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/copilot' && request.method === 'POST') {

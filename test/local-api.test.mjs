@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/server.mjs';
 
-async function start() {
-  const server = createApp();
+async function start(options) {
+  const server = createApp(options);
   await new Promise(resolve => server.listen(0, resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   return { server, origin };
@@ -94,6 +94,20 @@ test('an invitee must accept the intended one-time invitation before becoming a 
     const secondInviteeLogin = await api(origin, '/api/session', 'POST', { role: 'invitee' });
     const secondInviteeCookie = secondInviteeLogin.headers.get('set-cookie').split(';')[0];
     assert.equal((await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, secondInviteeCookie)).status, 422);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('an expired local participant session cannot read or act on an agreement', async () => {
+  let time = 1_000;
+  const { server, origin } = await start({ now: () => time });
+  try {
+    const buyerLogin = await api(origin, '/api/session', 'POST', { role: 'buyer' });
+    const buyerCookie = buyerLogin.headers.get('set-cookie').split(';')[0];
+    time += 8 * 60 * 60 * 1_000 + 1;
+    assert.equal((await api(origin, '/api/agreement', 'GET', undefined, buyerCookie)).status, 401);
+    assert.equal((await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, buyerCookie)).status, 401);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
