@@ -10,7 +10,7 @@ const publicRoot = join(root, 'public');
 const port = Number(process.env.PORT ?? 3000);
 const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const identities = { buyer: 'local-buyer', seller: 'local-seller', resolver: 'local-resolver' };
-const sessionRoles = new Set([...Object.keys(identities), 'guest']);
+const sessionRoles = new Set(['buyer', 'resolver', 'guest']);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
@@ -67,6 +67,7 @@ function participantSession(session) {
 
 export function createApp() {
   const sessions = new Map();
+  const invitations = new Map();
   const demo = createLocalDemo();
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -74,8 +75,8 @@ export function createApp() {
     try {
       if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'local-only', network: 'none', funds: 'no funds or external wallets' });
       if (url.pathname === '/api/session' && request.method === 'POST') {
-        const { role } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, seller, resolver, or guest.' });
-        const id = randomUUID(); sessions.set(id, { role, createdAt: Date.now() });
+        const { role } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
+        const id = randomUUID(); sessions.set(id, { id, role, createdAt: Date.now() });
         return respond(response, 201, { role, mode: 'local-only' }, { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
       }
       if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, { role: session.role, mode: 'local-only' }) : respond(response, 401, { error: 'No local session.' });
@@ -84,6 +85,23 @@ export function createApp() {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
         if (session.role === 'guest') return respond(response, 403, { error: 'This session is not invited to the agreement.' });
         return respond(response, 200, { agreement: agreementFor(session.role, demo), mode: 'local-only' });
+      }
+      if (url.pathname === '/api/agreement/invitations' && request.method === 'POST') {
+        if (!participantSession(session)) return respond(response, 403, { error: 'Only an invited buyer or seller can invite a counterparty.' });
+        const invitedRole = session.role === 'buyer' ? 'seller' : 'buyer';
+        const id = randomUUID();
+        invitations.set(id, { id, invitedRole, inviter: session.role, status: 'pending', createdAt: Date.now() });
+        return respond(response, 201, { id, invitedRole, status: 'pending', mode: 'local-only' });
+      }
+      const invitationMatch = url.pathname.match(/^\/api\/agreement\/invitations\/([\w-]+)\/accept$/);
+      if (invitationMatch && request.method === 'POST') {
+        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        if (session.role !== 'guest') return respond(response, 403, { error: 'Only a guest session can accept an invitation.' });
+        const invitation = invitations.get(invitationMatch[1]);
+        if (!invitation || invitation.status !== 'pending') throw new RuleError('This invitation is invalid, expired, or already accepted.');
+        session.role = invitation.invitedRole;
+        invitation.status = 'accepted'; invitation.acceptedAt = Date.now(); invitation.acceptedBy = session.id;
+        return respond(response, 200, { role: session.role, invitation: { id: invitation.id, status: invitation.status }, mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/copilot' && request.method === 'POST') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });

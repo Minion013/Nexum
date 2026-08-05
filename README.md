@@ -15,7 +15,7 @@ Open `http://localhost:3000`. `GET /health` reports the local-only demo health. 
 
 ## Demo runbook
 
-1. Open the app and select **buyer** or **seller** to establish a local simulated session. The server stores the session in memory and issues an HTTP-only cookie; it never requests a private key.
+1. Open the app and select **buyer** to establish a local simulated session. The server stores the session in memory and issues an HTTP-only cookie; it never requests a private key. Create the one-time local invitation, then sign out and choose **invited seller** to accept that code. The invitation and session records exist only while the local server runs.
 2. To demonstrate drafting, enter a plain-language brief and select **Suggest from brief**. Review and edit the scope, milestone allocations, evidence requirements, local-time deadlines, and review windows. The preview shows the retained UTC deadline. Suggestions remain drafts and cannot approve terms, release funds, judge quality, or resolve disputes.
 3. Save the editable draft. Earlier versions stay read-only with their approvals and field-level changes in **What changed and who approved**.
 4. Approve the same agreement version as buyer and seller; funding stays unavailable until both signatures are represented.
@@ -40,4 +40,4 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 The runnable demo and tested local rules engine cover editable validated custom drafts, deterministic co-pilot suggestions, immutable versions with approval and field-difference history, local participant-only data access, buyer-only simulated funding, sequential milestones, private-evidence hashes, acceptance and timeout release, buyer-controlled missed-delivery refunds, resolver-only splits, activity history, and local server sessions.
 
-The demo deliberately omits Privy authentication, real self-custodial wallets, durable invitations and participant records, Supabase, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service. It is a local development mode, not a secure production integration.
+The demo deliberately omits Privy authentication, real self-custodial wallets, durable invitation and participant records, Supabase, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service. It is a local development mode, not a secure production integration.

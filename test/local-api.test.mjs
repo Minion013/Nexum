@@ -24,8 +24,11 @@ test('local sessions enforce participant-only agreement access and drive shared 
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, buyerCookie)).status, 200);
     assert.equal((await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, buyerCookie)).status, 200);
 
-    const sellerLogin = await api(origin, '/api/session', 'POST', { role: 'seller' });
+    const invitation = await api(origin, '/api/agreement/invitations', 'POST', undefined, buyerCookie);
+    const { id } = await invitation.json();
+    const sellerLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
     const sellerCookie = sellerLogin.headers.get('set-cookie').split(';')[0];
+    assert.equal((await api(origin, `/api/agreement/invitations/${id}/accept`, 'POST', undefined, sellerCookie)).status, 200);
     const approved = await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, sellerCookie);
     assert.equal((await approved.json()).agreement.approvals.length, 2);
 
@@ -58,6 +61,32 @@ test('co-pilot suggestions stay editable drafts and unrelated sessions receive n
     assert.equal((await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, guestCookie)).status, 403);
     assert.equal((await api(origin, '/api/agreement/copilot', 'POST', { brief: 'Attempt an unauthorized agreement edit.' }, guestCookie)).status, 403);
     assert.equal((await api(origin, '/api/agreement/draft', 'PUT', { terms: suggestionBody.terms }, guestCookie)).status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('an invited guest must accept the intended one-time invitation before becoming a participant', async () => {
+  const { server, origin } = await start();
+  try {
+    const buyerLogin = await api(origin, '/api/session', 'POST', { role: 'buyer' });
+    const buyerCookie = buyerLogin.headers.get('set-cookie').split(';')[0];
+    const invitation = await api(origin, '/api/agreement/invitations', 'POST', undefined, buyerCookie);
+    assert.equal(invitation.status, 201);
+    const invitationBody = await invitation.json();
+    assert.equal(invitationBody.invitedRole, 'seller');
+
+    const guestLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
+    const guestCookie = guestLogin.headers.get('set-cookie').split(';')[0];
+    assert.equal((await api(origin, '/api/agreement', 'GET', undefined, guestCookie)).status, 403);
+    const accepted = await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, guestCookie);
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).role, 'seller');
+    assert.equal((await api(origin, '/api/agreement', 'GET', undefined, guestCookie)).status, 200);
+
+    const secondGuestLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
+    const secondGuestCookie = secondGuestLogin.headers.get('set-cookie').split(';')[0];
+    assert.equal((await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, secondGuestCookie)).status, 422);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
