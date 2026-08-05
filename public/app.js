@@ -61,9 +61,9 @@ function render() {
   $('#wallet-state').textContent = role ? `${role[0].toUpperCase() + role.slice(1)} local session` : 'No local session';
   $('#sign-in').hidden = Boolean(role); $('#sign-out').hidden = !role;
   const invitationPanel = $('#invitation-panel');
-  invitationPanel.hidden = !['buyer', 'seller', 'guest'].includes(role);
+  invitationPanel.hidden = !['buyer', 'seller', 'invitee'].includes(role);
   $('#create-invitation').hidden = !['buyer', 'seller'].includes(role);
-  $('#invitation-input').parentElement.hidden = role !== 'guest';
+  $('#invitation-input').parentElement.hidden = role !== 'invitee';
   if (!model) { $('#draft-panel').hidden = true; $('#version-panel').hidden = true; return; }
   const milestone = active();
   const approvals = model.approvals ?? [];
@@ -89,11 +89,18 @@ async function refresh() {
 }
 async function act(type) { try { model = (await request('/api/agreement/actions', { method: 'POST', body: JSON.stringify({ type }) })).agreement; draftDirty = false; showError(); render(); } catch (error) { showError(error.message); } }
 document.querySelector('[data-role="seller"]').textContent = 'Continue as invited seller';
-document.querySelectorAll('[data-role]').forEach(button => button.onclick = async () => { try { const selectedRole = button.dataset.role === 'seller' ? 'guest' : button.dataset.role; await request('/api/session', { method: 'POST', body: JSON.stringify({ role: selectedRole }) }); await refresh(); } catch (error) { showError(error.message); } });
+document.querySelectorAll('[data-role]').forEach(button => button.onclick = async () => { try {
+  const requestedRole = button.dataset.role;
+  const storedToken = localStorage.getItem(`pactflow-${requestedRole}-rejoin-token`);
+  const selectedRole = requestedRole === 'seller' && !storedToken ? 'invitee' : requestedRole;
+  const session = await request('/api/session', { method: 'POST', body: JSON.stringify({ role: selectedRole, rejoinToken: storedToken }) });
+  if (session.rejoinToken) localStorage.setItem(`pactflow-${session.role}-rejoin-token`, session.rejoinToken);
+  await refresh();
+} catch (error) { showError(error.message); } });
 $('#sign-in').onclick = () => $('#session-panel').scrollIntoView({ behavior: 'smooth' });
 $('#sign-out').onclick = async () => { await request('/api/session', { method: 'DELETE' }); draftTerms = null; await refresh(); };
 $('#create-invitation').onclick = async () => { try { const invitation = await request('/api/agreement/invitations', { method: 'POST' }); $('#invitation-code').textContent = `Share this one-time local invitation code with the counterparty: ${invitation.id}`; showError(); } catch (error) { showError(error.message); } };
-$('#accept-invitation').onclick = async () => { try { const code = $('#invitation-input').value.trim(); await request(`/api/agreement/invitations/${encodeURIComponent(code)}/accept`, { method: 'POST' }); await refresh(); } catch (error) { showError(error.message); } };
+$('#accept-invitation').onclick = async () => { try { const code = $('#invitation-input').value.trim(); const accepted = await request(`/api/agreement/invitations/${encodeURIComponent(code)}/accept`, { method: 'POST' }); localStorage.setItem(`pactflow-${accepted.role}-rejoin-token`, accepted.rejoinToken); await refresh(); } catch (error) { showError(error.message); } };
 ['approve', 'fund', 'evidence', 'accept', 'release', 'dispute', 'resolve', 'refund', 'amend'].forEach(type => { $(`#${type}`).onclick = () => act(type); });
 $('#copilot').onclick = async () => { try { const result = await request('/api/agreement/copilot', { method: 'POST', body: JSON.stringify({ brief: $('#copilot-brief').value }) }); draftTerms = result.terms; draftDirty = true; milestoneEditor(); showError(result.notice); } catch (error) { showError(error.message); } };
 $('#add-milestone').onclick = () => { if (draftTerms.milestones.length < 3) { const previous = draftTerms.milestones.at(-1); draftTerms.milestones.push({ ...previous, title: 'Additional delivery', deadline: previous.deadline + 7 * 86_400 }); draftDirty = true; milestoneEditor(); } };

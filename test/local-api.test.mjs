@@ -21,12 +21,15 @@ test('local sessions enforce participant-only agreement access and drive shared 
 
     const buyerLogin = await api(origin, '/api/session', 'POST', { role: 'buyer' });
     const buyerCookie = buyerLogin.headers.get('set-cookie').split(';')[0];
+    const buyerSession = await buyerLogin.clone().json();
+    assert.ok(buyerSession.rejoinToken);
+    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer' })).status, 403);
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, buyerCookie)).status, 200);
     assert.equal((await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, buyerCookie)).status, 200);
 
     const invitation = await api(origin, '/api/agreement/invitations', 'POST', undefined, buyerCookie);
     const { id } = await invitation.json();
-    const sellerLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
+    const sellerLogin = await api(origin, '/api/session', 'POST', { role: 'invitee' });
     const sellerCookie = sellerLogin.headers.get('set-cookie').split(';')[0];
     assert.equal((await api(origin, `/api/agreement/invitations/${id}/accept`, 'POST', undefined, sellerCookie)).status, 200);
     const approved = await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, sellerCookie);
@@ -35,6 +38,7 @@ test('local sessions enforce participant-only agreement access and drive shared 
     const funded = await api(origin, '/api/agreement/actions', 'POST', { type: 'fund' }, buyerCookie);
     assert.equal((await funded.json()).agreement.state, 'Funded');
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, sellerCookie)).status, 200);
+    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer', rejoinToken: buyerSession.rejoinToken })).status, 201);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
@@ -66,7 +70,7 @@ test('co-pilot suggestions stay editable drafts and unrelated sessions receive n
   }
 });
 
-test('an invited guest must accept the intended one-time invitation before becoming a participant', async () => {
+test('an invitee must accept the intended one-time invitation before becoming a participant', async () => {
   const { server, origin } = await start();
   try {
     const buyerLogin = await api(origin, '/api/session', 'POST', { role: 'buyer' });
@@ -79,14 +83,17 @@ test('an invited guest must accept the intended one-time invitation before becom
     const guestLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
     const guestCookie = guestLogin.headers.get('set-cookie').split(';')[0];
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, guestCookie)).status, 403);
-    const accepted = await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, guestCookie);
+    assert.equal((await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, guestCookie)).status, 403);
+    const inviteeLogin = await api(origin, '/api/session', 'POST', { role: 'invitee' });
+    const inviteeCookie = inviteeLogin.headers.get('set-cookie').split(';')[0];
+    const accepted = await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, inviteeCookie);
     assert.equal(accepted.status, 200);
     assert.equal((await accepted.json()).role, 'seller');
-    assert.equal((await api(origin, '/api/agreement', 'GET', undefined, guestCookie)).status, 200);
+    assert.equal((await api(origin, '/api/agreement', 'GET', undefined, inviteeCookie)).status, 200);
 
-    const secondGuestLogin = await api(origin, '/api/session', 'POST', { role: 'guest' });
-    const secondGuestCookie = secondGuestLogin.headers.get('set-cookie').split(';')[0];
-    assert.equal((await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, secondGuestCookie)).status, 422);
+    const secondInviteeLogin = await api(origin, '/api/session', 'POST', { role: 'invitee' });
+    const secondInviteeCookie = secondInviteeLogin.headers.get('set-cookie').split(';')[0];
+    assert.equal((await api(origin, `/api/agreement/invitations/${invitationBody.id}/accept`, 'POST', undefined, secondInviteeCookie)).status, 422);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

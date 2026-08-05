@@ -10,7 +10,8 @@ const publicRoot = join(root, 'public');
 const port = Number(process.env.PORT ?? 3000);
 const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const identities = { buyer: 'local-buyer', seller: 'local-seller', resolver: 'local-resolver' };
-const sessionRoles = new Set(['buyer', 'resolver', 'guest']);
+const sessionRoles = new Set(['buyer', 'seller', 'resolver', 'guest', 'invitee']);
+const localAgreementId = 'local-demo-agreement';
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
@@ -62,12 +63,13 @@ function agreementFor(role, demo) {
   throw new RuleError('This session is not invited to the agreement.');
 }
 function participantSession(session) {
-  return Boolean(session && ['buyer', 'seller'].includes(session.role));
+  return Boolean(session && ['buyer', 'seller'].includes(session.role) && session.agreementId === localAgreementId);
 }
 
 export function createApp() {
   const sessions = new Map();
   const invitations = new Map();
+  const participantTokens = new Map();
   const demo = createLocalDemo();
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -75,33 +77,41 @@ export function createApp() {
     try {
       if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'local-only', network: 'none', funds: 'no funds or external wallets' });
       if (url.pathname === '/api/session' && request.method === 'POST') {
-        const { role } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
-        const id = randomUUID(); sessions.set(id, { id, role, createdAt: Date.now() });
-        return respond(response, 201, { role, mode: 'local-only' }, { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
+        const { role, rejoinToken } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
+        let participantToken;
+        if (role === 'buyer' || role === 'seller') {
+          participantToken = participantTokens.get(role);
+          if (!participantToken && role === 'seller') return respond(response, 403, { error: 'Seller access requires an accepted invitation.' });
+          if (participantToken && rejoinToken !== participantToken) return respond(response, 403, { error: 'A valid local participant rejoin token is required.' });
+          if (!participantToken) { participantToken = randomUUID(); participantTokens.set(role, participantToken); }
+        }
+        const id = randomUUID(); sessions.set(id, { id, role, agreementId: participantToken ? localAgreementId : null, createdAt: Date.now() });
+        return respond(response, 201, { role, ...(participantToken ? { rejoinToken: participantToken } : {}), mode: 'local-only' }, { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
       }
       if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, { role: session.role, mode: 'local-only' }) : respond(response, 401, { error: 'No local session.' });
       if (url.pathname === '/api/session' && request.method === 'DELETE') { if (session) sessions.delete(cookie(request).pactflow_session); return respond(response, 204, {}, { 'set-cookie': 'pactflow_session=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/' }); }
       if (url.pathname === '/api/agreement' && request.method === 'GET') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
-        if (session.role === 'guest') return respond(response, 403, { error: 'This session is not invited to the agreement.' });
+        if (session.role !== 'resolver' && !participantSession(session)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
         return respond(response, 200, { agreement: agreementFor(session.role, demo), mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/invitations' && request.method === 'POST') {
         if (!participantSession(session)) return respond(response, 403, { error: 'Only an invited buyer or seller can invite a counterparty.' });
         const invitedRole = session.role === 'buyer' ? 'seller' : 'buyer';
         const id = randomUUID();
-        invitations.set(id, { id, invitedRole, inviter: session.role, status: 'pending', createdAt: Date.now() });
-        return respond(response, 201, { id, invitedRole, status: 'pending', mode: 'local-only' });
+        invitations.set(id, { id, agreementId: localAgreementId, invitedRole, inviter: session.role, status: 'pending', createdAt: Date.now() });
+        return respond(response, 201, { id, agreementId: localAgreementId, invitedRole, status: 'pending', mode: 'local-only' });
       }
       const invitationMatch = url.pathname.match(/^\/api\/agreement\/invitations\/([\w-]+)\/accept$/);
       if (invitationMatch && request.method === 'POST') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
-        if (session.role !== 'guest') return respond(response, 403, { error: 'Only a guest session can accept an invitation.' });
+        if (session.role !== 'invitee') return respond(response, 403, { error: 'Only an invitee session can accept an invitation.' });
         const invitation = invitations.get(invitationMatch[1]);
         if (!invitation || invitation.status !== 'pending') throw new RuleError('This invitation is invalid, expired, or already accepted.');
-        session.role = invitation.invitedRole;
+        const rejoinToken = randomUUID(); participantTokens.set(invitation.invitedRole, rejoinToken);
+        session.role = invitation.invitedRole; session.agreementId = invitation.agreementId;
         invitation.status = 'accepted'; invitation.acceptedAt = Date.now(); invitation.acceptedBy = session.id;
-        return respond(response, 200, { role: session.role, invitation: { id: invitation.id, status: invitation.status }, mode: 'local-only' });
+        return respond(response, 200, { role: session.role, rejoinToken, invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status }, mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/copilot' && request.method === 'POST') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
@@ -118,6 +128,7 @@ export function createApp() {
       if (url.pathname === '/api/agreement/actions' && request.method === 'POST') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
         if (!Object.hasOwn(identities, session.role)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
+        if (['buyer', 'seller'].includes(session.role) && !participantSession(session)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
         const { type } = await json(request); return respond(response, 200, { agreement: demo.act(session.role, type), mode: 'local-only' });
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown local endpoint.' });
