@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import test from 'node:test';
 import ganache from 'ganache';
 import solc from 'solc';
@@ -8,7 +9,7 @@ import { BrowserProvider, Contract, ContractFactory, NonceManager, Wallet, ZeroA
 const contractPaths = ['contracts/EscrowVault.sol', 'contracts/EscrowVaultFactory.sol'];
 
 async function compileContracts() {
-  const sources = Object.fromEntries(await Promise.all(contractPaths.map(async (path) => [path, { content: await readFile(path, 'utf8') }])));
+  const sources = Object.fromEntries(await Promise.all(contractPaths.map(async (path) => [path, { content: await readFile(join('..', path), 'utf8') }])));
   const output = JSON.parse(solc.compile(JSON.stringify({
     language: 'Solidity',
     sources,

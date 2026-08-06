@@ -1,8 +1,11 @@
+import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyAccessToken as verifyPrivyAccessToken, verifyIdentityToken } from '@privy-io/node';
+import { createRemoteJWKSet } from 'jose';
 import { AgreementEngine, RuleError, suggestDraft } from './agreement-engine.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -17,6 +20,7 @@ const sessionLifetimeMs = 8 * 60 * 60 * 1_000;
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
 function respond(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }); response.end(JSON.stringify(body)); }
+class AuthenticationError extends Error {}
 function cookie(request) { return Object.fromEntries((request.headers.cookie ?? '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(([key]) => key)); }
 async function json(request) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > 64_000) throw new RuleError('Request is too large.'); } return body ? JSON.parse(body) : {}; }
 function safeFile(urlPath) { const requested = urlPath === '/' ? '/index.html' : urlPath; const file = normalize(join(publicRoot, requested)); return file.startsWith(publicRoot) ? file : null; }
@@ -69,33 +73,68 @@ function participantSession(session) {
 function activeSession(request, sessions, now) {
   const id = cookie(request).pactflow_session;
   const session = sessions.get(id);
-  if (session && now() - session.createdAt > sessionLifetimeMs) { sessions.delete(id); return undefined; }
+  if (session && (now() - session.createdAt > sessionLifetimeMs || now() >= session.expiresAt)) { sessions.delete(id); return undefined; }
   return session;
 }
+function sessionPayload(session) {
+  return { role: session.role, userId: session.userId, walletAddress: session.walletAddress, mode: 'privy-testnet' };
+}
 
-export function createApp({ now = () => Date.now() } = {}) {
+function createPrivyVerifier() {
+  const appId = process.env.PRIVY_APP_ID;
+  const appSecret = process.env.PRIVY_APP_SECRET;
+  if (!appId || !appSecret) return async () => { throw new AuthenticationError('Privy is not configured.'); };
+  const credentials = Buffer.from(`${appId}:${appSecret}`).toString('base64');
+  const verificationKey = createRemoteJWKSet(new URL(`/v1/apps/${appId}/jwks.json`, process.env.PRIVY_API_BASE_URL ?? 'https://api.privy.io'), {
+    headers: { authorization: `Basic ${credentials}`, 'privy-app-id': appId }
+  });
+  return async (accessToken, identityToken) => {
+    if (typeof accessToken !== 'string' || !accessToken) throw new AuthenticationError('A Privy access token is required.');
+    if (typeof identityToken !== 'string' || !identityToken) throw new AuthenticationError('A Privy identity token is required.');
+    try {
+      const [access, identity] = await Promise.all([
+        verifyPrivyAccessToken({ access_token: accessToken, app_id: appId, verification_key: verificationKey }),
+        verifyIdentityToken({ identity_token: identityToken, app_id: appId, verification_key: verificationKey })
+      ]);
+      if (access.user_id !== identity.id) throw new AuthenticationError('Privy tokens do not belong to the same user.');
+      const walletAddresses = identity.linked_accounts
+        .filter(account => account.type === 'wallet' && account.chain_type === 'ethereum')
+        .map(account => account.address.toLowerCase());
+      return { userId: access.user_id, expiresAt: access.expiration * 1_000, walletAddresses };
+    } catch {
+      throw new AuthenticationError('Privy authentication is invalid or expired.');
+    }
+  };
+}
+
+export function createApp({ now = () => Date.now(), verifyAccessToken = createPrivyVerifier() } = {}) {
   const sessions = new Map();
   const invitations = new Map();
-  const participantTokens = new Map();
+  const participantUsers = new Map();
   const demo = createLocalDemo();
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const session = activeSession(request, sessions, now);
     try {
-      if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'local-only', network: 'none', funds: 'no funds or external wallets' });
+      if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'privy-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { appId: process.env.PRIVY_APP_ID ?? null, mode: 'privy-testnet' });
       if (url.pathname === '/api/session' && request.method === 'POST') {
-        const { role, rejoinToken } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
-        let participantToken;
+        const { role, accessToken, identityToken, walletAddress } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
+        let authenticated;
+        try { authenticated = await verifyAccessToken(accessToken, identityToken); } catch { throw new AuthenticationError('Privy authentication is invalid or expired.'); }
+        if (!authenticated?.userId || !Number.isFinite(authenticated.expiresAt) || !Array.isArray(authenticated.walletAddresses)) throw new AuthenticationError('Privy did not return a valid authenticated session.');
+        if (typeof walletAddress !== 'string' || !/^0x[\da-fA-F]{40}$/.test(walletAddress)) return respond(response, 400, { error: 'Wallet address must be an Ethereum address.' });
+        if (!authenticated.walletAddresses.includes(walletAddress.toLowerCase())) return respond(response, 403, { error: 'The selected wallet is not linked to this Privy account.', code: 'wallet_not_linked' });
         if (role === 'buyer' || role === 'seller') {
-          participantToken = participantTokens.get(role);
-          if (!participantToken && role === 'seller') return respond(response, 403, { error: 'Seller access requires an accepted invitation.' });
-          if (participantToken && rejoinToken !== participantToken) return respond(response, 403, { error: 'A valid local participant rejoin token is required.' });
-          if (!participantToken) { participantToken = randomUUID(); participantTokens.set(role, participantToken); }
+          const participantUser = participantUsers.get(role);
+          if (!participantUser && role === 'seller') return respond(response, 403, { error: 'Seller access requires an accepted invitation.', code: 'seller_invitation_required' });
+          if (participantUser && authenticated.userId !== participantUser) return respond(response, 403, { error: 'This Privy account is not the assigned local participant.', code: 'participant_not_assigned' });
+          if (!participantUser) participantUsers.set(role, authenticated.userId);
         }
-        const id = randomUUID(); sessions.set(id, { id, role, agreementId: participantToken ? localAgreementId : null, createdAt: now() });
-        return respond(response, 201, { role, ...(participantToken ? { rejoinToken: participantToken } : {}), mode: 'local-only' }, { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
+        const id = randomUUID(); const created = { id, role, userId: authenticated.userId, walletAddress, agreementId: participantUsers.get(role) === authenticated.userId ? localAgreementId : null, createdAt: now(), expiresAt: Math.min(authenticated.expiresAt, now() + sessionLifetimeMs) }; sessions.set(id, created);
+        return respond(response, 201, sessionPayload(created), { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
       }
-      if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, { role: session.role, mode: 'local-only' }) : respond(response, 401, { error: 'No local session.' });
+      if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, sessionPayload(session)) : respond(response, 401, { error: 'No authenticated session.' });
       if (url.pathname === '/api/session' && request.method === 'DELETE') { if (session) sessions.delete(cookie(request).pactflow_session); return respond(response, 204, {}, { 'set-cookie': 'pactflow_session=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/' }); }
       if (url.pathname === '/api/agreement' && request.method === 'GET') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
@@ -115,10 +154,10 @@ export function createApp({ now = () => Date.now() } = {}) {
         if (session.role !== 'invitee') return respond(response, 403, { error: 'Only an invitee session can accept an invitation.' });
         const invitation = invitations.get(invitationMatch[1]);
         if (!invitation || invitation.status !== 'pending') throw new RuleError('This invitation is invalid, expired, or already accepted.');
-        const rejoinToken = randomUUID(); participantTokens.set(invitation.invitedRole, rejoinToken);
+        participantUsers.set(invitation.invitedRole, session.userId);
         session.role = invitation.invitedRole; session.agreementId = invitation.agreementId;
         invitation.status = 'accepted'; invitation.acceptedAt = now(); invitation.acceptedBy = session.id;
-        return respond(response, 200, { role: session.role, rejoinToken, invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status }, mode: 'local-only' });
+        return respond(response, 200, { ...sessionPayload(session), invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status } });
       }
       if (url.pathname === '/api/agreement/copilot' && request.method === 'POST') {
         if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
@@ -146,7 +185,7 @@ export function createApp({ now = () => Date.now() } = {}) {
       if (request.method === 'HEAD') return response.end();
       createReadStream(file).pipe(response);
     } catch (error) {
-      const status = error instanceof SyntaxError ? 400 : error instanceof RuleError ? 422 : 500;
+      const status = error instanceof SyntaxError ? 400 : error instanceof AuthenticationError ? 401 : error instanceof RuleError ? 422 : 500;
       respond(response, status, { error: status === 500 ? 'Local demo request failed.' : error.message });
     }
   });

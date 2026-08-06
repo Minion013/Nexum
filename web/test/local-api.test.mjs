@@ -3,14 +3,44 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/server.mjs';
 
 async function start(options) {
-  const server = createApp(options);
+  const verifier = async (accessToken) => {
+    if (!accessToken?.startsWith('test-privy-')) throw new Error('invalid test token');
+    return { userId: accessToken, expiresAt: Date.now() + 60_000, walletAddresses: [testWallet(accessToken)] };
+  };
+  const server = createApp({ verifyAccessToken: verifier, ...options });
   await new Promise(resolve => server.listen(0, resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   return { server, origin };
 }
-async function api(origin, path, method = 'GET', body, cookie) {
-  return fetch(`${origin}${path}`, { method, headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+function testWallet(accessToken) {
+  const suffix = ({ 'test-privy-buyer': '0001', 'test-privy-seller': '0002', 'test-privy-resolver': '0003', 'test-privy-guest': '0004', 'test-privy-invitee': '0005' })[accessToken] ?? '0006';
+  return `0x${suffix.padStart(40, '0')}`;
 }
+async function api(origin, path, method = 'GET', body, cookie) {
+  const accessToken = `test-privy-${body?.role}`;
+  const authenticatedBody = path === '/api/session' && method === 'POST' && body && !body.accessToken ? { ...body, accessToken, identityToken: `test-identity-${body.role}`, walletAddress: testWallet(accessToken) } : body;
+  return fetch(`${origin}${path}`, { method, headers: { ...(authenticatedBody ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: authenticatedBody ? JSON.stringify(authenticatedBody) : undefined });
+}
+
+test('only a verified Privy access token can create a participant session', async () => {
+  const { server, origin } = await start({
+    verifyAccessToken: async (accessToken) => {
+      if (accessToken !== 'valid-privy-token') throw new Error('invalid token');
+      return { userId: 'did:privy:buyer', expiresAt: Date.now() + 60_000, walletAddresses: ['0x0000000000000000000000000000000000001234'] };
+    }
+  });
+  try {
+    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer', accessToken: 'invalid-token' })).status, 401);
+    const foreignWallet = await api(origin, '/api/session', 'POST', { role: 'buyer', accessToken: 'valid-privy-token', walletAddress: '0x0000000000000000000000000000000000009999' });
+    assert.equal(foreignWallet.status, 403);
+    assert.equal((await foreignWallet.json()).code, 'wallet_not_linked');
+    const verified = await api(origin, '/api/session', 'POST', { role: 'buyer', accessToken: 'valid-privy-token', walletAddress: '0x0000000000000000000000000000000000001234' });
+    assert.equal(verified.status, 201);
+    assert.deepEqual(await verified.json(), { role: 'buyer', userId: 'did:privy:buyer', walletAddress: '0x0000000000000000000000000000000000001234', mode: 'privy-testnet' });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 test('local sessions enforce participant-only agreement access and drive shared local state', async () => {
   const { server, origin } = await start();
@@ -21,9 +51,8 @@ test('local sessions enforce participant-only agreement access and drive shared 
 
     const buyerLogin = await api(origin, '/api/session', 'POST', { role: 'buyer' });
     const buyerCookie = buyerLogin.headers.get('set-cookie').split(';')[0];
-    const buyerSession = await buyerLogin.clone().json();
-    assert.ok(buyerSession.rejoinToken);
-    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer' })).status, 403);
+    await buyerLogin.clone().json();
+    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer' })).status, 201);
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, buyerCookie)).status, 200);
     assert.equal((await api(origin, '/api/agreement/actions', 'POST', { type: 'approve' }, buyerCookie)).status, 200);
 
@@ -38,7 +67,7 @@ test('local sessions enforce participant-only agreement access and drive shared 
     const funded = await api(origin, '/api/agreement/actions', 'POST', { type: 'fund' }, buyerCookie);
     assert.equal((await funded.json()).agreement.state, 'Funded');
     assert.equal((await api(origin, '/api/agreement', 'GET', undefined, sellerCookie)).status, 200);
-    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer', rejoinToken: buyerSession.rejoinToken })).status, 201);
+    assert.equal((await api(origin, '/api/session', 'POST', { role: 'buyer' })).status, 201);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

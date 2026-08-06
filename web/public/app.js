@@ -1,8 +1,14 @@
+import Privy, { LocalStorage, getUserEmbeddedEthereumWallet } from '@privy-io/js-sdk-core';
+
 const $ = selector => document.querySelector(selector);
 let role = null;
 let model = null;
 let draftTerms = null;
 let draftDirty = false;
+let privy = null;
+let accessToken = null;
+let identityToken = null;
+let walletAddress = null;
 const money = value => `${(value / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2 })} simulated eUSD`;
 const active = () => model?.milestones.find(milestone => ['Active', 'InReview', 'Disputed'].includes(milestone.status)) || model?.milestones[0];
 const enable = (id, allowed) => { $(id).disabled = !allowed; };
@@ -17,10 +23,56 @@ const deadline = seconds => `${new Date(seconds * 1000).toLocaleString()} (UTC $
 async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
   const payload = response.status === 204 ? {} : await response.json();
-  if (!response.ok) throw new Error(payload.error || 'The local request failed.');
+  if (!response.ok) {
+    const error = new Error(payload.error || 'The local request failed.');
+    error.code = payload.code;
+    throw error;
+  }
   return payload;
 }
 function showError(message = '') { $('#request-error').hidden = !message; $('#request-error').textContent = message; }
+function shortAddress(address) { return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : 'pending wallet'; }
+async function initializePrivy() {
+  const { appId } = await request('/api/auth/config');
+  if (!appId) throw new Error('Privy is not configured for this environment.');
+  privy = new Privy({ appId, storage: new LocalStorage() });
+  await privy.initialize();
+  accessToken = await privy.getAccessToken();
+}
+async function prepareWallet() {
+  const email = $('#email').value.trim();
+  const code = $('#email-code').value.trim();
+  if (!email || !code) throw new Error('Enter the email address and the Privy sign-in code.');
+  const authenticated = await privy.auth.email.loginWithCode(email, code);
+  let user = authenticated.user ?? authenticated;
+  let wallet = getUserEmbeddedEthereumWallet(user);
+  if (!wallet) {
+    const created = await privy.embeddedWallet.create();
+    user = created.user ?? created;
+    wallet = getUserEmbeddedEthereumWallet(user);
+  }
+  if (!wallet?.address) throw new Error('Privy did not return an embedded Ethereum wallet.');
+  accessToken = await privy.getAccessToken();
+  identityToken = await privy.getIdentityToken();
+  if (!accessToken) throw new Error('Privy did not return an access token.');
+  if (!identityToken) throw new Error('Privy did not return an identity token.');
+  walletAddress = wallet.address;
+  $('#auth-controls').hidden = true;
+  $('#role-controls').hidden = false;
+  showError('Privy sign-in complete. Choose your local agreement role. Your wallet remains user-controlled.');
+}
+async function startSession(requestedRole) {
+  if (!accessToken || !identityToken || !walletAddress) throw new Error('Sign in with Privy and prepare a wallet first.');
+  const create = async roleToCreate => request('/api/session', { method: 'POST', body: JSON.stringify({ role: roleToCreate, accessToken, identityToken, walletAddress }) });
+  let session;
+  try { session = await create(requestedRole); } catch (error) {
+    if (requestedRole !== 'seller' || error.code !== 'seller_invitation_required') throw error;
+    session = await create('invitee');
+  }
+  role = session.role;
+  walletAddress = session.walletAddress ?? walletAddress;
+  await refresh();
+}
 function milestoneEditor() {
   if (!draftTerms) return;
   $('#draft-scope').value = draftTerms.scope;
@@ -58,7 +110,7 @@ function renderVersions() {
   }).join('');
 }
 function render() {
-  $('#wallet-state').textContent = role ? `${role[0].toUpperCase() + role.slice(1)} local session` : 'No local session';
+  $('#wallet-state').textContent = role ? `${role[0].toUpperCase() + role.slice(1)} · Privy test wallet ${shortAddress(walletAddress)}` : 'No authenticated session';
   $('#sign-in').hidden = Boolean(role); $('#sign-out').hidden = !role;
   const invitationPanel = $('#invitation-panel');
   invitationPanel.hidden = !['buyer', 'seller', 'invitee'].includes(role);
@@ -83,28 +135,23 @@ function render() {
   renderVersions();
 }
 async function refresh() {
-  try { role = (await request('/api/session')).role; } catch { role = null; }
+  try { const session = await request('/api/session'); role = session.role; walletAddress = session.walletAddress ?? walletAddress; } catch { role = null; }
   try { model = (await request('/api/agreement')).agreement; draftDirty = false; showError(); } catch { model = null; }
   render();
 }
 async function act(type) { try { model = (await request('/api/agreement/actions', { method: 'POST', body: JSON.stringify({ type }) })).agreement; draftDirty = false; showError(); render(); } catch (error) { showError(error.message); } }
-document.querySelector('[data-role="seller"]').textContent = 'Continue as invited seller';
-document.querySelectorAll('[data-role]').forEach(button => button.onclick = async () => { try {
-  const requestedRole = button.dataset.role;
-  const storedToken = localStorage.getItem(`pactflow-${requestedRole}-rejoin-token`);
-  const selectedRole = requestedRole === 'seller' && !storedToken ? 'invitee' : requestedRole;
-  const session = await request('/api/session', { method: 'POST', body: JSON.stringify({ role: selectedRole, rejoinToken: storedToken }) });
-  if (session.rejoinToken) localStorage.setItem(`pactflow-${session.role}-rejoin-token`, session.rejoinToken);
-  await refresh();
-} catch (error) { showError(error.message); } });
+document.querySelectorAll('[data-role]').forEach(button => button.onclick = async () => { try { await startSession(button.dataset.role); } catch (error) { showError(error.message); } });
 $('#sign-in').onclick = () => $('#session-panel').scrollIntoView({ behavior: 'smooth' });
-$('#sign-out').onclick = async () => { await request('/api/session', { method: 'DELETE' }); draftTerms = null; await refresh(); };
+$('#send-code').onclick = async () => { try { if (!privy) await initializePrivy(); const email = $('#email').value.trim(); if (!email) throw new Error('Enter an email address.'); await privy.auth.email.sendCode(email); $('#email-code').hidden = false; $('#verify-code').hidden = false; showError('Privy sent a one-time sign-in code.'); } catch (error) { showError(error.message); } };
+$('#verify-code').onclick = async () => { try { if (!privy) await initializePrivy(); await prepareWallet(); } catch (error) { showError(error.message); } };
+$('#sign-out').onclick = async () => { try { await request('/api/session', { method: 'DELETE' }); if (privy) await privy.auth.logout(); accessToken = null; identityToken = null; walletAddress = null; draftTerms = null; $('#auth-controls').hidden = false; $('#role-controls').hidden = true; await refresh(); } catch (error) { showError(error.message); } };
 $('#create-invitation').onclick = async () => { try { const invitation = await request('/api/agreement/invitations', { method: 'POST' }); $('#invitation-code').textContent = `Share this one-time local invitation code with the counterparty: ${invitation.id}`; showError(); } catch (error) { showError(error.message); } };
-$('#accept-invitation').onclick = async () => { try { const code = $('#invitation-input').value.trim(); const accepted = await request(`/api/agreement/invitations/${encodeURIComponent(code)}/accept`, { method: 'POST' }); localStorage.setItem(`pactflow-${accepted.role}-rejoin-token`, accepted.rejoinToken); await refresh(); } catch (error) { showError(error.message); } };
+$('#accept-invitation').onclick = async () => { try { const code = $('#invitation-input').value.trim(); await request(`/api/agreement/invitations/${encodeURIComponent(code)}/accept`, { method: 'POST' }); await refresh(); } catch (error) { showError(error.message); } };
 ['approve', 'fund', 'evidence', 'accept', 'release', 'dispute', 'resolve', 'refund', 'amend'].forEach(type => { $(`#${type}`).onclick = () => act(type); });
 $('#copilot').onclick = async () => { try { const result = await request('/api/agreement/copilot', { method: 'POST', body: JSON.stringify({ brief: $('#copilot-brief').value }) }); draftTerms = result.terms; draftDirty = true; milestoneEditor(); showError(result.notice); } catch (error) { showError(error.message); } };
 $('#add-milestone').onclick = () => { if (draftTerms.milestones.length < 3) { const previous = draftTerms.milestones.at(-1); draftTerms.milestones.push({ ...previous, title: 'Additional delivery', deadline: previous.deadline + 7 * 86_400 }); draftDirty = true; milestoneEditor(); } };
 $('#milestone-editor').onclick = event => { const index = Number(event.target.dataset.removeMilestone); if (Number.isInteger(index)) { draftTerms.milestones.splice(index, 1); draftDirty = true; milestoneEditor(); } };
 $('#draft-form').oninput = () => { draftDirty = true; updateDraftPreview(); };
 $('#draft-form').onsubmit = async event => { event.preventDefault(); try { model = (await request('/api/agreement/draft', { method: 'PUT', body: JSON.stringify({ terms: termsFromForm() }) })).agreement; draftDirty = false; showError(); render(); } catch (error) { showError(error.message); } };
+initializePrivy().catch(error => showError(error.message));
 refresh();
