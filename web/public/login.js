@@ -1,5 +1,6 @@
 import { authenticatedRequest, supabase } from './supabase-auth.js';
 import { createMagicLinkSender } from './magic-link.js';
+import { restoreMagicLinkSession } from './magic-link-session.js';
 
 const $ = selector => document.querySelector(selector);
 let magicLinkSender;
@@ -40,4 +41,6 @@ async function beginSession(role) {
 $('#login-form').onsubmit = async event => { event.preventDefault(); try { await sendMagicLink(); } catch (error) { showMessage(error.message); } };
 $('#resend-link').onclick = async () => { try { await sendMagicLink(); } catch (error) { showMessage(error.message); } };
 document.querySelectorAll('[data-role]').forEach(button => { button.onclick = async () => { try { await beginSession(button.dataset.role); } catch (error) { showMessage(error.message); } }; });
-(async () => { const { data: { session } } = await (await supabase()).auth.getSession(); if (session) showRoleSelection(); })().catch(error => showMessage(error.message));
+const callbackParameters = new URLSearchParams(`${window.location.search.slice(1)}&${window.location.hash.slice(1)}`);
+const isMagicLinkCallback = callbackParameters.has('code') || callbackParameters.has('access_token') || callbackParameters.has('error');
+(async () => restoreMagicLinkSession({ auth: (await supabase()).auth, isCallback: isMagicLinkCallback, onAuthenticated: showRoleSelection, onCallbackFailure: showMessage }))().catch(error => showMessage(error.message));
