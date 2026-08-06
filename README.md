@@ -11,7 +11,7 @@ npm.cmd --prefix web run contracts:check
 npm.cmd --prefix web start
 ```
 
-Copy `web/.env.example` to `web/.env` and set the Supabase project URL and publishable key. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the authenticated local-simulation health.
+Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the authenticated local-simulation health.
 
 ## Demo runbook
 
