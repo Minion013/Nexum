@@ -4,24 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Sign in to PactFlow." />
-    <title>Log in — PactFlow</title>
+    <title>Log in &mdash; PactFlow</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/responsive.css" />
   </head>
   <body class="auth-page">
-    <header class="auth-header"><a class="brand" href="/">Pact<span>Flow</span></a><a class="back-link" href="/">← Back to home</a></header>
+    <header class="auth-header"><a class="brand" href="/">Pact<span>Flow</span></a><a class="back-link" href="/">&larr; Back to home</a></header>
     <main class="auth-main">
       <section class="auth-card" aria-labelledby="login-title">
-        <p class="eyebrow">Welcome to PactFlow</p>
-        <h1 id="login-title">Let’s get you in.</h1>
-        <p class="auth-intro">Enter your email and we’ll send a secure sign-in link.</p>
-        <form id="login-form" novalidate>
-          <label for="email">Email address</label>
-          <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
-          <button id="send-link" class="button button-dark auth-submit" type="submit">Send sign-in link</button>
-        </form>
-        <button id="resend-link" class="ghost" type="button" hidden>Resend sign-in link</button>
-        <div id="role-controls" hidden><p class="role-prompt">How are you joining this project?</p><div class="role-options"><button data-role="buyer" type="button"><strong>I’m hiring a creator</strong><span>Start or manage a project</span></button><button data-role="seller" type="button"><strong>I’m a creator</strong><span>Join with an invitation</span></button><button data-role="resolver" type="button"><strong>I’m helping resolve</strong><span>Access the project record</span></button></div></div>
+        <div id="email-entry">
+          <p class="eyebrow">PactFlow account</p>
+          <h1 id="login-title">Sign in or create your account.</h1>
+          <p class="auth-intro">Use the same secure email link whether you are new here or returning.</p>
+          <form id="login-form" novalidate>
+            <label for="email">Email address</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+            <button id="send-link" class="button button-dark auth-submit" type="submit">Send sign-in link</button>
+          </form>
+          <p class="auth-assurance">No password to remember. We never reveal whether an email already has an account.</p>
+        </div>
+        <section id="email-sent" class="email-sent" aria-labelledby="email-sent-title" hidden>
+          <div class="email-icon" aria-hidden="true">@</div>
+          <p class="eyebrow">One more step</p>
+          <h1 id="email-sent-title">Check your inbox.</h1>
+          <p class="auth-intro">We sent a secure sign-in link to <strong id="sent-email"></strong>. Open it in this browser to continue.</p>
+          <div class="email-actions"><button id="resend-link" class="button button-dark" type="button" hidden>Resend sign-in link</button><button id="change-email" class="text-button" type="button">Use a different email</button></div>
+          <p class="auth-assurance">The link works for both new and returning PactFlow accounts.</p>
+        </section>
+        <section id="role-controls" class="access-choice" aria-labelledby="role-title" hidden>
+          <p id="role-eyebrow" class="eyebrow"></p>
+          <h1 id="role-title"></h1>
+          <p id="role-intro" class="auth-intro"></p>
+          <p class="role-prompt">Choose your local demo access</p>
+          <div class="role-options"><button data-role="buyer" type="button"><strong>I&rsquo;m hiring a creator</strong><span>Start or manage a project</span></button><button data-role="seller" type="button"><strong>I&rsquo;m a creator</strong><span>Join with an invitation</span></button><button data-role="resolver" type="button"><strong>I&rsquo;m helping resolve</strong><span>Access the project record</span></button></div>
+          <p class="auth-assurance">This choice sets access for the local demo, not a permanent account type.</p>
+        </section>
         <p id="request-error" class="form-message" aria-live="polite" hidden></p>
       </section>
       <p class="auth-note">A simple, secure way to begin your project together.</p>

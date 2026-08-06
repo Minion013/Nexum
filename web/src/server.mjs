@@ -9,13 +9,38 @@ import { AgreementEngine, RuleError, suggestDraft } from './agreement-engine.mjs
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const publicRoot = join(root, 'public');
-const port = Number(process.env.PORT ?? 3000);
 const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const identities = { buyer: 'local-buyer', seller: 'local-seller', resolver: 'local-resolver' };
 const localRoles = new Set(['buyer', 'seller', 'resolver', 'guest', 'invitee']);
 const localAgreementId = 'local-demo-agreement';
 
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+function configuredValue(environment, key) {
+  const value = environment[key]?.trim();
+  if (!value) throw new Error(`${key} must be configured before PactFlow starts.`);
+  return value;
+}
+function configuredHttpUrl(environment, key) {
+  const value = configuredValue(environment, key);
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol');
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    throw new Error(`${key} must be a valid HTTP(S) URL.`);
+  }
+}
+
+export function runtimeConfigurationFromEnvironment(environment = process.env) {
+  const port = Number(environment.PORT ?? 3000);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+  return {
+    port,
+    publicSupabaseConfig: {
+      url: configuredHttpUrl(environment, 'SUPABASE_URL'),
+      publishableKey: configuredValue(environment, 'SUPABASE_PUBLISHABLE_KEY')
+    }
+  };
+}
 
 function respond(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }); response.end(JSON.stringify(body)); }
 class AuthenticationError extends Error {}
@@ -77,18 +102,29 @@ function createSupabaseSessionVerifier(config = publicSupabaseConfigFromEnvironm
     return { id: user.id, email: user.email ?? null };
   };
 }
-function createProfileLoader(config = publicSupabaseConfigFromEnvironment()) {
+export function createProfileLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ userId, accessToken }) => {
+    const supabase = createSupabaseClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
+    const { error: provisioningError } = await supabase.rpc('ensure_profile');
+    if (provisioningError) throw new AuthenticationError('We could not prepare your PactFlow profile.');
+    const { data, error } = await supabase.from('profiles').select('id, email, display_name, onboarding_completed_at').eq('id', userId).single();
+    if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
+    return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
+  };
+}
+function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvironment()) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
     const supabase = createClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
-    const { data, error } = await supabase.from('profiles').select('id, email, display_name').eq('id', userId).single();
-    if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
-    return { id: data.id, email: data.email, displayName: data.display_name };
+    const { data, error } = await supabase.from('profiles').update({ onboarding_completed_at: new Date().toISOString() }).eq('id', userId).select('id, email, display_name, onboarding_completed_at').single();
+    if (error || !data) throw new AuthenticationError('We could not save your PactFlow setup.');
+    return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
   };
 }
 function sessionPayload(session, profile) { return { role: session.role, user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const invitations = new Map();
   const participantUsers = new Map();
   const localSessions = new Map();
@@ -123,6 +159,12 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, sessionPayload(session, profile));
+      }
+      if (url.pathname === '/api/onboarding/complete' && request.method === 'POST') {
+        const session = await authenticate();
+        if (!session.role) return respond(response, 409, { error: 'Choose a local demo access before completing setup.' });
+        const profile = await completeProfileOnboarding({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, { profile });
       }
       if (url.pathname === '/api/session' && request.method === 'DELETE') { const session = await authenticate(); localSessions.delete(session.userId); return respond(response, 204, {}); }
       if (url.pathname === '/api/agreement' && request.method === 'GET') {
@@ -185,4 +227,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
   });
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) createApp().listen(port, () => console.log(`PactFlow local demo ready at http://localhost:${port}`));
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const runtimeConfiguration = runtimeConfigurationFromEnvironment();
+  createApp({ publicSupabaseConfig: runtimeConfiguration.publicSupabaseConfig }).listen(runtimeConfiguration.port, () => {
+    console.log(`PactFlow local demo ready at http://localhost:${runtimeConfiguration.port}`);
+  });
+}

@@ -2,10 +2,12 @@
 
 **What to build:** A buyer or seller can invite the counterparty into a payment agreement, and only those participants can view or change its private coordination data.
 
-**Blocked by:** 02 — Create secure participant sessions and wallets.
+**Blocked by:** 02 — Establish Supabase participant accounts and sessions.
 
-**Status:** complete locally; production authentication and durable storage remain open
+**Status:** partial — local participant checks are tested, but durable Supabase records and RLS are required for completion.
 
-- [x] A proposer can invite a buyer or seller and the invitee can accept into the intended payment agreement.
-- [x] Only the buyer and seller can read, edit, approve, or submit private agreement material for that agreement.
-- [x] An unrelated signed-in participant receives no agreement data and cannot act by modifying identifiers or requests.
+**Completion reference:** [00 — Testnet MVP implementation-completion reference](00-implementation-completion-reference.md)
+
+- [ ] A proposer can create a durable, expiring counterparty invitation and the intended authenticated recipient can accept it into exactly that agreement.
+- [ ] RLS policies allow only a buyer or seller to read or mutate that agreement's private coordination rows and evidence metadata; resolver visibility is limited to its operational data.
+- [ ] An unrelated authenticated user receives no private row or storage object and cannot gain access by changing identifiers, routes, or API payloads; integration tests prove these denials.

@@ -1,6 +1,6 @@
 # PactFlow test-wallet MVP
 
-PactFlow is a rules-first escrow simulation for custom digital-service agreements. Privy authenticates participants and creates their user-controlled embedded test wallets; PactFlow never receives a wallet private key. Agreement outcomes still use simulated six-decimal eUSD in a local rules engine—there is no live chain settlement, fiat conversion, cash-out, or real-money service.
+PactFlow is a rules-first escrow simulation for custom digital-service agreements. Supabase Auth provides participant identities; wallet linking is deliberately deferred. Agreement outcomes still use simulated six-decimal eUSD in a local rules engine—there is no live chain settlement, fiat conversion, cash-out, or real-money service.
 
 ## Run locally
 
@@ -11,11 +11,11 @@ npm.cmd --prefix web run contracts:check
 npm.cmd --prefix web start
 ```
 
-Copy `web/.env.example` to `web/.env` and set the Privy App ID and App Secret. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use email sign-in to prepare a Privy embedded test wallet. `GET /health` reports the authenticated local-simulation health.
+Copy `web/.env.example` to `web/.env` and set the Supabase project URL and publishable key. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the authenticated local-simulation health.
 
 ## Demo runbook
 
-1. Open the app, enter an email address, and complete the Privy one-time-code flow. Privy creates an embedded Ethereum test wallet when the participant has none; PactFlow receives only the verified access-token claims and public wallet address. Then choose **buyer**, **invited seller**, or **resolver** for the local agreement simulation. The PactFlow HTTP-only session expires after eight hours or the Privy access token expiry, whichever comes first.
+1. Open the app, enter an email address, and complete the Supabase magic-link flow. Then choose **buyer**, **invited seller**, or **resolver** for the local agreement simulation. The browser submits the Supabase access token with authenticated requests; the current local demo assignment remains process-local.
 2. To demonstrate drafting, enter a plain-language brief and select **Suggest from brief**. Review and edit the scope, milestone allocations, evidence requirements, local-time deadlines, and review windows. The preview shows the retained UTC deadline. Suggestions remain drafts and cannot approve terms, release funds, judge quality, or resolve disputes.
 3. Save the editable draft. Earlier versions stay read-only with their approvals and field-level changes in **What changed and who approved**.
 4. Approve the same agreement version as buyer and seller; funding stays unavailable until both signatures are represented.
@@ -38,6 +38,10 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 ## Implemented scope and remaining integrations
 
-The runnable demo and tested local rules engine cover Privy-authenticated local sessions, user-controlled embedded test wallets, editable validated custom drafts, deterministic co-pilot suggestions, immutable versions with approval and field-difference history, local participant-only data access, buyer-only simulated funding, sequential milestones, private-evidence hashes, acceptance and timeout release, buyer-controlled missed-delivery refunds, resolver-only splits, and activity history.
+The runnable demo and tested local rules engine cover Supabase-authenticated local sessions, editable validated custom drafts, deterministic co-pilot suggestions, immutable versions with approval and field-difference history, local participant-only data access, buyer-only simulated funding, sequential milestones, private-evidence hashes, acceptance and timeout release, buyer-controlled missed-delivery refunds, resolver-only splits, and activity history.
 
-The demo deliberately omits durable invitation and participant records, Supabase, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service. It is a test-wallet development mode, not a real-money escrow service.
+The demo deliberately omits durable invitation and participant records, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service. It is a test-wallet development mode, not a real-money escrow service.
+
+## Implementation tracking
+
+The implementation tickets use a [testnet-MVP completion reference](.scratch/pactflow-testnet-mvp/issues/00-implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. Local simulation behavior is evidence, not completion of a Base Sepolia checklist item.

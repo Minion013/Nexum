@@ -5,9 +5,27 @@ import { restoreMagicLinkSession } from './magic-link-session.js';
 const $ = selector => document.querySelector(selector);
 let magicLinkSender;
 let resendTimer;
+let needsOnboarding = false;
 
 function showMessage(message = '') { const element = $('#request-error'); element.hidden = !message; element.textContent = message; }
-function showRoleSelection() { $('#login-form').hidden = true; $('#resend-link').hidden = true; $('#role-controls').hidden = false; showMessage('Signed in. Choose how you are joining the local demo.'); }
+function showStep(step) {
+  $('#email-entry').hidden = step !== 'email';
+  $('#email-sent').hidden = step !== 'sent';
+  $('#role-controls').hidden = step !== 'access';
+}
+function showSentEmail(email) {
+  $('#sent-email').textContent = email;
+  showStep('sent');
+  showMessage();
+}
+function showRoleSelection(profile) {
+  needsOnboarding = !profile?.onboardingCompletedAt;
+  $('#role-eyebrow').textContent = needsOnboarding ? 'Welcome to PactFlow' : 'Welcome back';
+  $('#role-title').textContent = needsOnboarding ? 'How are you joining this demo?' : 'Choose your local demo access.';
+  $('#role-intro').textContent = needsOnboarding ? 'Set up your first local session. You can take a different role in another project.' : 'Your account is ready. Choose how you want to enter this local project.';
+  showStep('access');
+  showMessage();
+}
 async function sender() { magicLinkSender ??= createMagicLinkSender({ auth: (await supabase()).auth, redirectTo: new URL('/login.html', window.location.origin).toString() }); return magicLinkSender; }
 function startResendCooldown(seconds) {
   const button = $('#resend-link');
@@ -24,23 +42,30 @@ async function sendMagicLink() {
   if (!email) throw new Error('Enter your email address.');
   const result = await (await sender()).request(email);
   if (!result.ok) {
-    if (result.reason === 'cooldown') { startResendCooldown(result.retryAfterSeconds); showMessage(`Please wait ${result.retryAfterSeconds} seconds before requesting another link.`); return; }
+    if (result.reason === 'cooldown') { startResendCooldown(result.retryAfterSeconds); showSentEmail(email); showMessage(`Please wait ${result.retryAfterSeconds} seconds before requesting another link.`); return; }
     throw new Error(result.message);
   }
   startResendCooldown(result.retryAfterSeconds);
-  showMessage('We sent a sign-in link to your email. Open it in this browser to continue.');
+  showSentEmail(email);
 }
 async function beginSession(role) {
   try { await authenticatedRequest('/api/session', { method: 'POST', body: JSON.stringify({ role }) }); } catch (error) {
     if (role !== 'seller' || error.code !== 'seller_invitation_required') throw error;
     await authenticatedRequest('/api/session', { method: 'POST', body: JSON.stringify({ role: 'invitee' }) });
   }
+  if (needsOnboarding) await authenticatedRequest('/api/onboarding/complete', { method: 'POST' });
   window.location.assign('/workspace.html');
+}
+async function handleAuthenticatedSession() {
+  const session = await authenticatedRequest('/api/session');
+  if (session.role) { window.location.assign('/workspace.html'); return; }
+  showRoleSelection(session.user.profile);
 }
 
 $('#login-form').onsubmit = async event => { event.preventDefault(); try { await sendMagicLink(); } catch (error) { showMessage(error.message); } };
 $('#resend-link').onclick = async () => { try { await sendMagicLink(); } catch (error) { showMessage(error.message); } };
+$('#change-email').onclick = () => { clearInterval(resendTimer); $('#resend-link').hidden = true; showStep('email'); showMessage(); $('#email').focus(); };
 document.querySelectorAll('[data-role]').forEach(button => { button.onclick = async () => { try { await beginSession(button.dataset.role); } catch (error) { showMessage(error.message); } }; });
 const callbackParameters = new URLSearchParams(`${window.location.search.slice(1)}&${window.location.hash.slice(1)}`);
 const isMagicLinkCallback = callbackParameters.has('code') || callbackParameters.has('access_token') || callbackParameters.has('error');
-(async () => restoreMagicLinkSession({ auth: (await supabase()).auth, isCallback: isMagicLinkCallback, onAuthenticated: showRoleSelection, onCallbackFailure: showMessage }))().catch(error => showMessage(error.message));
+(async () => restoreMagicLinkSession({ auth: (await supabase()).auth, isCallback: isMagicLinkCallback, onAuthenticated: handleAuthenticatedSession, onCallbackFailure: showMessage }))().catch(error => showMessage(error.message));
