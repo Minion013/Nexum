@@ -105,31 +105,60 @@ function createSupabaseSessionVerifier(config = publicSupabaseConfigFromEnvironm
 export function createProfileLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
-    const supabase = createSupabaseClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
-    const { error: provisioningError } = await supabase.rpc('ensure_profile');
-    if (provisioningError) throw new AuthenticationError('We could not prepare your PactFlow profile.');
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow profile.');
     const { data, error } = await supabase.from('profiles').select('id, email, display_name, onboarding_completed_at').eq('id', userId).single();
     if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
     return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
   };
 }
+function authenticatedSupabaseClient(config, createSupabaseClient, accessToken) {
+  return createSupabaseClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
+}
+async function ensureProfileForAppData(supabase, unavailableMessage) {
+  const { error } = await supabase.rpc('ensure_profile');
+  if (error) throw new AuthenticationError(unavailableMessage);
+}
+function mapWorkspaces(rows) {
+  return rows.map(({ membership_role: membershipRole, workspaces }) => ({ id: workspaces.id, name: workspaces.name, kind: workspaces.kind, membershipRole }));
+}
 export function createWorkspaceLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
-    const supabase = createSupabaseClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
-    const { error: provisioningError } = await supabase.rpc('ensure_profile');
-    if (provisioningError) throw new AuthenticationError('We could not prepare your PactFlow workspace.');
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow workspace.');
     const { data, error } = await supabase
       .from('workspace_memberships')
       .select('membership_role, workspaces!inner(id, name, kind)')
       .eq('profile_id', userId);
     if (error) throw new AuthenticationError('Your PactFlow workspaces are unavailable.');
-    return data.map(({ membership_role: membershipRole, workspaces }) => ({
-      id: workspaces.id,
-      name: workspaces.name,
-      kind: workspaces.kind,
-      membershipRole
-    }));
+    return mapWorkspaces(data);
+  };
+}
+export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ userId, accessToken }) => {
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow Home.');
+    const [workspaceResult, contractResult] = await Promise.all([
+      supabase.from('workspace_memberships').select('membership_role, workspaces!inner(id, name, kind)').eq('profile_id', userId),
+      supabase.from('contracts').select('id, status, contract_versions(version_number), contract_parties(workspace_id)').order('updated_at', { ascending: false })
+    ]);
+    if (workspaceResult.error || contractResult.error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
+    const workspaces = mapWorkspaces(workspaceResult.data);
+    const personalWorkspace = workspaces.find(workspace => workspace.kind === 'personal');
+    const workspaceNames = new Map(workspaces.map(workspace => [workspace.id, workspace.name]));
+    return {
+      workspaces,
+      contracts: contractResult.data.map(contract => ({
+        id: contract.id,
+        status: contract.status,
+        latestVersionNumber: Math.max(0, ...(contract.contract_versions ?? []).map(version => version.version_number)),
+        workspaceName: (contract.contract_parties ?? [])
+          .map(party => workspaceNames.get(party.workspace_id))
+          .find(Boolean) ?? personalWorkspace?.name ?? 'Personal Contract'
+      }))
+    };
   };
 }
 function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvironment()) {
@@ -143,7 +172,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { role: session.role, user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const invitations = new Map();
   const participantUsers = new Map();
   const localSessions = new Map();
@@ -184,9 +213,13 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const workspaces = await loadWorkspaces({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { workspaces });
       }
+      if (url.pathname === '/api/home' && request.method === 'GET') {
+        const session = await authenticate();
+        const home = await loadHome({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, { home });
+      }
       if (url.pathname === '/api/onboarding/complete' && request.method === 'POST') {
         const session = await authenticate();
-        if (!session.role) return respond(response, 409, { error: 'Choose a local demo access before completing setup.' });
         const profile = await completeProfileOnboarding({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { profile });
       }

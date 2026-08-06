@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { restoreMagicLinkSession } from '../public/magic-link-session.js';
 
-test('a callback session reveals the participant role choices', async () => {
+test('a callback session continues into authenticated onboarding', async () => {
   let revealed = false;
   const result = await restoreMagicLinkSession({
     auth: { getSession: async () => ({ data: { session: { access_token: 'session-token' } }, error: null }) },

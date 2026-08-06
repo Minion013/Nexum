@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Your PactFlow Home." />
+    <title>Home — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/home.css" />
+  </head>
+  <body class="home-page">
+    <a class="skip-link" href="#main-content">Skip to Home</a>
+    <header class="home-header">
+      <a class="brand" href="/home.html">Pact<span>Flow</span></a>
+      <nav aria-label="Primary navigation"><a aria-current="page" href="/home.html">Home</a><a href="#contracts">Contracts</a><a href="#workspaces">Workspaces</a><a href="#contacts">Contacts</a><a href="#authorities">Authorities</a></nav>
+      <button id="sign-out" class="home-sign-out" type="button">Sign out</button>
+    </header>
+    <main id="main-content" class="home-main" tabindex="-1">
+      <p id="request-error" class="home-error" aria-live="polite" hidden></p>
+      <section class="home-intro" aria-labelledby="home-title">
+        <p class="eyebrow">Home</p>
+        <h1 id="home-title">Your work, with the next step clear.</h1>
+        <p id="home-subtitle">Loading your Workspaces and Contracts…</p>
+      </section>
+      <section class="home-summary" aria-label="Your Contract summary">
+        <article><span class="home-metric-label">Needs attention</span><strong id="attention-count">—</strong><span>Contract actions</span></article>
+        <article><span class="home-metric-label">In progress</span><strong id="active-count">—</strong><span>Active Contracts</span></article>
+        <article><span class="home-metric-label">Your context</span><strong id="workspace-count">—</strong><span>Workspaces</span></article>
+      </section>
+      <div class="home-columns">
+        <section class="home-panel" aria-labelledby="actions-title">
+          <div class="home-panel-heading"><div><p class="eyebrow">Action board</p><h2 id="actions-title">What needs you now</h2></div><span class="home-status-note">Contract-specific access</span></div>
+          <div id="action-list" class="home-list" aria-live="polite"></div>
+        </section>
+        <aside class="home-panel home-workspaces" id="workspaces" aria-labelledby="workspaces-title">
+          <div class="home-panel-heading"><div><p class="eyebrow">Workspaces</p><h2 id="workspaces-title">Where you operate</h2></div></div>
+          <div id="workspace-list" class="home-list" aria-live="polite"></div>
+          <button class="home-secondary-action" type="button" disabled title="Workspace creation is the next durable workflow">Create Workspace</button>
+        </aside>
+      </div>
+      <section class="home-panel home-contracts" id="contracts" aria-labelledby="contracts-title">
+        <div class="home-panel-heading"><div><p class="eyebrow">Contracts</p><h2 id="contracts-title">Move each engagement forward</h2><p>Contracts are the collaboration boundary. Their party, milestone, version, and authority detail will appear here as the durable contract workflow is added.</p></div><button class="home-primary-action" type="button" disabled title="Contract creation is the next durable workflow">New Contract</button></div>
+        <div id="contract-list" class="home-contract-list" aria-live="polite"></div>
+      </section>
+      <section class="home-secondary-surfaces" aria-label="Supporting PactFlow areas"><a id="contacts" href="#contacts"><strong>Contacts</strong><span>Reusable invitation targets; no access on their own.</span></a><a id="authorities" href="#authorities"><strong>Authorities</strong><span>Published Resolution Authorities and case-only access.</span></a><a href="#settings"><strong>Settings</strong><span>Profile and account preferences.</span></a></section>
+    </main>
+    <script type="module" src="/home.bundle.js"></script>
+  </body>
+</html>

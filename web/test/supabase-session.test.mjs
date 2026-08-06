@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, createProfileLoader } from '../src/server.mjs';
+import { createApp, createHomeLoader, createProfileLoader } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -80,6 +80,77 @@ test('an authenticated user can view only their provisioned workspaces', async (
   }
 });
 
+test('an authenticated user receives only their durable Home data', async () => {
+  const homeCalls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'home-jwt') throw new Error('invalid token');
+      return { id: '55555555-5555-4555-8555-555555555555', email: 'member@example.com' };
+    },
+    loadHome: async input => {
+      homeCalls.push(input);
+      return {
+        workspaces: [{ id: '66666666-6666-4666-8666-666666666666', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
+        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2, workspaceName: 'Member' }]
+      };
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/home', { token: 'wrong' })).status, 401);
+    const response = await request(origin, '/api/home', { token: 'home-jwt' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      home: {
+        workspaces: [{ id: '66666666-6666-4666-8666-666666666666', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
+        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2, workspaceName: 'Member' }]
+      }
+    });
+    assert.deepEqual(homeCalls, [{
+      userId: '55555555-5555-4555-8555-555555555555',
+      accessToken: 'home-jwt'
+    }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the Home loader queries the caller workspace membership and RLS-visible Contracts', async () => {
+  const calls = [];
+  const loadHome = createHomeLoader(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      rpc: async name => { calls.push({ operation: 'rpc', name }); return { error: null }; },
+      from: table => {
+        calls.push({ operation: 'from', table });
+        if (table === 'workspace_memberships') return {
+          select: fields => ({
+            eq: async (column, value) => {
+              calls.push({ operation: 'workspace-query', fields, column, value });
+              return { data: [{ membership_role: 'owner', workspaces: { id: 'workspace-id', name: 'Member', kind: 'personal' } }], error: null };
+            }
+          })
+        };
+        return {
+          select: fields => ({
+            order: async (column, options) => {
+              calls.push({ operation: 'contract-query', fields, column, options });
+              return { data: [{ id: 'contract-id', status: 'active', contract_versions: [{ version_number: 1 }, { version_number: 3 }], contract_parties: [{ workspace_id: 'workspace-id' }] }], error: null };
+            }
+          })
+        };
+      }
+    })
+  );
+
+  assert.deepEqual(await loadHome({ userId: 'profile-id', accessToken: 'access-token' }), {
+    workspaces: [{ id: 'workspace-id', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
+    contracts: [{ id: 'contract-id', status: 'active', latestVersionNumber: 3, workspaceName: 'Member' }]
+  });
+  assert.deepEqual(calls[0], { operation: 'rpc', name: 'ensure_profile' });
+  assert.ok(calls.some(call => call.operation === 'workspace-query' && call.fields === 'membership_role, workspaces!inner(id, name, kind)' && call.column === 'profile_id' && call.value === 'profile-id'));
+  assert.ok(calls.some(call => call.operation === 'contract-query' && call.fields === 'id, status, contract_versions(version_number), contract_parties(workspace_id)' && call.column === 'updated_at' && call.options.ascending === false));
+});
+
 test('the browser receives only Supabase public configuration', async () => {
   const { server, origin } = await start({
     publicSupabaseConfig: { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' }
@@ -129,7 +200,7 @@ test('a verified user without a profile is provisioned into incomplete setup bef
   ]);
 });
 
-test('a verified participant completes first-time setup only after choosing local demo access', async () => {
+test('a verified user can complete first-time setup without choosing a local demo role', async () => {
   const completed = [];
   const { server, origin } = await start({
     verifySupabaseSession: async token => {
@@ -144,8 +215,6 @@ test('a verified participant completes first-time setup only after choosing loca
   });
   try {
     assert.equal((await request(origin, '/api/onboarding/complete', { method: 'POST' })).status, 401);
-    assert.equal((await request(origin, '/api/onboarding/complete', { method: 'POST', token: 'new-participant-jwt' })).status, 409);
-    assert.equal((await request(origin, '/api/session', { method: 'POST', token: 'new-participant-jwt', body: { role: 'buyer' } })).status, 201);
     const completedResponse = await request(origin, '/api/onboarding/complete', { method: 'POST', token: 'new-participant-jwt' });
     assert.equal(completedResponse.status, 200);
     assert.equal((await completedResponse.json()).profile.onboardingCompletedAt, '2026-08-06T00:00:00.000Z');
