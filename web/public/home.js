@@ -59,7 +59,10 @@ function renderContracts(contracts) {
     const meta = statusCopy[contract.status] ?? { label: 'Contract update' };
     const heading = element('div');
     heading.append(element('span', 'home-contract-eyebrow', `Version ${contract.latestVersionNumber || 'draft'}`), element('h3', '', meta.label), element('p', '', 'Contract details are visible only to its Parties and active delegates.'));
-    card.append(heading, element('span', `home-contract-state ${contract.status}`, meta.label));
+    const link = element('a', 'home-row-link', 'Open Contract');
+    link.href = `/contracts/${encodeURIComponent(contract.id)}`;
+    link.setAttribute('aria-label', `Open Contract version ${contract.latestVersionNumber || 'draft'}`);
+    card.append(heading, link, element('span', `home-contract-state ${contract.status}`, meta.label));
     list.append(card);
   });
 }

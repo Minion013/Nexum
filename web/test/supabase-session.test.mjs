@@ -285,3 +285,76 @@ test('the authenticated API does not create a durable Contract without a Supabas
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('a verified Contract Party can read and save a validated durable Contract draft', async () => {
+  const calls = [];
+  const draft = {
+    id: 'contract-id',
+    status: 'negotiation',
+    versionNumber: 1,
+    scope: { title: 'Checkout redesign', description: 'Redesign the checkout flow.' },
+    milestones: [
+      { title: 'Research', allocation: 400, evidenceRequirement: 'Annotated findings', deliveryDeadlineUtc: '2026-09-10T09:00:00.000Z', reviewWindowHours: 48 },
+      { title: 'Delivery', allocation: 600, evidenceRequirement: 'Production-ready handoff', deliveryDeadlineUtc: '2026-09-24T09:00:00.000Z', reviewWindowHours: 72 }
+    ],
+    totalAllocation: 1000,
+    successFeeBps: 250,
+    authority: { name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1' },
+    paymentAuthority: 'not configured'
+  };
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'party-jwt') throw new Error('invalid token');
+      return { id: 'party-id', email: 'party@example.com' };
+    },
+    contractWorkflow: {
+      getDraft: async input => { calls.push({ operation: 'getDraft', input }); return draft; },
+      saveDraft: async input => { calls.push({ operation: 'saveDraft', input }); return draft; }
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/contracts/contract-id')).status, 401);
+    const loaded = await request(origin, '/api/contracts/contract-id', { token: 'party-jwt' });
+    assert.equal(loaded.status, 200);
+    assert.deepEqual(await loaded.json(), { contract: draft });
+
+    const changes = {
+      scope: draft.scope,
+      milestones: draft.milestones,
+      totalAllocation: 1000,
+      successFeeBps: 250
+    };
+    const saved = await request(origin, '/api/contracts/contract-id', { token: 'party-jwt', method: 'PUT', body: changes });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { contract: draft });
+    assert.deepEqual(calls, [
+      { operation: 'getDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id' } },
+      { operation: 'saveDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', ...changes } }
+    ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the durable draft workflow rejects a non-conserving milestone allocation before it reaches Supabase', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({ rpc: async (name, args) => { calls.push({ name, args }); return { data: 'version-id', error: null }; } })
+  );
+  await assert.rejects(
+    workflow.saveDraft({
+      accessToken: 'party-jwt',
+      contractId: 'contract-id',
+      scope: { title: 'Checkout redesign', description: 'Redesign the checkout flow.' },
+      milestones: [
+        { title: 'Research', allocation: 400, evidenceRequirement: 'Annotated findings', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 48 },
+        { title: 'Delivery', allocation: 600, evidenceRequirement: 'Production-ready handoff', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
+      ],
+      totalAllocation: 999,
+      successFeeBps: 250
+    }),
+    /Milestone allocations must equal the Contract total allocation/
+  );
+  assert.deepEqual(calls, []);
+});

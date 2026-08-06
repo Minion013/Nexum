@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A private PactFlow Contract draft." />
+    <title>Contract draft — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/home.css" />
+  </head>
+  <body class="home-page">
+    <a class="skip-link" href="#main-content">Skip to Contract draft</a>
+    <header class="home-header"><a class="brand" href="/home">Pact<span>Flow</span></a><nav aria-label="Primary navigation"><a href="/home">Home</a><a aria-current="page" href="/contracts">Contracts</a><a href="/workspace">Workspace</a><a href="/contacts">Contacts</a><a href="/authorities">Authorities</a></nav><button id="sign-out" class="home-sign-out" type="button">Sign out</button></header>
+    <main id="main-content" class="home-main" tabindex="-1">
+      <p id="request-error" class="home-error" aria-live="polite" hidden></p>
+      <section class="home-intro"><p class="eyebrow">Private Contract draft</p><h1 id="contract-title">Loading Contract…</h1><p id="contract-summary">Only Contract Parties can view or edit this private draft. It cannot move funds.</p></section>
+      <form id="contract-draft-form" class="home-contract-form contract-draft-form" hidden>
+        <fieldset><legend>Scope</legend><label>Contract title<input name="title" maxlength="160" required /></label><label>Scope<textarea name="description" maxlength="4000" rows="4" required></textarea></label></fieldset>
+        <fieldset><legend>Milestone schedule</legend><p class="contract-form-help">Deadlines are shown in your local time and stored as canonical UTC timestamps.</p><label>Contract total allocation (testnet eUSD units)<input name="totalAllocation" type="number" min="1" step="1" required /></label><div id="milestone-list" class="milestone-list"></div><button id="add-milestone" class="home-secondary-action contract-inline-action" type="button">Add third milestone</button></fieldset>
+        <fieldset><legend>Resolution and disclosed success fee</legend><label>Resolution Authority<select name="authorityId" required></select></label><p id="authority-summary" class="contract-form-help"></p><label>Fee (basis points)<input name="successFeeBps" type="number" min="0" max="10000" step="1" required /></label></fieldset>
+        <div class="contract-draft-footer"><p><strong>No payment authority.</strong> This draft has no wallet connection, vault, funding, or settlement capability.</p><button class="home-primary-action" type="submit">Save private draft</button></div>
+        <p id="contract-form-status" class="home-form-status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script type="module" src="/contract.bundle.js"></script>
+  </body>
+</html>

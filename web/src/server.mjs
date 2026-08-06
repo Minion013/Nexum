@@ -134,16 +134,107 @@ function requiredEmail(value) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ValidationError('Enter a valid counterparty email address.');
   return email;
 }
+function requiredUuid(value, label) {
+  const text = requiredText(value, label, 36);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) throw new ValidationError(`${label} must be valid.`);
+  return text;
+}
+function positiveWholeNumber(value, label, maximum = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 1 || number > maximum) throw new ValidationError(`${label} must be a whole number.`);
+  return number;
+}
+function canonicalDeadline(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new ValidationError('Each delivery deadline must be a UTC timestamp.');
+  }
+  if (Date.parse(value) <= Date.now()) throw new ValidationError('Each delivery deadline must be in the future.');
+  return value;
+}
+function validatedDraft({ scope, milestones, totalAllocation, successFeeBps, authorityId }) {
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) throw new ValidationError('Contract scope is required.');
+  if (!Array.isArray(milestones) || milestones.length < 2 || milestones.length > 3) throw new ValidationError('A Contract needs two or three milestones.');
+  const validatedMilestones = milestones.map((milestone, index) => {
+    if (!milestone || typeof milestone !== 'object' || Array.isArray(milestone)) throw new ValidationError(`Milestone ${index + 1} is invalid.`);
+    return {
+      title: requiredText(milestone.title, `Milestone ${index + 1} title`, 160),
+      allocation: positiveWholeNumber(milestone.allocation, `Milestone ${index + 1} allocation`),
+      evidenceRequirement: requiredText(milestone.evidenceRequirement, `Milestone ${index + 1} evidence requirement`),
+      deliveryDeadlineUtc: canonicalDeadline(milestone.deliveryDeadlineUtc),
+      reviewWindowHours: positiveWholeNumber(milestone.reviewWindowHours, `Milestone ${index + 1} review window`, 720)
+    };
+  });
+  for (let index = 1; index < validatedMilestones.length; index += 1) {
+    if (validatedMilestones[index - 1].deliveryDeadlineUtc >= validatedMilestones[index].deliveryDeadlineUtc) throw new ValidationError('Milestone delivery deadlines must be in order.');
+  }
+  const allocation = positiveWholeNumber(totalAllocation, 'Contract total allocation');
+  if (validatedMilestones.reduce((sum, milestone) => sum + milestone.allocation, 0) !== allocation) throw new ValidationError('Milestone allocations must equal the Contract total allocation.');
+  const fee = Number(successFeeBps);
+  if (!Number.isSafeInteger(fee) || fee < 0 || fee > 10_000) throw new ValidationError('Success fee must be between 0 and 10,000 basis points.');
+  return {
+    scope: {
+      title: requiredText(scope.title, 'Contract title', 160),
+      description: requiredText(scope.description, 'Contract scope')
+    },
+    milestones: validatedMilestones,
+    totalAllocation: allocation,
+    successFeeBps: fee,
+    authorityId: requiredUuid(authorityId, 'Resolution Authority')
+  };
+}
+function mapContractDraft(contract, authorities = []) {
+  const latestVersion = [...(contract.contract_versions ?? [])].sort((left, right) => right.version_number - left.version_number)[0];
+  if (!latestVersion) throw new ValidationError('This Contract has no readable draft version.');
+  const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms]));
+  const scope = sections.get('scope') ?? {};
+  const milestones = sections.get('milestones')?.items ?? [];
+  const payment = sections.get('payment') ?? {};
+  const authority = latestVersion.authority_snapshot ?? {};
+  return {
+    id: contract.id,
+    status: contract.status,
+    versionNumber: latestVersion.version_number,
+    scope: { title: scope.title ?? '', description: scope.description ?? '' },
+    milestones: milestones.map(milestone => ({
+      title: milestone.title,
+      allocation: milestone.allocation,
+      evidenceRequirement: milestone.evidenceRequirement,
+      deliveryDeadlineUtc: milestone.deliveryDeadlineUtc,
+      reviewWindowHours: milestone.reviewWindowHours
+    })),
+    totalAllocation: payment.totalAllocation ?? payment.total_allocation ?? 0,
+    successFeeBps: payment.successFeeBps ?? payment.success_fee_bps ?? 0,
+    authority: {
+      id: latestVersion.selected_authority_id,
+      name: authority.authority_name ?? '',
+      jurisdictionLabel: authority.jurisdiction_label ?? '',
+      rulesetVersion: authority.ruleset_version ?? ''
+    },
+    authorities: authorities.map(item => ({ id: item.id, name: item.display_name, jurisdictionLabel: item.jurisdiction_label, rulesetVersion: item.ruleset_version })),
+    paymentAuthority: 'not configured'
+  };
+}
 export function createContractWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return {
     create: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     invite: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
-    accept: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
+    accept: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    getDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    saveDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
   };
   const call = async ({ accessToken }, name, args, unavailableMessage) => {
     const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc(name, args);
     if (error || !data) throw new ValidationError(unavailableMessage);
     return data;
+  };
+  const getDraft = async ({ accessToken, contractId }) => {
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    const [contractResult, authorityResult] = await Promise.all([
+      supabase.from('contracts').select('id, status, contract_versions(id, version_number, selected_authority_id, authority_snapshot, contract_sections(section_type, position, terms))').eq('id', requiredText(contractId, 'Contract')).single(),
+      supabase.from('resolution_authorities').select('id, display_name, jurisdiction_label, ruleset_version').eq('status', 'published')
+    ]);
+    if (contractResult.error || !contractResult.data || authorityResult.error) throw new ValidationError('This Contract is unavailable.');
+    return mapContractDraft(contractResult.data, authorityResult.data ?? []);
   };
   return {
     create: async ({ accessToken, name, scope, counterpartyEmail }) => ({ id: await call({ accessToken }, 'create_private_contract', {
@@ -157,7 +248,20 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     }, 'We could not create this Contract invitation.') }),
     accept: async ({ accessToken, invitationId }) => ({ id: await call({ accessToken }, 'accept_contract_invitation', {
       target_invitation_id: requiredText(invitationId, 'Invitation')
-    }, 'This Contract invitation cannot be accepted.') })
+    }, 'This Contract invitation cannot be accepted.') }),
+    getDraft,
+    saveDraft: async ({ accessToken, contractId, ...draft }) => {
+      const validated = validatedDraft(draft);
+      await call({ accessToken }, 'update_contract_draft', {
+        target_contract_id: requiredText(contractId, 'Contract'),
+        draft_scope: { title: validated.scope.title, description: validated.scope.description },
+        draft_milestones: validated.milestones,
+        total_allocation: validated.totalAllocation,
+        disclosed_success_fee_bps: validated.successFeeBps,
+        selected_authority_id: validated.authorityId
+      }, 'We could not save this Contract draft.');
+      return getDraft({ accessToken, contractId });
+    }
   };
 }
 function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvironment()) {
@@ -205,6 +309,18 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contract.id, email: payload.counterpartyEmail });
         return respond(response, 201, { contract, invitation });
       }
+      const contractMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)$/);
+      if (contractMatch && request.method === 'GET') {
+        const session = await authenticate();
+        const contract = await contractWorkflow.getDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1] });
+        return respond(response, 200, { contract });
+      }
+      if (contractMatch && request.method === 'PUT') {
+        const session = await authenticate();
+        const payload = await json(request);
+        const contract = await contractWorkflow.saveDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1], ...payload });
+        return respond(response, 200, { contract });
+      }
       const contractInvitationMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/invitations$/);
       if (contractInvitationMatch && request.method === 'POST') {
         const session = await authenticate();
@@ -225,7 +341,8 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
-      const file = standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
+      const contractPageMatch = url.pathname.match(/^\/contracts\/[^/]+$/);
+      const file = contractPageMatch ? join(publicRoot, 'contract.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
       if (!file || !existsSync(file) || !statSync(file).isFile()) { response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found'); return; }
       response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'x-content-type-options': 'nosniff' });
       if (request.method === 'HEAD') return response.end();

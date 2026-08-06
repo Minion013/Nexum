@@ -45,8 +45,11 @@ test('authenticated area pages are served from their canonical URLs', async () =
     for (const href of ['/home', '/contracts', '/workspace', '/contacts', '/authorities']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
-    assert.equal((await request(server, '/contracts/not-a-contract')).status, 404);
-    assert.equal((await request(server, '/contracts/local-demo-agreement')).status, 404);
+    const detail = await request(server, '/contracts/not-a-contract');
+    assert.equal(detail.status, 200);
+    assert.match(await detail.text(), /Contract draft/);
+    assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /contract\.bundle\.js/);
+    assert.equal((await request(server, '/contracts/not-a-contract/extra')).status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

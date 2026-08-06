@@ -44,6 +44,23 @@ values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-0000000
 insert into public.private_evidence_references (id, contract_id, dispute_case_id, milestone_key, reference_hash, created_by_profile_id)
 values ('00000000-0000-4000-8000-000000000701', '00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000501', 'milestone-2', 'private-evidence-hash', '00000000-0000-4000-8000-000000000101');
 
+insert into public.contracts (id, created_by_profile_id, status)
+values ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-000000000101', 'private_draft');
+
+insert into public.contract_parties (contract_id, party_kind, profile_id)
+values ('00000000-0000-4000-8000-000000000303', 'profile', '00000000-0000-4000-8000-000000000101');
+
+insert into public.contract_versions (id, contract_id, version_number, version_hash, authority_snapshot, selected_authority_id, created_by_profile_id)
+values (
+  '00000000-0000-4000-8000-000000000353',
+  '00000000-0000-4000-8000-000000000303',
+  1,
+  'rls-test-draft-v1',
+  '{"authority_name":"RLS Test Simulation Authority","jurisdiction_label":"Testnet simulation","ruleset_version":"v1"}',
+  '00000000-0000-4000-8000-000000000201',
+  '00000000-0000-4000-8000-000000000101'
+);
+
 do $$
 begin
   begin
@@ -143,6 +160,46 @@ begin
   if not exists (select 1 from public.dispute_cases where id = '00000000-0000-4000-8000-000000000501') then
     raise exception 'A Contract Party must see its contract dispute.';
   end if;
+  perform public.update_contract_draft(
+    '00000000-0000-4000-8000-000000000303',
+    '{"title":"RLS draft","description":"A participant-only durable Contract draft."}'::jsonb,
+    '[{"title":"Discovery","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]'::jsonb,
+    1000,
+    250,
+    '00000000-0000-4000-8000-000000000201'
+  );
+  if not exists (
+    select 1 from public.contract_sections section
+    join public.contract_versions version on version.id = section.contract_version_id
+    where version.contract_id = '00000000-0000-4000-8000-000000000303'
+      and version.version_number = 2
+      and section.section_type = 'milestones'
+      and jsonb_array_length(section.terms -> 'items') = 2
+  ) then
+    raise exception 'A Contract Party must be able to save its validated durable milestone schedule.';
+  end if;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000102', true);
+do $$
+begin
+  begin
+    perform public.update_contract_draft(
+      '00000000-0000-4000-8000-000000000303',
+      '{"title":"Intrusion","description":"This must not be writable."}'::jsonb,
+      '[{"title":"One","allocation":1000,"evidenceRequirement":"None","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Two","allocation":1,"evidenceRequirement":"None","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":48}]'::jsonb,
+      1001,
+      0,
+      '00000000-0000-4000-8000-000000000201'
+    );
+    raise exception 'An unrelated Profile unexpectedly updated a Contract draft.';
+  exception
+    when others then
+      if position('Only a Contract Party can edit this draft' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
 end;
 $$;
 
