@@ -77,6 +77,33 @@ function renderHome(profile, home) {
 }
 function showError(error) { const message = $('#request-error'); message.hidden = false; message.textContent = error.message; }
 
+const contractForm = $('#new-contract-form');
+const contractStatus = $('#contract-form-status');
+function toggleContractForm(open) {
+  contractForm.hidden = !open;
+  if (open) contractForm.elements.name.focus();
+}
+$('#new-contract').onclick = () => toggleContractForm(true);
+$('#cancel-contract').onclick = () => { contractForm.reset(); contractStatus.textContent = ''; toggleContractForm(false); };
+contractForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = contractForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  contractStatus.textContent = 'Creating your private Contract…';
+  try {
+    const data = Object.fromEntries(new FormData(contractForm));
+    await authenticatedRequest('/api/contracts', { method: 'POST', body: JSON.stringify(data) });
+    contractStatus.textContent = 'Private Contract created and invitation sent. It is visible only to you until the counterparty accepts.';
+    contractForm.reset();
+    const response = await authenticatedRequest('/api/home');
+    renderContracts(response.home.contracts ?? []);
+    $('#attention-count').textContent = String((response.home.contracts ?? []).filter(requiresAttention).length);
+    window.setTimeout(() => toggleContractForm(false), 1200);
+  } catch (error) {
+    contractStatus.textContent = error.message;
+  } finally { submit.disabled = false; }
+});
+
 $('#sign-out').onclick = async () => { await (await supabase()).auth.signOut(); window.location.assign('/'); };
 (async () => {
   try {

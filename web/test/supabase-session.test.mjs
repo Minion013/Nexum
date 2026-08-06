@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, createHomeLoader, createProfileLoader } from '../src/server.mjs';
+import { createApp, createContractWorkflow, createHomeLoader, createProfileLoader } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -219,6 +219,68 @@ test('a verified user can complete first-time setup without choosing a local dem
     assert.equal(completedResponse.status, 200);
     assert.equal((await completedResponse.json()).profile.onboardingCompletedAt, '2026-08-06T00:00:00.000Z');
     assert.deepEqual(completed, [{ userId: '22222222-2222-4222-8222-222222222222', accessToken: 'new-participant-jwt' }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a verified Contract Party can create a durable private Contract and invite an exact email address', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      rpc: async (name, args) => {
+        calls.push({ name, args });
+        if (name === 'create_private_contract') return { data: 'contract-id', error: null };
+        if (name === 'create_contract_invitation') return { data: 'invitation-id', error: null };
+        return { data: null, error: { message: 'unexpected call' } };
+      }
+    })
+  );
+
+  const contract = await workflow.create({
+    userId: 'profile-id',
+    accessToken: 'access-token',
+    name: 'Checkout redesign',
+    scope: 'Redesign the checkout flow.',
+    counterpartyEmail: 'seller@example.com'
+  });
+  assert.deepEqual(contract, { id: 'contract-id' });
+  const invitation = await workflow.invite({
+    userId: 'profile-id',
+    accessToken: 'access-token',
+    contractId: 'contract-id',
+    email: 'seller@example.com'
+  });
+  assert.deepEqual(invitation, { id: 'invitation-id' });
+  assert.deepEqual(calls, [
+    { name: 'create_private_contract', args: { contract_name: 'Checkout redesign', contract_scope: 'Redesign the checkout flow.', counterparty_email: 'seller@example.com' } },
+    { name: 'create_contract_invitation', args: { target_contract_id: 'contract-id', invitee_email: 'seller@example.com' } }
+  ]);
+});
+
+test('the authenticated API does not create a durable Contract without a Supabase session', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'durable-jwt') throw new Error('invalid token');
+      return { id: 'profile-id', email: 'buyer@example.com' };
+    },
+    contractWorkflow: {
+      create: async input => { calls.push({ operation: 'create', input }); return { id: 'contract-id' }; },
+      invite: async input => { calls.push({ operation: 'invite', input }); return { id: 'invitation-id' }; }
+    }
+  });
+  try {
+    const body = { name: 'Checkout redesign', scope: 'Redesign the checkout flow.', counterpartyEmail: 'seller@example.com' };
+    assert.equal((await request(origin, '/api/contracts', { method: 'POST', body })).status, 401);
+    const created = await request(origin, '/api/contracts', { method: 'POST', token: 'durable-jwt', body });
+    assert.equal(created.status, 201);
+    assert.deepEqual(await created.json(), { contract: { id: 'contract-id' }, invitation: { id: 'invitation-id' } });
+    assert.deepEqual(calls, [
+      { operation: 'create', input: { ...body, userId: 'profile-id', accessToken: 'durable-jwt' } },
+      { operation: 'invite', input: { userId: 'profile-id', accessToken: 'durable-jwt', contractId: 'contract-id', email: 'seller@example.com' } }
+    ]);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

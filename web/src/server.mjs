@@ -166,6 +166,41 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
     };
   };
 }
+function requiredText(value, label, limit = 4_000) {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > limit) throw new RuleError(`${label} is required.`);
+  return value.trim();
+}
+function requiredEmail(value) {
+  const email = requiredText(value, 'Counterparty email', 320).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new RuleError('Enter a valid counterparty email address.');
+  return email;
+}
+export function createContractWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return {
+    create: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    invite: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    accept: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
+  };
+  const call = async ({ accessToken }, name, args, unavailableMessage) => {
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc(name, args);
+    if (error || !data) throw new RuleError(unavailableMessage);
+    return data;
+  };
+  return {
+    create: async ({ accessToken, name, scope, counterpartyEmail }) => ({ id: await call({ accessToken }, 'create_private_contract', {
+      contract_name: requiredText(name, 'Contract name', 160),
+      contract_scope: requiredText(scope, 'Contract scope'),
+      counterparty_email: requiredEmail(counterpartyEmail)
+    }, 'We could not create this private Contract.') }),
+    invite: async ({ accessToken, contractId, email }) => ({ id: await call({ accessToken }, 'create_contract_invitation', {
+      target_contract_id: requiredText(contractId, 'Contract'),
+      invitee_email: requiredEmail(email)
+    }, 'We could not create this Contract invitation.') }),
+    accept: async ({ accessToken, invitationId }) => ({ id: await call({ accessToken }, 'accept_contract_invitation', {
+      target_invitation_id: requiredText(invitationId, 'Invitation')
+    }, 'This Contract invitation cannot be accepted.') })
+  };
+}
 function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvironment()) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
@@ -177,7 +212,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { role: session.role, user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const invitations = new Map();
   const participantUsers = new Map();
   const localSessions = new Map();
@@ -222,6 +257,26 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const home = await loadHome({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { home });
+      }
+      if (url.pathname === '/api/contracts' && request.method === 'POST') {
+        const session = await authenticate();
+        const payload = await json(request);
+        const contract = await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
+        const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contract.id, email: payload.counterpartyEmail });
+        return respond(response, 201, { contract, invitation });
+      }
+      const contractInvitationMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/invitations$/);
+      if (contractInvitationMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const { email } = await json(request);
+        const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contractInvitationMatch[1], email });
+        return respond(response, 201, { invitation });
+      }
+      const durableInvitationMatch = url.pathname.match(/^\/api\/invitations\/([^/]+)\/accept$/);
+      if (durableInvitationMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const invitation = await contractWorkflow.accept({ userId: session.userId, accessToken: session.accessToken, invitationId: durableInvitationMatch[1] });
+        return respond(response, 200, { invitation });
       }
       if (url.pathname === '/api/onboarding/complete' && request.method === 'POST') {
         const session = await authenticate();
