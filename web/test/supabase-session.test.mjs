@@ -53,6 +53,33 @@ test('a verified Supabase session exposes the durable profile and protects appli
   }
 });
 
+test('an authenticated user can view only their provisioned workspaces', async () => {
+  const workspaceCalls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'workspace-jwt') throw new Error('invalid token');
+      return { id: '33333333-3333-4333-8333-333333333333', email: 'case.officer@example.com' };
+    },
+    loadWorkspaces: async input => {
+      workspaceCalls.push(input);
+      return [{ id: '44444444-4444-4444-8444-444444444444', name: 'Case Officer', kind: 'personal', membershipRole: 'owner' }];
+    }
+  });
+  try {
+    const response = await request(origin, '/api/workspaces', { token: 'workspace-jwt' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      workspaces: [{ id: '44444444-4444-4444-8444-444444444444', name: 'Case Officer', kind: 'personal', membershipRole: 'owner' }]
+    });
+    assert.deepEqual(workspaceCalls, [{
+      userId: '33333333-3333-4333-8333-333333333333',
+      accessToken: 'workspace-jwt'
+    }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('the browser receives only Supabase public configuration', async () => {
   const { server, origin } = await start({
     publicSupabaseConfig: { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' }
