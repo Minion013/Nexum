@@ -81,6 +81,28 @@ begin
         raise;
       end if;
   end;
+
+  begin
+    insert into public.private_evidence_references (contract_id, dispute_case_id, milestone_key, reference_hash, created_by_profile_id)
+    values ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000501', 'milestone-3', 'cross-milestone-evidence', '00000000-0000-4000-8000-000000000101');
+    raise exception 'Evidence was linked to a dispute case for another milestone.';
+  exception
+    when others then
+      if position('must belong to the dispute case milestone' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+
+  begin
+    insert into public.contract_parties (contract_id, party_kind, profile_id)
+    values ('00000000-0000-4000-8000-000000000301', 'profile', '00000000-0000-4000-8000-000000000103');
+    raise exception 'An assigned Case Officer became a Contract Party.';
+  exception
+    when others then
+      if position('cannot become a Contract Party' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
 end;
 $$;
 
