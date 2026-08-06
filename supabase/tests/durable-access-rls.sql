@@ -24,11 +24,25 @@ values ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-0000000
 insert into public.contract_parties (id, contract_id, party_kind, profile_id)
 values ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000301', 'profile', '00000000-0000-4000-8000-000000000101');
 
-insert into public.dispute_cases (id, contract_id, authority_id, milestone_key, status)
-values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000201', 'milestone-2', 'open');
+insert into public.contract_versions (id, contract_id, version_number, version_hash, authority_snapshot, selected_authority_id, created_by_profile_id)
+values (
+  '00000000-0000-4000-8000-000000000351',
+  '00000000-0000-4000-8000-000000000301',
+  1,
+  'rls-test-contract-v1',
+  '{"authority_name":"RLS Test Simulation Authority","jurisdiction_label":"Testnet simulation","ruleset_version":"v1"}',
+  '00000000-0000-4000-8000-000000000201',
+  '00000000-0000-4000-8000-000000000101'
+);
+
+insert into public.dispute_cases (id, contract_id, contract_version_id, authority_id, milestone_key, status)
+values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000351', '00000000-0000-4000-8000-000000000201', 'milestone-2', 'open');
 
 insert into public.authority_case_assignments (dispute_case_id, authority_id, case_officer_profile_id, assigned_by_profile_id)
 values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000101');
+
+insert into public.private_evidence_references (id, contract_id, dispute_case_id, milestone_key, reference_hash, created_by_profile_id)
+values ('00000000-0000-4000-8000-000000000701', '00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000501', 'milestone-2', 'private-evidence-hash', '00000000-0000-4000-8000-000000000101');
 
 do $$
 begin
@@ -51,6 +65,19 @@ begin
   exception
     when others then
       if position('must use the dispute case Resolution Authority' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+
+  insert into public.contracts (id, created_by_profile_id, status)
+  values ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000102', 'private_draft');
+  begin
+    insert into public.private_evidence_references (contract_id, dispute_case_id, milestone_key, reference_hash, created_by_profile_id)
+    values ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000501', 'milestone-2', 'cross-contract-evidence', '00000000-0000-4000-8000-000000000102');
+    raise exception 'Evidence was linked to a dispute case from another Contract.';
+  exception
+    when others then
+      if position('must belong to the same Contract' in sqlerrm) = 0 then
         raise;
       end if;
   end;
