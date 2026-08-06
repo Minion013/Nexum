@@ -5,9 +5,10 @@ import { join, resolve } from 'node:path';
 const webRoot = resolve(fileURLToPath(new URL('../', import.meta.url)));
 
 await build({
-  entryPoints: [join(webRoot, 'public', 'app.js')],
+  entryPoints: [join(webRoot, 'public', 'app.js'), join(webRoot, 'public', 'login.js')],
   bundle: true,
   format: 'esm',
   platform: 'browser',
-  outfile: join(webRoot, 'public', 'app.bundle.js')
+  outdir: join(webRoot, 'public'),
+  entryNames: '[name].bundle'
 });

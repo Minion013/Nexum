@@ -4,8 +4,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyAccessToken as verifyPrivyAccessToken, verifyIdentityToken } from '@privy-io/node';
-import { createRemoteJWKSet } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 import { AgreementEngine, RuleError, suggestDraft } from './agreement-engine.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -13,17 +12,16 @@ const publicRoot = join(root, 'public');
 const port = Number(process.env.PORT ?? 3000);
 const types = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
 const identities = { buyer: 'local-buyer', seller: 'local-seller', resolver: 'local-resolver' };
-const sessionRoles = new Set(['buyer', 'seller', 'resolver', 'guest', 'invitee']);
+const localRoles = new Set(['buyer', 'seller', 'resolver', 'guest', 'invitee']);
 const localAgreementId = 'local-demo-agreement';
-const sessionLifetimeMs = 8 * 60 * 60 * 1_000;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
 function respond(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }); response.end(JSON.stringify(body)); }
 class AuthenticationError extends Error {}
-function cookie(request) { return Object.fromEntries((request.headers.cookie ?? '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(([key]) => key)); }
 async function json(request) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > 64_000) throw new RuleError('Request is too large.'); } return body ? JSON.parse(body) : {}; }
 function safeFile(urlPath) { const requested = urlPath === '/' ? '/index.html' : urlPath; const file = normalize(join(publicRoot, requested)); return file.startsWith(publicRoot) ? file : null; }
+function bearerToken(request) { const match = typeof request.headers.authorization === 'string' && request.headers.authorization.match(/^Bearer\s+(.+)$/i); return match?.[1]; }
 
 function createLocalDemo() {
   const now = Math.floor(Date.now() / 1000);
@@ -67,115 +65,111 @@ function agreementFor(role, demo) {
   }
   throw new RuleError('This session is not invited to the agreement.');
 }
-function participantSession(session) {
-  return Boolean(session && ['buyer', 'seller'].includes(session.role) && session.agreementId === localAgreementId);
-}
-function activeSession(request, sessions, now) {
-  const id = cookie(request).pactflow_session;
-  const session = sessions.get(id);
-  if (session && (now() - session.createdAt > sessionLifetimeMs || now() >= session.expiresAt)) { sessions.delete(id); return undefined; }
-  return session;
-}
-function sessionPayload(session) {
-  return { role: session.role, userId: session.userId, walletAddress: session.walletAddress, mode: 'privy-testnet' };
-}
-
-function createPrivyVerifier() {
-  const appId = process.env.PRIVY_APP_ID;
-  const appSecret = process.env.PRIVY_APP_SECRET;
-  if (!appId || !appSecret) return async () => { throw new AuthenticationError('Privy is not configured.'); };
-  const credentials = Buffer.from(`${appId}:${appSecret}`).toString('base64');
-  const verificationKey = createRemoteJWKSet(new URL(`/v1/apps/${appId}/jwks.json`, process.env.PRIVY_API_BASE_URL ?? 'https://api.privy.io'), {
-    headers: { authorization: `Basic ${credentials}`, 'privy-app-id': appId }
-  });
-  return async (accessToken, identityToken) => {
-    if (typeof accessToken !== 'string' || !accessToken) throw new AuthenticationError('A Privy access token is required.');
-    if (typeof identityToken !== 'string' || !identityToken) throw new AuthenticationError('A Privy identity token is required.');
-    try {
-      const [access, identity] = await Promise.all([
-        verifyPrivyAccessToken({ access_token: accessToken, app_id: appId, verification_key: verificationKey }),
-        verifyIdentityToken({ identity_token: identityToken, app_id: appId, verification_key: verificationKey })
-      ]);
-      if (access.user_id !== identity.id) throw new AuthenticationError('Privy tokens do not belong to the same user.');
-      const walletAddresses = identity.linked_accounts
-        .filter(account => account.type === 'wallet' && account.chain_type === 'ethereum')
-        .map(account => account.address.toLowerCase());
-      return { userId: access.user_id, expiresAt: access.expiration * 1_000, walletAddresses };
-    } catch {
-      throw new AuthenticationError('Privy authentication is invalid or expired.');
-    }
+function participantSession(session) { return Boolean(session && ['buyer', 'seller'].includes(session.role) && session.agreementId === localAgreementId); }
+function publicSupabaseConfigFromEnvironment() { return { url: process.env.SUPABASE_URL ?? null, publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? null }; }
+function createSupabaseSessionVerifier(config = publicSupabaseConfigFromEnvironment()) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  const supabase = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  return async accessToken => {
+    if (!accessToken) throw new AuthenticationError('A Supabase session is required.');
+    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+    if (error || !user) throw new AuthenticationError('Supabase authentication is invalid or expired.');
+    return { id: user.id, email: user.email ?? null };
   };
 }
+function createProfileLoader(config = publicSupabaseConfigFromEnvironment()) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ userId, accessToken }) => {
+    const supabase = createClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
+    const { data, error } = await supabase.from('profiles').select('id, email, display_name').eq('id', userId).single();
+    if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
+    return { id: data.id, email: data.email, displayName: data.display_name };
+  };
+}
+function sessionPayload(session, profile) { return { role: session.role, user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ now = () => Date.now(), verifyAccessToken = createPrivyVerifier() } = {}) {
-  const sessions = new Map();
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const invitations = new Map();
   const participantUsers = new Map();
+  const localSessions = new Map();
   const demo = createLocalDemo();
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
-    const session = activeSession(request, sessions, now);
+    const authenticate = async () => {
+      const accessToken = bearerToken(request);
+      let user;
+      try { user = await verifySupabaseSession(accessToken); } catch { throw new AuthenticationError('Supabase authentication is invalid or expired.'); }
+      return { ...localSessions.get(user.id), userId: user.id, email: user.email, accessToken };
+    };
     try {
-      if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'privy-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
-      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { appId: process.env.PRIVY_APP_ID ?? null, mode: 'privy-testnet' });
+      if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'supabase-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { ...publicSupabaseConfig, mode: 'supabase-auth' });
       if (url.pathname === '/api/session' && request.method === 'POST') {
-        const { role, accessToken, identityToken, walletAddress } = await json(request); if (!sessionRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
-        let authenticated;
-        try { authenticated = await verifyAccessToken(accessToken, identityToken); } catch { throw new AuthenticationError('Privy authentication is invalid or expired.'); }
-        if (!authenticated?.userId || !Number.isFinite(authenticated.expiresAt) || !Array.isArray(authenticated.walletAddresses)) throw new AuthenticationError('Privy did not return a valid authenticated session.');
-        if (typeof walletAddress !== 'string' || !/^0x[\da-fA-F]{40}$/.test(walletAddress)) return respond(response, 400, { error: 'Wallet address must be an Ethereum address.' });
-        if (!authenticated.walletAddresses.includes(walletAddress.toLowerCase())) return respond(response, 403, { error: 'The selected wallet is not linked to this Privy account.', code: 'wallet_not_linked' });
+        const { role } = await json(request);
+        if (!localRoles.has(role)) return respond(response, 400, { error: 'Choose buyer, resolver, or guest. Seller access requires an invitation.' });
+        const authenticated = await authenticate();
         if (role === 'buyer' || role === 'seller') {
           const participantUser = participantUsers.get(role);
           if (!participantUser && role === 'seller') return respond(response, 403, { error: 'Seller access requires an accepted invitation.', code: 'seller_invitation_required' });
-          if (participantUser && authenticated.userId !== participantUser) return respond(response, 403, { error: 'This Privy account is not the assigned local participant.', code: 'participant_not_assigned' });
+          if (participantUser && authenticated.userId !== participantUser) return respond(response, 403, { error: 'This Supabase account is not the assigned local participant.', code: 'participant_not_assigned' });
           if (!participantUser) participantUsers.set(role, authenticated.userId);
         }
-        const id = randomUUID(); const created = { id, role, userId: authenticated.userId, walletAddress, agreementId: participantUsers.get(role) === authenticated.userId ? localAgreementId : null, createdAt: now(), expiresAt: Math.min(authenticated.expiresAt, now() + sessionLifetimeMs) }; sessions.set(id, created);
-        return respond(response, 201, sessionPayload(created), { 'set-cookie': `pactflow_session=${id}; HttpOnly; SameSite=Strict; Path=/` });
+        const session = { role, userId: authenticated.userId, email: authenticated.email, agreementId: participantUsers.get(role) === authenticated.userId ? localAgreementId : null };
+        localSessions.set(session.userId, session);
+        const profile = await loadProfile({ userId: session.userId, accessToken: authenticated.accessToken });
+        return respond(response, 201, sessionPayload(session, profile));
       }
-      if (url.pathname === '/api/session' && request.method === 'GET') return session ? respond(response, 200, sessionPayload(session)) : respond(response, 401, { error: 'No authenticated session.' });
-      if (url.pathname === '/api/session' && request.method === 'DELETE') { if (session) sessions.delete(cookie(request).pactflow_session); return respond(response, 204, {}, { 'set-cookie': 'pactflow_session=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/' }); }
+      if (url.pathname === '/api/session' && request.method === 'GET') {
+        const session = await authenticate();
+        const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, sessionPayload(session, profile));
+      }
+      if (url.pathname === '/api/session' && request.method === 'DELETE') { const session = await authenticate(); localSessions.delete(session.userId); return respond(response, 204, {}); }
       if (url.pathname === '/api/agreement' && request.method === 'GET') {
-        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        const session = await authenticate();
+        if (!session.role) return respond(response, 403, { error: 'Choose a local demo role before viewing the agreement.' });
         if (session.role !== 'resolver' && !participantSession(session)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
         return respond(response, 200, { agreement: agreementFor(session.role, demo), mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/invitations' && request.method === 'POST') {
+        const session = await authenticate();
         if (!participantSession(session)) return respond(response, 403, { error: 'Only an invited buyer or seller can invite a counterparty.' });
         const invitedRole = session.role === 'buyer' ? 'seller' : 'buyer';
         const id = randomUUID();
-        invitations.set(id, { id, agreementId: localAgreementId, invitedRole, inviter: session.role, status: 'pending', createdAt: now() });
+        invitations.set(id, { id, agreementId: localAgreementId, invitedRole, inviter: session.role, status: 'pending', createdAt: Date.now() });
         return respond(response, 201, { id, agreementId: localAgreementId, invitedRole, status: 'pending', mode: 'local-only' });
       }
       const invitationMatch = url.pathname.match(/^\/api\/agreement\/invitations\/([\w-]+)\/accept$/);
       if (invitationMatch && request.method === 'POST') {
-        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        const session = await authenticate();
         if (session.role !== 'invitee') return respond(response, 403, { error: 'Only an invitee session can accept an invitation.' });
         const invitation = invitations.get(invitationMatch[1]);
         if (!invitation || invitation.status !== 'pending') throw new RuleError('This invitation is invalid, expired, or already accepted.');
         participantUsers.set(invitation.invitedRole, session.userId);
         session.role = invitation.invitedRole; session.agreementId = invitation.agreementId;
-        invitation.status = 'accepted'; invitation.acceptedAt = now(); invitation.acceptedBy = session.id;
-        return respond(response, 200, { ...sessionPayload(session), invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status } });
+        localSessions.set(session.userId, session);
+        invitation.status = 'accepted'; invitation.acceptedAt = Date.now(); invitation.acceptedBy = session.userId;
+        const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, { ...sessionPayload(session, profile), invitation: { id: invitation.id, agreementId: invitation.agreementId, status: invitation.status } });
       }
       if (url.pathname === '/api/agreement/copilot' && request.method === 'POST') {
-        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        const session = await authenticate();
         if (!participantSession(session)) return respond(response, 403, { error: 'This session is not invited to change the agreement.' });
         const { brief } = await json(request);
         return respond(response, 200, { terms: demo.suggest(brief), notice: 'Co-pilot suggestions are editable drafts only. It cannot approve terms, release funds, judge quality, or resolve disputes.', mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/draft' && request.method === 'PUT') {
-        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        const session = await authenticate();
         if (!participantSession(session)) return respond(response, 403, { error: 'This session is not invited to change the agreement.' });
         const { terms } = await json(request);
         return respond(response, 200, { agreement: demo.replaceDraft(session.role, terms), mode: 'local-only' });
       }
       if (url.pathname === '/api/agreement/actions' && request.method === 'POST') {
-        if (!session) return respond(response, 401, { error: 'Sign in to the local demo.' });
+        const session = await authenticate();
         if (!Object.hasOwn(identities, session.role)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
         if (['buyer', 'seller'].includes(session.role) && !participantSession(session)) return respond(response, 403, { error: 'This session is not invited to the agreement.' });
-        const { type } = await json(request); return respond(response, 200, { agreement: demo.act(session.role, type), mode: 'local-only' });
+        const { type } = await json(request);
+        return respond(response, 200, { agreement: demo.act(session.role, type), mode: 'local-only' });
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown local endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }

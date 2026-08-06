@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Sign in to PactFlow." />
+    <title>Log in — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/responsive.css" />
+  </head>
+  <body class="auth-page">
+    <header class="auth-header"><a class="brand" href="/">Pact<span>Flow</span></a><a class="back-link" href="/">← Back to home</a></header>
+    <main class="auth-main">
+      <section class="auth-card" aria-labelledby="login-title">
+        <p class="eyebrow">Welcome to PactFlow</p>
+        <h1 id="login-title">Let’s get you in.</h1>
+        <p class="auth-intro">Enter your email and we’ll send a one-time sign-in code.</p>
+        <form id="login-form" novalidate>
+          <label for="email">Email address</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          <div id="code-field" hidden><label for="email-code">One-time code</label><input id="email-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter your code" /></div>
+          <button id="send-code" class="button button-dark auth-submit" type="submit">Continue with email</button>
+        </form>
+        <div id="role-controls" hidden><p class="role-prompt">How are you joining this project?</p><div class="role-options"><button data-role="buyer" type="button"><strong>I’m hiring a creator</strong><span>Start or manage a project</span></button><button data-role="seller" type="button"><strong>I’m a creator</strong><span>Join with an invitation</span></button><button data-role="resolver" type="button"><strong>I’m helping resolve</strong><span>Access the project record</span></button></div></div>
+        <p id="request-error" class="form-message" aria-live="polite" hidden></p>
+      </section>
+      <p class="auth-note">A simple, secure way to begin your project together.</p>
+    </main>
+    <script type="module" src="/login.bundle.js"></script>
+  </body>
+</html>

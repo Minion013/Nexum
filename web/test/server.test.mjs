@@ -12,10 +12,10 @@ test('public entry and health check are safe to render', async () => {
   try {
     const health = await request(server, '/health');
     assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), { status: 'ok', mode: 'privy-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
+    assert.deepEqual(await health.json(), { status: 'ok', mode: 'supabase-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
     const authConfig = await request(server, '/api/auth/config');
     assert.equal(authConfig.status, 200);
-    assert.deepEqual(Object.keys(await authConfig.json()).sort(), ['appId', 'mode']);
+    assert.deepEqual(Object.keys(await authConfig.json()).sort(), ['mode', 'publishableKey', 'url']);
     const entry = await request(server, '/');
     assert.equal(entry.status, 200);
     assert.match(await entry.text(), /PactFlow/);
