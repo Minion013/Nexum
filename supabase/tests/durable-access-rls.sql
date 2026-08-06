@@ -30,6 +30,33 @@ values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-0000000
 insert into public.authority_case_assignments (dispute_case_id, authority_id, case_officer_profile_id, assigned_by_profile_id)
 values ('00000000-0000-4000-8000-000000000501', '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000101');
 
+do $$
+begin
+  begin
+    insert into public.delegated_project_access (contract_party_id, profile_id, granted_by_profile_id)
+    values ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000101');
+    raise exception 'A Profile Contract Party unexpectedly accepted a delegation.';
+  exception
+    when others then
+      if position('only by a Workspace Contract Party' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+
+  begin
+    update public.authority_case_assignments
+    set authority_id = (select id from public.resolution_authorities where slug = 'pactflow-simulation')
+    where dispute_case_id = '00000000-0000-4000-8000-000000000501';
+    raise exception 'A Case Officer was assigned through the wrong Resolution Authority.';
+  exception
+    when others then
+      if position('must use the dispute case Resolution Authority' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+end;
+$$;
+
 set local role authenticated;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', true);
@@ -37,6 +64,18 @@ do $$
 begin
   if (select count(*) from public.workspaces) <> 1 then
     raise exception 'A party must see only its provisioned personal workspace.';
+  end if;
+  insert into public.workspaces (owner_profile_id, name, kind)
+  values ('00000000-0000-4000-8000-000000000101', 'Party collaboration', 'collaborative');
+  if not exists (
+    select 1
+    from public.workspace_memberships membership
+    join public.workspaces workspace on workspace.id = membership.workspace_id
+    where workspace.name = 'Party collaboration'
+      and membership.profile_id = '00000000-0000-4000-8000-000000000101'
+      and membership.membership_role = 'owner'
+  ) then
+    raise exception 'A collaborative Workspace creator must receive its owner membership.';
   end if;
   if not exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000301') then
     raise exception 'A Contract Party must see its contract.';

@@ -40,7 +40,7 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 The runnable demo and tested local rules engine cover Supabase-authenticated local sessions, editable validated custom drafts, deterministic co-pilot suggestions, immutable versions with approval and field-difference history, local participant-only data access, buyer-only simulated funding, sequential milestones, private-evidence hashes, acceptance and timeout release, buyer-controlled missed-delivery refunds, resolver-only splits, and activity history.
 
-The demo deliberately omits durable invitation and participant records, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service. It is a test-wallet development mode, not a real-money escrow service.
+The demo now includes durable workspace, participant, invitation, authority, and Case Officer schema with linked-project RLS proof. Its browser agreement flow remains a local simulation while durable contract writes, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service are still incomplete. It is a test-wallet development mode, not a real-money escrow service.
 
 ## Implementation tracking
 
