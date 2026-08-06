@@ -46,6 +46,11 @@ function respond(response, status, body, headers = {}) { response.writeHead(stat
 class AuthenticationError extends Error {}
 async function json(request) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > 64_000) throw new RuleError('Request is too large.'); } return body ? JSON.parse(body) : {}; }
 function safeFile(urlPath) { const requested = urlPath === '/' ? '/index.html' : urlPath; const file = normalize(join(publicRoot, requested)); return file.startsWith(publicRoot) ? file : null; }
+function standalonePage(urlPath) {
+  if (urlPath === '/workspace') return join(publicRoot, 'home.html');
+  if (/^\/contracts\/local-demo-agreement\/(?:draft|activity|versions|invitations)\/?$/.test(urlPath) || /^\/contracts\/local-demo-agreement\/milestones\/\d+\/?$/.test(urlPath) || /^\/contracts\/local-demo-agreement\/?$/.test(urlPath)) return join(publicRoot, 'workspace.html');
+  return null;
+}
 function bearerToken(request) { const match = typeof request.headers.authorization === 'string' && request.headers.authorization.match(/^Bearer\s+(.+)$/i); return match?.[1]; }
 
 function createLocalDemo() {
@@ -272,7 +277,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown local endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
-      const file = safeFile(decodeURIComponent(url.pathname));
+      const file = standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
       if (!file || !existsSync(file) || !statSync(file).isFile()) { response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found'); return; }
       response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'x-content-type-options': 'nosniff' });
       if (request.method === 'HEAD') return response.end();

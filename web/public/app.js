@@ -1,97 +1,32 @@
 import { authenticatedRequest, supabase } from './supabase-auth.js';
 
-const $ = selector => document.querySelector(selector);
-let role = null;
-let model = null;
-let draftTerms = null;
-let draftDirty = false;
-const money = value => `${(value / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2 })} simulated eUSD`;
-const active = () => model?.milestones.find(milestone => ['Active', 'InReview', 'Disputed'].includes(milestone.status)) || model?.milestones[0];
-const enable = (id, allowed) => { $(id).disabled = !allowed; };
-const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-const localInput = seconds => {
-  const date = new Date(seconds * 1000);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-};
-const deadline = seconds => `${new Date(seconds * 1000).toLocaleString()} (UTC ${new Date(seconds * 1000).toISOString().replace('.000Z', 'Z')})`;
-
+const $ = s => document.querySelector(s);
 const request = authenticatedRequest;
-function showError(message = '') { $('#request-error').hidden = !message; $('#request-error').textContent = message; }
-function milestoneEditor() {
-  if (!draftTerms) return;
-  $('#draft-scope').value = draftTerms.scope;
-  $('#draft-roles').textContent = `Buyer ${draftTerms.buyer} | Seller ${draftTerms.seller} | Bound resolver ${draftTerms.resolver} | Success fee ${(draftTerms.feeBps / 100).toFixed(2)}%`;
-  $('#milestone-editor').innerHTML = draftTerms.milestones.map((milestone, index) => `<fieldset class="milestone-fields"><h3>Milestone ${index + 1}</h3><label>Title<input name="title-${index}" required value="${escape(milestone.title)}"></label><label>Allocation (eUSD)<input name="amount-${index}" required type="number" min="0.01" step="0.01" value="${milestone.amount / 1_000_000}"></label><label>Deadline in your local time<input name="deadline-${index}" required type="datetime-local" value="${localInput(milestone.deadline)}"></label><label>Review hours<select name="review-${index}"><option value="24" ${milestone.reviewSeconds === 86_400 ? 'selected' : ''}>24</option><option value="72" ${milestone.reviewSeconds === 259_200 ? 'selected' : ''}>72</option><option value="168" ${milestone.reviewSeconds === 604_800 ? 'selected' : ''}>168</option></select></label><label class="wide">Evidence requirement<input name="evidence-${index}" required value="${escape(milestone.evidenceRequirement)}"></label>${draftTerms.milestones.length > 2 ? `<button type="button" class="danger" data-remove-milestone="${index}">Remove</button>` : ''}</fieldset>`).join('');
-  updateDraftPreview();
-}
-function termsFromForm() {
-  const form = $('#draft-form');
-  const milestones = draftTerms.milestones.map((_, index) => ({
-    title: form.elements[`title-${index}`].value.trim(),
-    amount: Math.round(Number(form.elements[`amount-${index}`].value) * 1_000_000),
-    deadline: Math.floor(new Date(form.elements[`deadline-${index}`].value).getTime() / 1000),
-    reviewSeconds: Number(form.elements[`review-${index}`].value) * 3_600,
-    evidenceRequirement: form.elements[`evidence-${index}`].value.trim()
-  }));
-  return { ...draftTerms, scope: $('#draft-scope').value.trim(), milestones };
-}
-function updateDraftPreview() {
-  try {
-    const terms = termsFromForm();
-    const total = terms.milestones.reduce((sum, milestone) => sum + milestone.amount, 0);
-    $('#draft-preview').textContent = `Draft allocation: ${money(total)}. ${terms.milestones.map((milestone, index) => `Milestone ${index + 1}: ${deadline(milestone.deadline)}`).join(' | ')}`;
-  } catch { $('#draft-preview').textContent = 'Enter complete milestone values to preview local and UTC deadlines.'; }
-}
-function renderVersions() {
-  const panel = $('#version-panel');
-  const history = model?.history;
-  panel.hidden = !history;
-  if (!history) return;
-  $('#version-history').innerHTML = history.slice().reverse().map(version => {
-    const approvals = version.approvals.length ? `Approved by ${version.approvals.join(', ')}` : 'No approvals yet';
-    const changes = version.changes.length ? version.changes.map(change => `${escape(change.field)}: ${escape(change.before)} to ${escape(change.after)}`).join('; ') : 'Original terms';
-    return `<li><strong>v${version.version} - ${escape(version.status)}</strong><span>${new Date(version.timestamp).toLocaleString()} | ${approvals} | ${changes}</span></li>`;
-  }).join('');
-}
-function render() {
-  $('#wallet-state').textContent = role ? `${role[0].toUpperCase() + role.slice(1)} · Supabase account` : 'No authenticated session';
-  $('#sign-out').hidden = !role;
-  const invitationPanel = $('#invitation-panel');
-  invitationPanel.hidden = !['buyer', 'seller', 'invitee'].includes(role);
-  $('#create-invitation').hidden = !['buyer', 'seller'].includes(role);
-  $('#invitation-input').parentElement.hidden = role !== 'invitee';
-  if (!model) { $('#draft-panel').hidden = true; $('#version-panel').hidden = true; return; }
-  const milestone = active();
-  const approvals = model.approvals ?? [];
-  $('#agreement-state').textContent = model.state === 'Funded' ? 'Funded - local simulation' : model.state === 'Expired' ? 'Funding window expired' : 'Draft - no payment authority';
-  $('#agreement-version').textContent = model.approvals ? `v${model.version} - ${approvals.length}/2 approvals${model.hasPendingAmendment ? ' - amendment pending' : ''}` : `v${model.version} - operational status only`;
-  $('#milestone-title').textContent = milestone?.title || 'All milestones complete';
-  $('#milestone-detail').textContent = milestone ? `${money(milestone.amount)} - ${deadline(milestone.deadline)}` : 'No active milestone';
-  $('#milestone-status').textContent = !milestone ? 'All milestones have a terminal local outcome.' : model.state !== 'Funded' ? 'Locked until the agreement is funded' : milestone.status === 'InReview' ? `In review until ${deadline(milestone.reviewEndsAt)}` : milestone.status === 'Disputed' ? 'Frozen locally - only the simulated resolver may resolve it.' : 'Active - seller can submit one final local evidence record.';
-  enable('#approve', Boolean(role) && model.state === 'Unfunded' && !approvals.includes(`local-${role}`) && ['buyer', 'seller'].includes(role));
-  enable('#fund', role === 'buyer' && approvals.length === 2 && model.state === 'Unfunded'); enable('#evidence', role === 'seller' && milestone?.status === 'Active');
-  enable('#accept', role === 'buyer' && milestone?.status === 'InReview'); enable('#release', milestone?.status === 'InReview'); enable('#dispute', role === 'buyer' && milestone?.status === 'InReview');
-  enable('#resolve', role === 'resolver' && milestone?.status === 'Disputed'); enable('#refund', role === 'buyer' && milestone?.status === 'Active'); enable('#amend', ['buyer', 'seller'].includes(role) && model.state !== 'Expired' && !model.hasPendingAmendment);
-  $('#timeline').innerHTML = model.events.slice().reverse().map(item => `<li><strong>${escape(item.type)}</strong><span>${new Date(item.timestamp).toLocaleString()} - ${item.version ? `version ${item.version}` : item.milestone !== undefined ? `milestone ${item.milestone + 1}` : 'local event'}</span></li>`).join('');
-  const canEdit = ['buyer', 'seller'].includes(role) && model.state === 'Unfunded';
-  $('#draft-panel').hidden = !canEdit;
-  if (canEdit && (!draftTerms || !draftDirty)) { draftTerms = structuredClone(model.terms); milestoneEditor(); }
-  renderVersions();
-}
-async function refresh() {
-  try { const session = await request('/api/session'); role = session.role; } catch { role = null; }
-  try { model = (await request('/api/agreement')).agreement; draftDirty = false; showError(); } catch { model = null; }
-  render();
-}
-async function act(type) { try { model = (await request('/api/agreement/actions', { method: 'POST', body: JSON.stringify({ type }) })).agreement; draftDirty = false; showError(); render(); } catch (error) { showError(error.message); } }
-$('#sign-out').onclick = async () => { try { await request('/api/session', { method: 'DELETE' }); await (await supabase()).auth.signOut(); window.location.assign('/login.html'); } catch (error) { showError(error.message); } };
-$('#create-invitation').onclick = async () => { try { const invitation = await request('/api/agreement/invitations', { method: 'POST' }); $('#invitation-code').textContent = `Share this one-time local invitation code with the counterparty: ${invitation.id}`; showError(); } catch (error) { showError(error.message); } };
-$('#accept-invitation').onclick = async () => { try { const code = $('#invitation-input').value.trim(); await request(`/api/agreement/invitations/${encodeURIComponent(code)}/accept`, { method: 'POST' }); await refresh(); } catch (error) { showError(error.message); } };
-['approve', 'fund', 'evidence', 'accept', 'release', 'dispute', 'resolve', 'refund', 'amend'].forEach(type => { $(`#${type}`).onclick = () => act(type); });
-$('#copilot').onclick = async () => { try { const result = await request('/api/agreement/copilot', { method: 'POST', body: JSON.stringify({ brief: $('#copilot-brief').value }) }); draftTerms = result.terms; draftDirty = true; milestoneEditor(); showError(result.notice); } catch (error) { showError(error.message); } };
-$('#add-milestone').onclick = () => { if (draftTerms.milestones.length < 3) { const previous = draftTerms.milestones.at(-1); draftTerms.milestones.push({ ...previous, title: 'Additional delivery', deadline: previous.deadline + 7 * 86_400 }); draftDirty = true; milestoneEditor(); } };
-$('#milestone-editor').onclick = event => { const index = Number(event.target.dataset.removeMilestone); if (Number.isInteger(index)) { draftTerms.milestones.splice(index, 1); draftDirty = true; milestoneEditor(); } };
-$('#draft-form').oninput = () => { draftDirty = true; updateDraftPreview(); };
-$('#draft-form').onsubmit = async event => { event.preventDefault(); try { model = (await request('/api/agreement/draft', { method: 'PUT', body: JSON.stringify({ terms: termsFromForm() }) })).agreement; draftDirty = false; showError(); render(); } catch (error) { showError(error.message); } };
-refresh().then(() => { if (!role) window.location.replace('/login.html'); });
+let role, model, draft;
+const money = n => `${(n / 1e6).toLocaleString(undefined, { minimumFractionDigits: 2 })} simulated eUSD`;
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const date = seconds => new Date(seconds * 1000).toLocaleString();
+const active = () => model?.milestones.find(m => ['Active', 'InReview', 'Disputed'].includes(m.status)) || model?.milestones[0];
+const path = () => window.location.pathname;
+const id = () => path().split('/')[2] || 'local-demo-agreement';
+const link = suffix => `/contracts/${encodeURIComponent(id())}${suffix}`;
+const page = () => { const part = path().split('/').slice(3); return part[0] === 'milestones' ? 'milestone' : part[0] || 'overview'; };
+const selectedMilestone = () => page() === 'milestone' ? model?.milestones.find(m => m.index === Number(path().split('/')[4])) : active();
+const error = text => { $('#request-error').hidden = !text; $('#request-error').textContent = text || ''; };
+const allowed = type => { const milestone = active(); const selected = selectedMilestone(); const approvals = model?.approvals ?? []; const isCurrent = selected?.index === milestone?.index; return ({ approve: ['buyer', 'seller'].includes(role) && model.state === 'Unfunded' && !approvals.includes(`local-${role}`), fund: role === 'buyer' && approvals.length === 2 && model.state === 'Unfunded', evidence: isCurrent && role === 'seller' && milestone?.status === 'Active', accept: isCurrent && role === 'buyer' && milestone?.status === 'InReview', release: isCurrent && milestone?.status === 'InReview', dispute: isCurrent && role === 'buyer' && milestone?.status === 'InReview', resolve: isCurrent && role === 'resolver' && milestone?.status === 'Disputed', refund: isCurrent && role === 'buyer' && milestone?.status === 'Active', amend: isCurrent && ['buyer', 'seller'].includes(role) && model.state !== 'Expired' && !model.hasPendingAmendment })[type]; };
+const button = (type, label, style = '') => `<button type="button" data-action="${type}" class="${style}" ${allowed(type) ? '' : 'disabled'}>${label}</button>`;
+function nav() { const milestone = active(); const links = [['overview', link(''), 'Overview'], ['draft', link('/draft'), 'Draft'], ['milestone', link(`/milestones/${milestone?.index ?? 0}`), 'Milestone'], ['activity', link('/activity'), 'Activity'], ['versions', link('/versions'), 'Versions'], ['invitations', link('/invitations'), 'Invitations']]; $('#workspace-navigation').innerHTML = links.map(([name, href, label]) => `<a href="${href}" ${page() === name ? 'aria-current="page"' : ''}>${label}</a>`).join(''); }
+function overview() { const m = active(), approvals = model.approvals ?? []; return `<section class="workspace-intro"><p class="eyebrow">Contract overview</p><h1>Keep the agreement and the work in sync.</h1><p>Review the project plan, move milestones forward, and keep each decision clear for everyone involved.</p></section><section class="grid"><article class="panel"><p class="eyebrow">Custom contract</p><h2>Checkout redesign</h2><p>Northstar Commerce (Singapore) × Nia Putri (Indonesia)</p><dl><div><dt>Settlement</dt><dd>1,500.00 simulated eUSD</dd></div><div><dt>Contract state</dt><dd>${model.state === 'Funded' ? 'Funded — local simulation' : 'Draft — no payment authority'}</dd></div><div><dt>Version</dt><dd>v${model.version} · ${approvals.length}/2 acceptances</dd></div></dl><div class="actions">${button('approve', 'Accept this version')}${button('fund', 'Fund local contract', 'primary')}</div></article><article class="panel"><p class="eyebrow">Next milestone</p><h2>${esc(m?.title || 'All milestones complete')}</h2><p>${m ? `${money(m.amount)} · ${date(m.deadline)}` : 'No active milestone'}</p><div class="status">${m?.status || 'Complete'}</div><a class="button button-dark" href="${link(`/milestones/${m?.index ?? 0}`)}">Open milestone</a></article></section><section class="panel safety"><h2>Testnet boundary</h2><p>This workspace is a local simulation for demonstration only. It does not provide real-money escrow, custody, fiat conversion, or cash-out.</p></section>`; }
+function draftView() { if (!['buyer', 'seller'].includes(role) || model.state !== 'Unfunded') return `<section class="workspace-intro"><p class="eyebrow">Contract draft</p><h1>Draft is read-only</h1><p>Only Contract Parties can edit an unfunded contract draft.</p></section>`; return `<section class="panel"><div class="row"><div><p class="eyebrow">Editable contract draft</p><h1>Set the commercial rules</h1><p class="muted">Deadlines are saved as canonical UTC timestamps and shown in your local time.</p></div><button id="copilot" class="ghost" type="button">Suggest from brief</button></div><label for="copilot-brief">Plain-language brief (optional)</label><textarea id="copilot-brief" rows="3"></textarea><form id="draft-form"><label for="draft-scope">Scope</label><textarea id="draft-scope" required rows="3"></textarea><div id="milestone-editor"></div><div class="actions"><button id="save-draft" class="primary">Save editable draft</button></div></form><p class="muted">Co-pilot suggestions are editable only. It cannot accept terms, release funds, judge quality, or resolve disputes.</p></section>`; }
+function milestoneView() { const m = selectedMilestone(); if (!m) return `<section class="workspace-intro"><p class="eyebrow">Milestone work</p><h1>Milestone not found</h1><p>Choose a milestone listed in this contract.</p></section>`; return `<section class="workspace-intro"><p class="eyebrow">Milestone work</p><h1>${esc(m.title)}</h1><p>${money(m.amount)} · ${date(m.deadline)}</p></section><section class="panel"><p class="eyebrow">Current status</p><h2>${esc(m.status)}</h2><p class="muted">Evidence requirement: ${esc(m.evidenceRequirement)}</p><div class="actions">${button('evidence', 'Submit evidence record')}${button('accept', 'Accept evidence')}${button('release', 'Release eligible milestone', 'primary')}${button('dispute', 'Open dispute', 'danger')}${button('resolve', 'Resolve 50/50 split')}${button('refund', 'Simulate missed-delivery refund', 'danger')}${button('amend', 'Extend future deadline', 'ghost')}</div></section>`; }
+function activity() { return `<section class="workspace-intro"><p class="eyebrow">Append-only activity</p><h1>Contract history</h1><p>Every local agreement decision is recorded here.</p></section><section class="panel"><ol class="timeline">${model.events.slice().reverse().map(e => `<li><strong>${esc(e.type)}</strong><span>${date(e.timestamp)} — ${e.version ? `version ${e.version}` : e.milestone !== undefined ? `milestone ${e.milestone + 1}` : 'local event'}</span></li>`).join('')}</ol></section>`; }
+function versions() { const history = model.history ?? []; return `<section class="workspace-intro"><p class="eyebrow">Read-only versions</p><h1>What changed and who accepted</h1><p>Each version is retained with its recorded Contract Party acceptances.</p></section><section class="panel"><ol class="timeline">${history.slice().reverse().map(v => `<li><strong>v${v.version} — ${esc(v.status)}</strong><span>${date(v.timestamp)} | ${v.approvals.length ? `Accepted by ${v.approvals.join(', ')}` : 'No acceptances yet'} | ${v.changes.length ? v.changes.map(c => `${esc(c.field)}: ${esc(c.before)} to ${esc(c.after)}`).join('; ') : 'Original terms'}</span></li>`).join('') || '<li><strong>No version history is available for this operational view.</strong></li>'}</ol></section>`; }
+function invitations() { const party = ['buyer', 'seller'].includes(role); return `<section class="workspace-intro"><p class="eyebrow">Private participation</p><h1>Invite the counterparty</h1><p>The link code is a local, one-time demo invitation. It is kept only while this server runs.</p></section><section class="panel">${party ? '<div class="actions"><button id="create-invitation" type="button">Create counterparty invitation</button></div><p id="invitation-code" class="muted"></p>' : ''}${role === 'invitee' ? '<label for="invitation-input">Invitation code</label><div class="actions"><input id="invitation-input" placeholder="Paste local invitation code"><button id="accept-invitation" type="button">Accept invitation</button></div>' : ''}${!party && role !== 'invitee' ? '<p class="muted">Only a participating Contract Party can create an invitation. An invitee can accept a shared code here.</p>' : ''}</section>`; }
+function renderEditor() { if (!draft) return; $('#draft-scope').value = draft.scope; $('#milestone-editor').innerHTML = draft.milestones.map((m, i) => `<fieldset class="milestone-fields"><h3>Milestone ${i + 1}</h3><label>Title<input name="title-${i}" value="${esc(m.title)}" required></label><label>Allocation (eUSD)<input name="amount-${i}" type="number" min="0.01" step="0.01" value="${m.amount / 1e6}" required></label><label>Deadline<input name="deadline-${i}" type="datetime-local" value="${new Date(m.deadline * 1000 - new Date(m.deadline * 1000).getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required></label><label>Review hours<input name="review-${i}" type="number" value="${m.reviewSeconds / 3600}" required></label><label class="wide">Evidence requirement<input name="evidence-${i}" value="${esc(m.evidenceRequirement)}" required></label></fieldset>`).join(''); }
+function terms() { const form = $('#draft-form'); return { ...draft, scope: $('#draft-scope').value.trim(), milestones: draft.milestones.map((_, i) => ({ title: form.elements[`title-${i}`].value.trim(), amount: Math.round(Number(form.elements[`amount-${i}`].value) * 1e6), deadline: Math.floor(new Date(form.elements[`deadline-${i}`].value).getTime() / 1000), reviewSeconds: Number(form.elements[`review-${i}`].value) * 3600, evidenceRequirement: form.elements[`evidence-${i}`].value.trim() })) }; }
+function bind() { document.querySelectorAll('[data-action]').forEach(b => b.onclick = () => act(b.dataset.action)); $('#create-invitation')?.addEventListener('click', async () => { try { const invite = await request('/api/agreement/invitations', { method: 'POST' }); $('#invitation-code').textContent = `Share this one-time local invitation code with the counterparty: ${invite.id}`; } catch (e) { error(e.message); } }); $('#accept-invitation')?.addEventListener('click', async () => { try { await request(`/api/agreement/invitations/${encodeURIComponent($('#invitation-input').value.trim())}/accept`, { method: 'POST' }); refresh(); } catch (e) { error(e.message); } }); $('#copilot')?.addEventListener('click', async () => { try { draft = (await request('/api/agreement/copilot', { method: 'POST', body: JSON.stringify({ brief: $('#copilot-brief').value }) })).terms; renderEditor(); } catch (e) { error(e.message); } }); $('#draft-form')?.addEventListener('submit', async e => { e.preventDefault(); try { model = (await request('/api/agreement/draft', { method: 'PUT', body: JSON.stringify({ terms: terms() }) })).agreement; draft = structuredClone(model.terms); render(); } catch (x) { error(x.message); } }); }
+function render() { if (!model) return; const views = { overview, draft: draftView, milestone: milestoneView, activity, versions, invitations }; $('#wallet-state').textContent = role ? `${role[0].toUpperCase() + role.slice(1)} · Supabase account` : ''; $('#workspace-content').innerHTML = (views[page()] || overview)(); nav(); if (page() === 'draft' && ['buyer', 'seller'].includes(role) && model.state === 'Unfunded') { draft ??= structuredClone(model.terms); renderEditor(); } bind(); }
+async function act(type) { try { model = (await request('/api/agreement/actions', { method: 'POST', body: JSON.stringify({ type }) })).agreement; render(); } catch (e) { error(e.message); } }
+async function refresh() { try { role = (await request('/api/session')).role; } catch { window.location.replace('/login.html'); return; } try { model = (await request('/api/agreement')).agreement; render(); } catch (e) { error(e.message); $('#workspace-content').innerHTML = '<section class="workspace-intro"><p class="eyebrow">Contract access</p><h1>This contract is unavailable</h1><p>Your session is active, but it does not have access to this local contract.</p></section>'; } }
+$('#sign-out').onclick = async () => { try { await request('/api/session', { method: 'DELETE' }); await (await supabase()).auth.signOut(); window.location.assign('/login.html'); } catch (e) { error(e.message); } };
+refresh();

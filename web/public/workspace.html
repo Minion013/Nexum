@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="PactFlow contract workspace." />
+    <title>Contract workspace — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/responsive.css" />
+    <link rel="stylesheet" href="/workspace.css" />
+  </head>
+  <body class="workspace-page">
+    <a class="skip-link" href="#workspace-main">Skip to Contract content</a>
+    <header class="workspace-header">
+      <a class="brand" href="/workspace">Pact<span>Flow</span></a>
+      <nav id="workspace-navigation" class="workspace-navigation" aria-label="Contract navigation"></nav>
+      <div class="workspace-actions"><span id="wallet-state"></span><button id="sign-out" class="ghost" type="button">Sign out</button></div>
+    </header>
+    <main id="workspace-main" tabindex="-1"><p id="request-error" class="error" aria-live="polite" hidden></p><div id="workspace-content" aria-live="polite"></div></main>
+    <script type="module" src="/app.bundle.js"></script>
+  </body>
+</html>

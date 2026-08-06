@@ -25,6 +25,29 @@ test('public entry and health check are safe to render', async () => {
   }
 });
 
+test('standalone local Contract pages are served from their canonical URLs', async () => {
+  const server = createApp();
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    for (const path of [
+      '/workspace',
+      '/contracts/local-demo-agreement',
+      '/contracts/local-demo-agreement/draft',
+      '/contracts/local-demo-agreement/milestones/0',
+      '/contracts/local-demo-agreement/activity',
+      '/contracts/local-demo-agreement/versions',
+      '/contracts/local-demo-agreement/invitations'
+    ]) {
+      const response = await request(server, path);
+      assert.equal(response.status, 200, path);
+      assert.match(await response.text(), /PactFlow/, path);
+    }
+    assert.equal((await request(server, '/contracts/not-a-contract')).status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('runtime configuration requires public Supabase authentication settings and keeps secrets out of it', () => {
   assert.throws(
     () => runtimeConfigurationFromEnvironment({ PORT: '3000' }),
