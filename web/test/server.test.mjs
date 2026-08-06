@@ -25,12 +25,16 @@ test('public entry and health check are safe to render', async () => {
   }
 });
 
-test('standalone local Contract pages are served from their canonical URLs', async () => {
+test('authenticated area pages are served from their canonical URLs', async () => {
   const server = createApp();
   await new Promise(resolve => server.listen(0, resolve));
   try {
     for (const path of [
+      '/home',
+      '/contracts',
       '/workspace',
+      '/contacts',
+      '/authorities',
       '/contracts/local-demo-agreement',
       '/contracts/local-demo-agreement/draft',
       '/contracts/local-demo-agreement/milestones/0',
@@ -41,6 +45,11 @@ test('standalone local Contract pages are served from their canonical URLs', asy
       const response = await request(server, path);
       assert.equal(response.status, 200, path);
       assert.match(await response.text(), /PactFlow/, path);
+    }
+    const home = await request(server, '/home');
+    const homeMarkup = await home.text();
+    for (const href of ['/home', '/contracts', '/workspace', '/contacts', '/authorities']) {
+      assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
     assert.equal((await request(server, '/contracts/not-a-contract')).status, 404);
   } finally {

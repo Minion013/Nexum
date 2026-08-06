@@ -47,11 +47,11 @@ async function sendMagicLink() {
 }
 async function continueToHome() {
   if (needsOnboarding) await authenticatedRequest('/api/onboarding/complete', { method: 'POST' });
-  window.location.assign('/workspace');
+  window.location.assign('/home');
 }
 async function handleAuthenticatedSession() {
   const session = await authenticatedRequest('/api/session');
-  if (session.user.profile.onboardingCompletedAt) { window.location.assign('/workspace'); return; }
+  if (session.user.profile.onboardingCompletedAt) { window.location.assign('/home'); return; }
   showOnboarding(session.user.profile);
 }
 

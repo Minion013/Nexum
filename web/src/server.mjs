@@ -47,7 +47,14 @@ class AuthenticationError extends Error {}
 async function json(request) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > 64_000) throw new RuleError('Request is too large.'); } return body ? JSON.parse(body) : {}; }
 function safeFile(urlPath) { const requested = urlPath === '/' ? '/index.html' : urlPath; const file = normalize(join(publicRoot, requested)); return file.startsWith(publicRoot) ? file : null; }
 function standalonePage(urlPath) {
-  if (urlPath === '/workspace') return join(publicRoot, 'home.html');
+  const authenticatedPages = {
+    '/home': 'home.html',
+    '/contracts': 'contracts.html',
+    '/workspace': 'workspace-list.html',
+    '/contacts': 'contacts.html',
+    '/authorities': 'authorities.html'
+  };
+  if (authenticatedPages[urlPath]) return join(publicRoot, authenticatedPages[urlPath]);
   if (/^\/contracts\/local-demo-agreement\/(?:draft|activity|versions|invitations)\/?$/.test(urlPath) || /^\/contracts\/local-demo-agreement\/milestones\/\d+\/?$/.test(urlPath) || /^\/contracts\/local-demo-agreement\/?$/.test(urlPath)) return join(publicRoot, 'workspace.html');
   return null;
 }
