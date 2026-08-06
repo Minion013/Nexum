@@ -8,8 +8,7 @@
     "start": "npm run build && node src/server.mjs",
     "test": "node --test",
     "test:smoke": "node --test test/server.test.mjs",
-    "test:rules": "node --test test/agreement-engine.test.mjs",
-    "typecheck": "node --check src/server.mjs && node --check src/agreement-engine.mjs && node --check public/app.js && node --check public/home.js && node --check public/login.js",
+    "typecheck": "node --check src/server.mjs && node --check public/home.js && node --check public/login.js",
     "contracts:check": "solcjs --optimize --base-path .. --include-path .. --bin --abi --output-dir ../.scratch/solc-output ../contracts/EscrowVault.sol ../contracts/EscrowVaultFactory.sol"
   },
   "engines": {

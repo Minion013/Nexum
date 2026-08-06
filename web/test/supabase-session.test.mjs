@@ -47,7 +47,7 @@ test('a verified Supabase session exposes the durable profile and protects appli
     });
     assert.deepEqual(calls, ['current-supabase-jwt']);
     assert.deepEqual(profileCalls, [{ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'current-supabase-jwt' }]);
-    assert.equal((await request(origin, '/api/agreement', { token: 'expired-supabase-jwt' })).status, 401);
+    assert.equal((await request(origin, '/api/home', { token: 'expired-supabase-jwt' })).status, 401);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

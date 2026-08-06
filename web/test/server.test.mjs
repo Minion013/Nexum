@@ -12,7 +12,7 @@ test('public entry and health check are safe to render', async () => {
   try {
     const health = await request(server, '/health');
     assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), { status: 'ok', mode: 'supabase-auth-local-simulation', network: 'none', funds: 'no funds or external wallets' });
+    assert.deepEqual(await health.json(), { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
     const authConfig = await request(server, '/api/auth/config');
     assert.equal(authConfig.status, 200);
     assert.deepEqual(Object.keys(await authConfig.json()).sort(), ['mode', 'publishableKey', 'url']);
@@ -34,13 +34,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
       '/contracts',
       '/workspace',
       '/contacts',
-      '/authorities',
-      '/contracts/local-demo-agreement',
-      '/contracts/local-demo-agreement/draft',
-      '/contracts/local-demo-agreement/milestones/0',
-      '/contracts/local-demo-agreement/activity',
-      '/contracts/local-demo-agreement/versions',
-      '/contracts/local-demo-agreement/invitations'
+      '/authorities'
     ]) {
       const response = await request(server, path);
       assert.equal(response.status, 200, path);
@@ -52,6 +46,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
     assert.equal((await request(server, '/contracts/not-a-contract')).status, 404);
+    assert.equal((await request(server, '/contracts/local-demo-agreement')).status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

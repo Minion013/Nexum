@@ -1,6 +1,6 @@
-# PactFlow test-wallet MVP
+# PactFlow testnet MVP foundation
 
-PactFlow is a rules-first escrow simulation for custom digital-service agreements. Supabase Auth provides participant identities; wallet linking is deliberately deferred. Agreement outcomes still use simulated six-decimal eUSD in a local rules engine—there is no live chain settlement, fiat conversion, cash-out, or real-money service.
+PactFlow is a private workspace for structuring custom digital-service projects through durable Contracts, invitations, and versioned terms. Supabase Auth provides participant identities and Supabase RLS scopes private coordination data. Wallet linking and Base Sepolia settlement are deliberately deferred: PactFlow currently has no payment authority, escrow custody, fiat conversion, cash-out, or real-money service.
 
 ## Run locally
 
@@ -11,24 +11,18 @@ npm.cmd --prefix web run contracts:check
 npm.cmd --prefix web start
 ```
 
-Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the authenticated local-simulation health.
+Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the application boundary and confirms that payment authority is not configured.
 
-## Demo runbook
+## Current workflow
 
-1. Open the app, enter an email address, and complete the Supabase magic-link flow. Then choose **buyer**, **invited seller**, or **resolver** for the local agreement simulation. The browser submits the Supabase access token with authenticated requests; the current local demo assignment remains process-local.
-2. To demonstrate drafting, enter a plain-language brief and select **Suggest from brief**. Review and edit the scope, milestone allocations, evidence requirements, local-time deadlines, and review windows. The preview shows the retained UTC deadline. Suggestions remain drafts and cannot approve terms, release funds, judge quality, or resolve disputes.
-3. Save the editable draft. Earlier versions stay read-only with their approvals and field-level changes in **What changed and who approved**.
-4. Approve the same agreement version as buyer and seller; funding stays unavailable until both signatures are represented.
-5. As buyer, select **Fund local agreement**. The demo marks the first milestone active and shows the simulated eUSD allocation.
-6. As seller, submit an evidence record. It records only a demo hash and starts a 72-hour review window.
-7. For the normal path, sign in as buyer, accept the evidence, then release it from any role. The activity record shows that the payment decision is rule-driven.
-8. For a dispute, fund and submit evidence, then open a dispute as buyer. Switch to the resolver local role and select **Resolve 50/50 split**. The resolver receives only operational status, not private agreement terms, approvals, or evidence hashes.
-9. To show missed delivery, select **Simulate missed-delivery refund** as buyer while a milestone is active. This local-only shortcut advances the simulated clock for that action; it never makes a real transfer.
-10. Use **Extend future deadline** to propose an amendment. The rules engine leaves a funded amendment inert until both local participant roles approve it.
+1. Open the app, enter an email address, and complete the Supabase magic-link flow.
+2. Finish onboarding to provision your durable Profile and personal Workspace.
+3. Create a private Contract with a scope and exact counterparty email address. The server creates the Contract and its expiring invitation under the caller's Supabase identity.
+4. The Contract is private until the invited, authenticated recipient accepts that exact invitation. Payment, approval, evidence, disputes, and on-chain settlement are not yet available in the browser.
 
 ## Reference contracts
 
-`contracts/` contains a compiled Solidity 0.8.30 reference foundation. It is not used by local mode:
+`contracts/` contains a compiled Solidity 0.8.30 reference foundation. It is not connected to the browser workflow:
 
 - `MockEUSD.sol`: an explicitly valueless, six-decimal demo token with a capped public faucet.
 - `EscrowVault.sol`: an unfunded, isolated, non-upgradeable, non-administered vault foundation. It contains no owner, pause, rescue, platform-withdrawal, funding, or settlement function.
@@ -38,10 +32,10 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 ## Implemented scope and remaining integrations
 
-The runnable demo and tested local rules engine cover Supabase-authenticated local sessions, editable validated custom drafts, deterministic co-pilot suggestions, immutable versions with approval and field-difference history, local participant-only data access, buyer-only simulated funding, sequential milestones, private-evidence hashes, acceptance and timeout release, buyer-controlled missed-delivery refunds, resolver-only splits, and activity history.
+The application includes durable Profile and Workspace provisioning, authenticated Home data, durable private Contract creation, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
 
-The demo now includes durable workspace, participant, invitation, authority, and Case Officer schema with linked-project RLS proof. Its browser agreement flow remains a local simulation while durable contract writes, a chain reader/indexer, EIP-712 browser signing, Base Sepolia deployment, and a real AI service are still incomplete. It is a test-wallet development mode, not a real-money escrow service.
+The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page, typed milestone editor, version review, wallet linking, EIP-712 signatures, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
 
 ## Implementation tracking
 
-The implementation tickets use a [testnet-MVP completion reference](.scratch/pactflow-testnet-mvp/issues/00-implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. Local simulation behavior is evidence, not completion of a Base Sepolia checklist item.
+The implementation tickets use a [testnet-MVP completion reference](.scratch/pactflow-testnet-mvp/issues/00-implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. A Base Sepolia payment path is required before any settlement functionality can be claimed.
