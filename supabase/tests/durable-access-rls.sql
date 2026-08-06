@@ -126,6 +126,17 @@ begin
   ) then
     raise exception 'A collaborative Workspace creator must receive its owner membership.';
   end if;
+  begin
+    update public.workspaces
+    set owner_profile_id = '00000000-0000-4000-8000-000000000102'
+    where name = 'Party collaboration';
+    raise exception 'A Workspace owner changed without an explicit ownership-transfer flow.';
+  exception
+    when others then
+      if position('ownership is immutable' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
   if not exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000301') then
     raise exception 'A Contract Party must see its contract.';
   end if;
