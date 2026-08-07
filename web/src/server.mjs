@@ -15,6 +15,12 @@ class DraftValidationError extends ValidationError {
 const requiredContractSectionTypes = ['parties', 'scope', 'milestones', 'payment', 'evidence', 'intellectual_property', 'change_control', 'dispute_resolution', 'notices'];
 const contractAcceptanceStatement = 'I accept this exact PactFlow Contract Version. This signature does not move funds.';
 const baseSepoliaChainId = 84532;
+const oneDayInMilliseconds = 86_400_000;
+const coPilotProjectStartOffsetDays = 1;
+const coPilotFirstMilestoneOffsetDays = 14;
+const coPilotSecondMilestoneOffsetDays = 28;
+const coPilotMilestoneReviewWindowHours = 72;
+const coPilotAuthorityNotice = 'These are editable drafting suggestions. The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes.';
 
 export function contractAcceptanceTypedData({ contractId, versionId, versionHash }) {
   return {
@@ -197,6 +203,77 @@ function stringList(value, sectionType, fieldPath, label) {
 function enumValue(value, allowed, sectionType, fieldPath, label) {
   if (!allowed.includes(value)) invalid(sectionType, fieldPath, 'invalid_choice', `${label} is invalid.`);
   return value;
+}
+function canonicalSuggestionDate(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 9)).toISOString();
+}
+function suggestionDateFromText(value) {
+  const date = new Date(`${value}T09:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+function futureSuggestionDate(now, days) {
+  const date = new Date(now.getTime());
+  date.setUTCDate(date.getUTCDate() + days);
+  return canonicalSuggestionDate(date);
+}
+function suggestedTitle(brief) {
+  const firstSentence = brief.split(/[.!?]/, 1)[0].trim();
+  const withoutDeadline = firstSentence.replace(/\s+by\s+20\d{2}-\d{2}-\d{2}(?:\s|,|$).*/i, '').trim();
+  return (withoutDeadline || firstSentence || 'Service engagement').slice(0, 160);
+}
+function suggestedDeadlines(brief, currentMilestones, now) {
+  const requested = [...new Set([...brief.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map(match => suggestionDateFromText(match[1])).filter(Boolean))]
+    .filter(deadline => Date.parse(deadline) > now.getTime())
+    .sort();
+  const current = currentMilestones
+    .map(milestone => milestone?.deliveryDeadlineUtc)
+    .filter(deadline => typeof deadline === 'string' && Date.parse(deadline) > now.getTime())
+    .sort();
+  if (requested.length >= 2) return requested.slice(0, 2);
+  if (requested.length === 1) {
+    const earlierCurrentDeadline = current.find(deadline => deadline < requested[0]);
+    if (earlierCurrentDeadline) return [earlierCurrentDeadline, requested[0]];
+    const requestedTime = Date.parse(requested[0]);
+    const oneDayBeforeRequested = canonicalSuggestionDate(new Date(requestedTime - oneDayInMilliseconds));
+    if (Date.parse(oneDayBeforeRequested) > now.getTime()) return [oneDayBeforeRequested, requested[0]];
+    return [requested[0], futureSuggestionDate(new Date(requestedTime), 7)];
+  }
+  return current.length >= 2 ? current.slice(0, 2) : [futureSuggestionDate(now, coPilotFirstMilestoneOffsetDays), futureSuggestionDate(now, coPilotSecondMilestoneOffsetDays)];
+}
+function normalizedSuggestionDraftSections(draft) {
+  if (draft.sections) return draft.sections;
+  return {
+    ...draft,
+    milestones: Array.isArray(draft.milestones) ? { items: draft.milestones } : draft.milestones
+  };
+}
+
+export function suggestContractDraft({ brief, draft = {}, now = new Date() }) {
+  const commercialBrief = requiredText(brief, 'Commercial brief', 3_200);
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new ValidationError('A valid suggestion time is required.');
+  const title = suggestedTitle(commercialBrief);
+  const sections = normalizedSuggestionDraftSections(draft);
+  const currentMilestones = sections.milestones?.items ?? [];
+  const [discoveryDeadline, deliveryDeadline] = suggestedDeadlines(commercialBrief, currentMilestones, now);
+  const totalAllocation = Number(sections.payment?.totalAllocation) || 1_000;
+  const firstAllocation = Math.floor(totalAllocation / 2);
+  return {
+    scope: {
+      title,
+      description: commercialBrief,
+      outcome: `A documented delivery of ${title.toLowerCase()}.`,
+      includedDeliverables: ['Discovery findings', 'Documented delivery handoff'],
+      excludedWork: ['Ongoing operations outside the stated milestones'],
+      projectStartDateUtc: futureSuggestionDate(now, coPilotProjectStartOffsetDays),
+      clientDependencies: ['Timely access to the materials needed for the stated scope']
+    },
+    milestones: [
+      { title: 'Discovery', deliveryOutcome: `Document the findings that shape ${title.toLowerCase()}.`, allocation: firstAllocation, evidenceRequirement: 'A private summary of the completed discovery work.', deliveryDeadlineUtc: discoveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours },
+      { title: 'Delivery', deliveryOutcome: `Deliver the agreed outcome for ${title.toLowerCase()} with a documented handoff.`, allocation: totalAllocation - firstAllocation, evidenceRequirement: 'A private delivery summary and handoff record without credentials or secrets.', deliveryDeadlineUtc: deliveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours }
+    ],
+    evidence: { reviewDecision: 'Buyer records acceptance or a specific change request within the review window.', dependencyAcknowledgementRequired: false },
+    notice: coPilotAuthorityNotice
+  };
 }
 function validatedDraft(draft) {
   const parties = section(draft.parties, 'parties');
@@ -382,6 +459,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     invite: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     accept: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    suggest: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     saveDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getReview: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     acceptVersion: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
@@ -423,6 +501,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
       target_invitation_id: requiredText(invitationId, 'Invitation')
     }, 'This Contract invitation cannot be accepted.') }),
     getDraft,
+    suggest: async ({ accessToken, contractId, brief }) => suggestContractDraft({ brief, draft: await getDraft({ accessToken, contractId }) }),
     getReview,
     acceptVersion: async ({ userId, accessToken, contractId, versionId, walletAddress, walletSignature, versionHash }) => {
       const targetContractId = requiredText(contractId, 'Contract');
@@ -499,6 +578,13 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const contract = await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
         const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contract.id, email: payload.counterpartyEmail });
         return respond(response, 201, { contract, invitation });
+      }
+      const contractSuggestionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/copilot-suggestions$/);
+      if (contractSuggestionMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const payload = await json(request);
+        const suggestion = await contractWorkflow.suggest({ userId: session.userId, accessToken: session.accessToken, contractId: contractSuggestionMatch[1], brief: payload.brief });
+        return respond(response, 200, { suggestion });
       }
       const contractMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)$/);
       if (contractMatch && request.method === 'GET') {

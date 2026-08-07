@@ -6,6 +6,9 @@ const status = document.querySelector('#contract-form-status');
 const error = document.querySelector('#request-error');
 const contractId = decodeURIComponent(window.location.pathname.split('/').at(-1));
 const reviewPanel = document.querySelector('#contract-review');
+const copilotPanel = document.querySelector('#contract-copilot');
+const copilotForm = document.querySelector('#contract-copilot-form');
+const copilotStatus = document.querySelector('#contract-copilot-status');
 
 function localDateTime(utc) {
   if (!utc) return '';
@@ -125,7 +128,21 @@ function renderDraft(contract) {
   authoritySelect.value = contract.authority.id;
   document.querySelector('#authority-summary').textContent = 'The selected Resolution Authority is bound into the new immutable Version when validation succeeds.';
   renderMilestones(sections.milestones?.length ? sections.milestones : [newMilestone(), newMilestone()]);
+  copilotPanel.hidden = false;
   form.hidden = false;
+}
+function applyCopilotSuggestion(suggestion) {
+  const { scope, evidence } = suggestion;
+  form.elements.title.value = scope.title;
+  form.elements.description.value = scope.description;
+  form.elements.outcome.value = scope.outcome;
+  form.elements.includedDeliverables.value = lineText(scope.includedDeliverables);
+  form.elements.excludedWork.value = lineText(scope.excludedWork);
+  form.elements.projectStartDateUtc.value = localDateTime(scope.projectStartDateUtc);
+  form.elements.clientDependencies.value = lineText(scope.clientDependencies);
+  form.elements.reviewDecision.value = evidence.reviewDecision;
+  form.elements.dependencyAcknowledgementRequired.checked = Boolean(evidence.dependencyAcknowledgementRequired);
+  renderMilestones(suggestion.milestones);
 }
 function reviewLine(label, reviewValue) { const line = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = `${label}: `; line.append(strong, reviewValue); return line; }
 function reviewSection(title, lines) { const section = document.createElement('article'); section.className = 'contract-review-section'; const heading = document.createElement('h3'); heading.textContent = title; section.append(heading, ...lines); return section; }
@@ -192,6 +209,18 @@ function showValidationIssues(issues = []) {
   });
 }
 document.querySelector('#add-milestone').onclick = () => renderMilestones([...milestonesFromForm({ preserveLocalDeadline: true }), newMilestone()]);
+copilotForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = copilotForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  copilotStatus.textContent = 'Preparing editable suggestions…';
+  try {
+    const response = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/copilot-suggestions`, { method: 'POST', body: JSON.stringify({ brief: copilotForm.elements.brief.value }) });
+    applyCopilotSuggestion(response.suggestion);
+    copilotStatus.textContent = `${response.suggestion.notice} Review and edit every field, then validate and share the Version when it is ready.`;
+    status.textContent = 'Editable suggestions applied. They are not saved or shared until you validate the Contract Version.';
+  } catch (requestError) { copilotStatus.textContent = requestError.message; } finally { submit.disabled = false; }
+});
 form.addEventListener('submit', async event => {
   event.preventDefault();
   clearValidationIssues();

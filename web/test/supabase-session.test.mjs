@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -418,6 +418,53 @@ test('a verified Contract Party can read and save a validated durable Contract d
       { operation: 'getDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id' } },
       { operation: 'saveDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', ...changes } }
     ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the Contract co-pilot returns editable, non-authoritative scope and milestone suggestions', () => {
+  const suggestion = suggestContractDraft({
+    brief: 'Redesign our checkout by 2030-09-24, beginning with research and ending in a documented implementation handoff.',
+    draft: validServiceEngagementDraft(),
+    now: new Date('2030-09-01T00:00:00.000Z')
+  });
+
+  assert.equal(suggestion.scope.title, 'Redesign our checkout');
+  assert.match(suggestion.scope.description, /Redesign our checkout by 2030-09-24/);
+  assert.deepEqual(suggestion.milestones.map(milestone => milestone.deliveryDeadlineUtc), ['2030-09-10T09:00:00.000Z', '2030-09-24T09:00:00.000Z']);
+  assert.deepEqual(suggestion.milestones.map(milestone => milestone.allocation), [500, 500]);
+  assert.ok(suggestion.milestones.every(milestone => milestone.reviewWindowHours === 72 && milestone.evidenceRequirement.includes('private')));
+  assert.match(suggestion.notice, /cannot approve terms, move funds, release funds, judge quality, or resolve disputes/i);
+
+  const shortNoticeSuggestion = suggestContractDraft({
+    brief: 'Produce the handoff by 2030-09-24.',
+    now: new Date('2030-09-23T00:00:00.000Z')
+  });
+  assert.ok(Date.parse(shortNoticeSuggestion.milestones[0].deliveryDeadlineUtc) < Date.parse(shortNoticeSuggestion.milestones[1].deliveryDeadlineUtc));
+});
+
+test('only an authenticated Contract Party can request co-pilot suggestions for their durable draft', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'party-jwt') throw new Error('invalid token');
+      return { id: 'party-id', email: 'party@example.com' };
+    },
+    contractWorkflow: {
+      suggest: async input => {
+        calls.push(input);
+        return { scope: { title: 'Suggested Contract' }, milestones: [], evidence: {}, notice: 'The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes.' };
+      }
+    }
+  });
+  try {
+    const body = { brief: 'Create a two-step discovery and delivery engagement.' };
+    assert.equal((await request(origin, '/api/contracts/contract-id/copilot-suggestions', { method: 'POST', body })).status, 401);
+    const response = await request(origin, '/api/contracts/contract-id/copilot-suggestions', { token: 'party-jwt', method: 'POST', body });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { suggestion: { scope: { title: 'Suggested Contract' }, milestones: [], evidence: {}, notice: 'The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes.' } });
+    assert.deepEqual(calls, [{ userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', brief: body.brief }]);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
