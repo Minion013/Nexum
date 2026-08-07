@@ -16,6 +16,35 @@ async function request(origin, path, { token, method = 'GET', body } = {}) {
   });
 }
 
+function validServiceEngagementDraft(overrides = {}) {
+  const draft = {
+    authorityId: '00000000-0000-4000-8000-000000000201',
+    parties: {
+      buyer: { partyRef: 'initiating_party', responsibility: 'Funds the agreed gross allocation.' },
+      serviceProvider: { partyRef: 'counterparty', responsibility: 'Delivers the agreed service outcomes.' }
+    },
+    scope: {
+      title: 'Checkout redesign',
+      description: 'Redesign the checkout flow.',
+      outcome: 'A production-ready checkout experience with a documented handoff.',
+      includedDeliverables: ['Research findings', 'Production-ready handoff'],
+      excludedWork: ['Ongoing operations'],
+      projectStartDateUtc: '2030-09-01T00:00:00.000Z',
+      clientDependencies: ['Existing checkout analytics access']
+    },
+    milestones: [
+      { title: 'Research', deliveryOutcome: 'Annotated research findings', allocation: 400, evidenceRequirement: 'Annotated findings', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 },
+      { title: 'Delivery', deliveryOutcome: 'Production-ready handoff', allocation: 600, evidenceRequirement: 'Repository handoff notes', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
+    ],
+    payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: 1000, fundingDeadlineUtc: '2030-09-05T09:00:00.000Z', successFeeBps: 250, feeRecipient: 'PactFlow demonstration fee recipient' },
+    evidence: { reviewDecision: 'Buyer records acceptance or a specific change request within the review window.', dependencyAcknowledgementRequired: true },
+    intellectualProperty: { outcome: 'provider_retains_ownership_with_client_license', licenseScope: 'Project delivery use', confidentiality: 'mutual_confidentiality', confidentialityDuration: 'Two years' },
+    changeControl: { proposalProcess: 'Either Contract Party may propose a written change request.', bilateralAmendmentOnly: true },
+    notices: { buyerContact: 'buyer@example.test', serviceProviderContact: 'provider@example.test', exactVersionAcknowledgement: true }
+  };
+  return { ...draft, ...overrides };
+}
+
 test('a verified Supabase session exposes the durable profile and protects application routes', async () => {
   const calls = [];
   const profileCalls = [];
@@ -472,15 +501,69 @@ test('the durable draft workflow rejects a non-conserving milestone allocation b
     workflow.saveDraft({
       accessToken: 'party-jwt',
       contractId: 'contract-id',
-      scope: { title: 'Checkout redesign', description: 'Redesign the checkout flow.' },
-      milestones: [
-        { title: 'Research', allocation: 400, evidenceRequirement: 'Annotated findings', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 48 },
-        { title: 'Delivery', allocation: 600, evidenceRequirement: 'Production-ready handoff', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
-      ],
-      totalAllocation: 999,
-      successFeeBps: 250
+      ...validServiceEngagementDraft({ payment: { ...validServiceEngagementDraft().payment, totalAllocation: 999 } })
     }),
     /Milestone allocations must equal the Contract total allocation/
   );
   assert.deepEqual(calls, []);
+});
+
+test('the durable draft workflow refuses to share an incomplete Service Engagement template', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({ rpc: async (name, args) => { calls.push({ name, args }); return { data: 'version-id', error: null }; } })
+  );
+
+  await assert.rejects(
+    workflow.saveDraft({
+      accessToken: 'party-jwt',
+      contractId: 'contract-id',
+      ...validServiceEngagementDraft({ scope: { ...validServiceEngagementDraft().scope, outcome: '' } })
+    }),
+    /Scope outcome is required/
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('the durable draft workflow submits every validated Service Engagement section to the protected RPC', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      rpc: async (name, args) => { calls.push({ name, args }); return { data: 'version-id', error: null }; },
+      from: table => ({
+        select: () => ({
+          eq: () => table === 'resolution_authorities'
+            ? Promise.resolve({ data: [{ id: 'authority-id', display_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
+            : ({ single: async () => ({
+              data: {
+                id: 'contract-id', status: 'negotiation',
+                contract_versions: [{ id: 'version-id', version_number: 2, selected_authority_id: 'authority-id', authority_snapshot: { authority_name: 'PactFlow Simulation Authority' }, acceptance_ready_at: '2030-09-01T00:00:00.000Z', contract_sections: [] }]
+              }, error: null
+            }) })
+        })
+      })
+    })
+  );
+
+  const draft = validServiceEngagementDraft();
+  await workflow.saveDraft({ accessToken: 'party-jwt', contractId: 'contract-id', ...draft });
+  assert.deepEqual(calls[0], {
+    name: 'update_contract_draft',
+    args: {
+      target_contract_id: 'contract-id',
+      draft_sections: {
+        parties: draft.parties,
+        scope: draft.scope,
+        milestones: { items: draft.milestones },
+        payment: { ...draft.payment, fundingWindowHours: 48, paymentAuthority: 'not_configured' },
+        evidence: draft.evidence,
+        intellectual_property: draft.intellectualProperty,
+        change_control: draft.changeControl,
+        notices: draft.notices
+      },
+      selected_authority_id: '00000000-0000-4000-8000-000000000201'
+    }
+  });
 });

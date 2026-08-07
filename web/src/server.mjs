@@ -5,6 +5,12 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 class ValidationError extends Error {}
+class DraftValidationError extends ValidationError {
+  constructor(issue) {
+    super(issue.message);
+    this.issues = [issue];
+  }
+}
 const requiredContractSectionTypes = ['parties', 'scope', 'milestones', 'payment', 'evidence', 'intellectual_property', 'change_control', 'dispute_resolution', 'notices'];
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -145,42 +151,142 @@ function positiveWholeNumber(value, label, maximum = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(number) || number < 1 || number > maximum) throw new ValidationError(`${label} must be a whole number.`);
   return number;
 }
-function canonicalDeadline(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || Number.isNaN(Date.parse(value))) {
-    throw new ValidationError('Each delivery deadline must be a UTC timestamp.');
-  }
-  if (Date.parse(value) <= Date.now()) throw new ValidationError('Each delivery deadline must be in the future.');
+function invalid(sectionType, fieldPath, code, message) { throw new DraftValidationError({ sectionType, fieldPath, code, message }); }
+function section(value, sectionType) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) invalid(sectionType, '', 'required_section', `${sectionType.replaceAll('_', ' ')} terms are required.`);
   return value;
 }
-function validatedDraft({ scope, milestones, totalAllocation, successFeeBps, authorityId }) {
-  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) throw new ValidationError('Contract scope is required.');
-  if (!Array.isArray(milestones) || milestones.length < 2 || milestones.length > 3) throw new ValidationError('A Contract needs two or three milestones.');
-  const validatedMilestones = milestones.map((milestone, index) => {
-    if (!milestone || typeof milestone !== 'object' || Array.isArray(milestone)) throw new ValidationError(`Milestone ${index + 1} is invalid.`);
+function text(value, sectionType, fieldPath, label, limit = 4_000) {
+  try { return requiredText(value, label, limit); } catch { invalid(sectionType, fieldPath, 'required_text', `${label} is required.`); }
+}
+function email(value, sectionType, fieldPath, label) {
+  try { return requiredEmail(value); } catch { invalid(sectionType, fieldPath, 'invalid_email', `${label} must be a valid email address.`); }
+}
+function canonicalTimestamp(value, sectionType, fieldPath, label, { future = true } = {}) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || Number.isNaN(Date.parse(value))) {
+    invalid(sectionType, fieldPath, 'invalid_utc_timestamp', `${label} must be a UTC timestamp.`);
+  }
+  if (future && Date.parse(value) <= Date.now()) invalid(sectionType, fieldPath, 'past_timestamp', `${label} must be in the future.`);
+  return value;
+}
+function stringList(value, sectionType, fieldPath, label) {
+  if (!Array.isArray(value) || value.length === 0) invalid(sectionType, fieldPath, 'required_list', `${label} needs at least one item.`);
+  return value.map((item, index) => text(item, sectionType, `${fieldPath}.${index}`, label));
+}
+function enumValue(value, allowed, sectionType, fieldPath, label) {
+  if (!allowed.includes(value)) invalid(sectionType, fieldPath, 'invalid_choice', `${label} is invalid.`);
+  return value;
+}
+function validatedDraft(draft) {
+  const parties = section(draft.parties, 'parties');
+  const buyer = section(parties.buyer, 'parties');
+  const serviceProvider = section(parties.serviceProvider, 'parties');
+  const validatedParties = {
+    buyer: {
+      partyRef: enumValue(buyer.partyRef, ['initiating_party', 'counterparty'], 'parties', 'buyer.partyRef', 'Buyer party'),
+      responsibility: text(buyer.responsibility, 'parties', 'buyer.responsibility', 'Buyer responsibility', 500)
+    },
+    serviceProvider: {
+      partyRef: enumValue(serviceProvider.partyRef, ['initiating_party', 'counterparty'], 'parties', 'serviceProvider.partyRef', 'Service provider party'),
+      responsibility: text(serviceProvider.responsibility, 'parties', 'serviceProvider.responsibility', 'Service provider responsibility', 500)
+    }
+  };
+  if (validatedParties.buyer.partyRef === validatedParties.serviceProvider.partyRef) invalid('parties', 'serviceProvider.partyRef', 'duplicate_party', 'Buyer and service provider must be different Contract Parties.');
+
+  const scope = section(draft.scope, 'scope');
+  const validatedScope = {
+    title: text(scope.title, 'scope', 'title', 'Contract title', 160),
+    description: text(scope.description, 'scope', 'description', 'Contract scope'),
+    outcome: text(scope.outcome, 'scope', 'outcome', 'Scope outcome', 1_000),
+    includedDeliverables: stringList(scope.includedDeliverables, 'scope', 'includedDeliverables', 'Included deliverables'),
+    excludedWork: stringList(scope.excludedWork, 'scope', 'excludedWork', 'Excluded work'),
+    projectStartDateUtc: canonicalTimestamp(scope.projectStartDateUtc, 'scope', 'projectStartDateUtc', 'Project start date'),
+    clientDependencies: Array.isArray(scope.clientDependencies) ? scope.clientDependencies.map((item, index) => text(item, 'scope', `clientDependencies.${index}`, 'Client dependency')) : []
+  };
+
+  if (!Array.isArray(draft.milestones) || draft.milestones.length < 2 || draft.milestones.length > 3) invalid('milestones', '', 'milestone_count', 'A Contract needs two or three milestones.');
+  const validatedMilestones = draft.milestones.map((milestone, index) => {
+    if (!milestone || typeof milestone !== 'object' || Array.isArray(milestone)) invalid('milestones', String(index), 'invalid_milestone', `Milestone ${index + 1} is invalid.`);
+    let allocation;
+    try { allocation = positiveWholeNumber(milestone.allocation, `Milestone ${index + 1} allocation`); } catch { invalid('milestones', `${index}.allocation`, 'invalid_allocation', `Milestone ${index + 1} allocation must be a positive whole number.`); }
     return {
-      title: requiredText(milestone.title, `Milestone ${index + 1} title`, 160),
-      allocation: positiveWholeNumber(milestone.allocation, `Milestone ${index + 1} allocation`),
-      evidenceRequirement: requiredText(milestone.evidenceRequirement, `Milestone ${index + 1} evidence requirement`),
-      deliveryDeadlineUtc: canonicalDeadline(milestone.deliveryDeadlineUtc),
-      reviewWindowHours: positiveWholeNumber(milestone.reviewWindowHours, `Milestone ${index + 1} review window`, 720)
+      title: text(milestone.title, 'milestones', `${index}.title`, `Milestone ${index + 1} title`, 160),
+      deliveryOutcome: text(milestone.deliveryOutcome, 'milestones', `${index}.deliveryOutcome`, `Milestone ${index + 1} delivery outcome`, 1_000),
+      allocation,
+      evidenceRequirement: text(milestone.evidenceRequirement, 'milestones', `${index}.evidenceRequirement`, `Milestone ${index + 1} evidence requirement`),
+      deliveryDeadlineUtc: canonicalTimestamp(milestone.deliveryDeadlineUtc, 'milestones', `${index}.deliveryDeadlineUtc`, `Milestone ${index + 1} delivery deadline`),
+      reviewWindowHours: enumValue(Number(milestone.reviewWindowHours), [24, 72, 168], 'milestones', `${index}.reviewWindowHours`, `Milestone ${index + 1} review window`)
     };
   });
   for (let index = 1; index < validatedMilestones.length; index += 1) {
-    if (validatedMilestones[index - 1].deliveryDeadlineUtc >= validatedMilestones[index].deliveryDeadlineUtc) throw new ValidationError('Milestone delivery deadlines must be in order.');
+    if (validatedMilestones[index - 1].deliveryDeadlineUtc >= validatedMilestones[index].deliveryDeadlineUtc) invalid('milestones', `${index}.deliveryDeadlineUtc`, 'unordered_deadline', 'Milestone delivery deadlines must be in order.');
   }
-  const allocation = positiveWholeNumber(totalAllocation, 'Contract total allocation');
-  if (validatedMilestones.reduce((sum, milestone) => sum + milestone.allocation, 0) !== allocation) throw new ValidationError('Milestone allocations must equal the Contract total allocation.');
-  const fee = Number(successFeeBps);
-  if (!Number.isSafeInteger(fee) || fee < 0 || fee > 10_000) throw new ValidationError('Success fee must be between 0 and 10,000 basis points.');
+
+  const payment = section(draft.payment, 'payment');
+  let totalAllocation;
+  try { totalAllocation = positiveWholeNumber(payment.totalAllocation, 'Contract total allocation'); } catch { invalid('payment', 'totalAllocation', 'invalid_allocation', 'Contract total allocation must be a positive whole number.'); }
+  if (validatedMilestones.reduce((sum, milestone) => sum + milestone.allocation, 0) !== totalAllocation) invalid('payment', 'totalAllocation', 'non_conserving_allocation', 'Milestone allocations must equal the Contract total allocation.');
+  const successFeeBps = Number(payment.successFeeBps);
+  if (!Number.isSafeInteger(successFeeBps) || successFeeBps < 0 || successFeeBps > 1_000) invalid('payment', 'successFeeBps', 'invalid_success_fee', 'Success fee must be between 0 and 1,000 basis points.');
+  const fundingDeadlineUtc = canonicalTimestamp(payment.fundingDeadlineUtc, 'payment', 'fundingDeadlineUtc', 'Funding deadline');
+  if (fundingDeadlineUtc >= validatedMilestones[0].deliveryDeadlineUtc) invalid('payment', 'fundingDeadlineUtc', 'funding_after_delivery', 'Funding deadline must be before the first delivery deadline.');
+  const validatedPayment = {
+    settlementToken: text(payment.settlementToken, 'payment', 'settlementToken', 'Settlement token', 160),
+    network: enumValue(payment.network, ['Base Sepolia'], 'payment', 'network', 'Settlement network'),
+    totalAllocation,
+    fundingDeadlineUtc,
+    fundingWindowHours: 48,
+    successFeeBps,
+    feeRecipient: successFeeBps === 0 ? '' : text(payment.feeRecipient, 'payment', 'feeRecipient', 'Fee recipient', 320),
+    paymentAuthority: 'not_configured'
+  };
+
+  const evidence = section(draft.evidence, 'evidence');
+  const validatedEvidence = {
+    reviewDecision: text(evidence.reviewDecision, 'evidence', 'reviewDecision', 'Review decision rule', 1_000),
+    dependencyAcknowledgementRequired: Boolean(evidence.dependencyAcknowledgementRequired)
+  };
+  for (const [index, milestone] of validatedMilestones.entries()) {
+    if (/(private key|password|api[ _-]?key|https?:\/\/)/i.test(milestone.evidenceRequirement)) invalid('milestones', `${index}.evidenceRequirement`, 'unsafe_evidence_reference', 'Evidence requirements must not contain credentials or raw private file URLs.');
+  }
+
+  const intellectualProperty = section(draft.intellectualProperty, 'intellectual_property');
+  const ipOutcome = enumValue(intellectualProperty.outcome, ['client_owns_project_deliverables_on_final_settlement', 'provider_retains_ownership_with_client_license'], 'intellectual_property', 'outcome', 'Intellectual-property outcome');
+  const confidentiality = enumValue(intellectualProperty.confidentiality, ['not_requested', 'mutual_confidentiality'], 'intellectual_property', 'confidentiality', 'Confidentiality choice');
+  const validatedIntellectualProperty = {
+    outcome: ipOutcome,
+    licenseScope: ipOutcome === 'provider_retains_ownership_with_client_license' ? text(intellectualProperty.licenseScope, 'intellectual_property', 'licenseScope', 'License scope', 1_000) : '',
+    confidentiality,
+    confidentialityDuration: confidentiality === 'mutual_confidentiality' ? text(intellectualProperty.confidentialityDuration, 'intellectual_property', 'confidentialityDuration', 'Confidentiality duration', 160) : ''
+  };
+
+  const changeControl = section(draft.changeControl, 'change_control');
+  const validatedChangeControl = {
+    proposalProcess: text(changeControl.proposalProcess, 'change_control', 'proposalProcess', 'Change-request process', 1_000),
+    bilateralAmendmentOnly: changeControl.bilateralAmendmentOnly === true
+  };
+  if (!validatedChangeControl.bilateralAmendmentOnly) invalid('change_control', 'bilateralAmendmentOnly', 'missing_bilateral_rule', 'Future uncompleted milestones must require a bilateral amendment.');
+
+  const notices = section(draft.notices, 'notices');
+  const validatedNotices = {
+    buyerContact: email(notices.buyerContact, 'notices', 'buyerContact', 'Buyer notice email'),
+    serviceProviderContact: email(notices.serviceProviderContact, 'notices', 'serviceProviderContact', 'Service provider notice email'),
+    exactVersionAcknowledgement: notices.exactVersionAcknowledgement === true
+  };
+  if (!validatedNotices.exactVersionAcknowledgement) invalid('notices', 'exactVersionAcknowledgement', 'missing_version_acknowledgement', 'Acknowledge that acceptance applies to this exact Version.');
+
   return {
-    scope: {
-      title: requiredText(scope.title, 'Contract title', 160),
-      description: requiredText(scope.description, 'Contract scope')
-    },
-    milestones: validatedMilestones,
-    totalAllocation: allocation,
-    successFeeBps: fee,
-    authorityId: requiredUuid(authorityId, 'Resolution Authority')
+    authorityId: requiredUuid(draft.authorityId, 'Resolution Authority'),
+    sections: {
+      parties: validatedParties,
+      scope: validatedScope,
+      milestones: { items: validatedMilestones },
+      payment: validatedPayment,
+      evidence: validatedEvidence,
+      intellectual_property: validatedIntellectualProperty,
+      change_control: validatedChangeControl,
+      notices: validatedNotices
+    }
   };
 }
 function mapContractDraft(contract, authorities = []) {
@@ -190,21 +296,26 @@ function mapContractDraft(contract, authorities = []) {
   const scope = sections.get('scope') ?? {};
   const milestones = sections.get('milestones')?.items ?? [];
   const payment = sections.get('payment') ?? {};
+  const parties = sections.get('parties') ?? {};
+  const evidence = sections.get('evidence') ?? {};
+  const intellectualProperty = sections.get('intellectual_property') ?? {};
+  const changeControl = sections.get('change_control') ?? {};
+  const notices = sections.get('notices') ?? {};
   const authority = latestVersion.authority_snapshot ?? {};
   return {
     id: contract.id,
     status: contract.status,
     versionNumber: latestVersion.version_number,
-    scope: { title: scope.title ?? '', description: scope.description ?? '' },
-    milestones: milestones.map(milestone => ({
-      title: milestone.title,
-      allocation: milestone.allocation,
-      evidenceRequirement: milestone.evidenceRequirement,
-      deliveryDeadlineUtc: milestone.deliveryDeadlineUtc,
-      reviewWindowHours: milestone.reviewWindowHours
-    })),
-    totalAllocation: payment.totalAllocation ?? payment.total_allocation ?? 0,
-    successFeeBps: payment.successFeeBps ?? payment.success_fee_bps ?? 0,
+    sections: {
+      parties,
+      scope,
+      milestones,
+      payment,
+      evidence,
+      intellectualProperty,
+      changeControl,
+      notices
+    },
     authority: {
       id: latestVersion.selected_authority_id,
       name: authority.authority_name ?? '',
@@ -212,7 +323,8 @@ function mapContractDraft(contract, authorities = []) {
       rulesetVersion: authority.ruleset_version ?? ''
     },
     authorities: authorities.map(item => ({ id: item.id, name: item.display_name, jurisdictionLabel: item.jurisdiction_label, rulesetVersion: item.ruleset_version })),
-    paymentAuthority: 'not configured'
+    paymentAuthority: 'not configured',
+    shareReady: Boolean(latestVersion.acceptance_ready_at)
   };
 }
 function mapContractReview(contract) {
@@ -261,7 +373,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
   const getDraft = async ({ accessToken, contractId }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
     const [contractResult, authorityResult] = await Promise.all([
-      supabase.from('contracts').select('id, status, contract_versions(id, version_number, selected_authority_id, authority_snapshot, contract_sections(section_type, position, terms))').eq('id', requiredText(contractId, 'Contract')).single(),
+      supabase.from('contracts').select('id, status, contract_versions(id, version_number, selected_authority_id, authority_snapshot, acceptance_ready_at, contract_sections(section_type, position, terms))').eq('id', requiredText(contractId, 'Contract')).single(),
       supabase.from('resolution_authorities').select('id, display_name, jurisdiction_label, ruleset_version').eq('status', 'published')
     ]);
     if (contractResult.error || !contractResult.data || authorityResult.error) throw new ValidationError('This Contract is unavailable.');
@@ -302,10 +414,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
       const validated = validatedDraft(draft);
       await call({ accessToken }, 'update_contract_draft', {
         target_contract_id: requiredText(contractId, 'Contract'),
-        draft_scope: { title: validated.scope.title, description: validated.scope.description },
-        draft_milestones: validated.milestones,
-        total_allocation: validated.totalAllocation,
-        disclosed_success_fee_bps: validated.successFeeBps,
+        draft_sections: validated.sections,
         selected_authority_id: validated.authorityId
       }, 'We could not save this Contract draft.');
       return getDraft({ accessToken, contractId });
@@ -410,7 +519,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       createReadStream(file).pipe(response);
     } catch (error) {
       const status = error instanceof SyntaxError ? 400 : error instanceof AuthenticationError ? 401 : error instanceof ValidationError ? 422 : 500;
-      respond(response, status, { error: status === 500 ? 'Request failed.' : error.message });
+      respond(response, status, { error: status === 500 ? 'Request failed.' : error.message, ...(error instanceof DraftValidationError ? { issues: error.issues } : {}) });
     }
   });
 }

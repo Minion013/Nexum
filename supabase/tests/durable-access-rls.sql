@@ -177,10 +177,7 @@ begin
   end if;
   perform public.update_contract_draft(
     '00000000-0000-4000-8000-000000000303',
-    '{"title":"RLS draft","description":"A participant-only durable Contract draft."}'::jsonb,
-    '[{"title":"Discovery","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]'::jsonb,
-    1000,
-    250,
+    '{"parties":{"buyer":{"partyRef":"initiating_party","responsibility":"Funds the agreed allocation."},"serviceProvider":{"partyRef":"counterparty","responsibility":"Delivers the agreed outcomes."}},"scope":{"title":"RLS draft","description":"A participant-only durable Contract draft.","outcome":"A documented service handoff.","includedDeliverables":["Discovery findings","Handoff"],"excludedWork":["Ongoing operations"],"projectStartDateUtc":"2030-01-02T09:00:00.000Z","clientDependencies":[]},"milestones":{"items":[{"title":"Discovery","deliveryOutcome":"Annotated findings","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":72},{"title":"Handoff","deliveryOutcome":"Production-ready handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]},"payment":{"settlementToken":"eUSD testnet demonstration token","network":"Base Sepolia","totalAllocation":1000,"fundingDeadlineUtc":"2030-01-05T09:00:00.000Z","successFeeBps":250,"feeRecipient":"PactFlow demonstration fee recipient"},"evidence":{"reviewDecision":"Buyer records acceptance or a specific change request.","dependencyAcknowledgementRequired":false},"intellectual_property":{"outcome":"provider_retains_ownership_with_client_license","licenseScope":"Project delivery use","confidentiality":"mutual_confidentiality","confidentialityDuration":"Two years"},"change_control":{"proposalProcess":"Either Contract Party may propose a written change request.","bilateralAmendmentOnly":true},"notices":{"buyerContact":"party@example.test","serviceProviderContact":"invitee@example.test","exactVersionAcknowledgement":true}}'::jsonb,
     '00000000-0000-4000-8000-000000000201'
   );
   if not exists (
@@ -222,10 +219,7 @@ begin
   begin
     perform public.update_contract_draft(
       '00000000-0000-4000-8000-000000000303',
-      '{"title":"Intrusion","description":"This must not be writable."}'::jsonb,
-      '[{"title":"One","allocation":1000,"evidenceRequirement":"None","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Two","allocation":1,"evidenceRequirement":"None","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":48}]'::jsonb,
-      1001,
-      0,
+      '{}'::jsonb,
       '00000000-0000-4000-8000-000000000201'
     );
     raise exception 'An unrelated Profile unexpectedly updated a Contract draft.';
@@ -269,16 +263,18 @@ begin
     or not exists (select 1 from public.private_evidence_references where id = '00000000-0000-4000-8000-000000000702') then
     raise exception 'The invited Profile could not read private Contract coordination data after acceptance.';
   end if;
-  begin
-    perform public.accept_contract_version(
-      '00000000-0000-4000-8000-000000000303',
-      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
-    );
-    raise exception 'An unvalidated Contract Version unexpectedly accepted a Contract Acceptance.';
-  exception
-    when others then
-      if position('incomplete and cannot be accepted' in sqlerrm) = 0 then raise; end if;
-  end;
+  perform public.accept_contract_version(
+    '00000000-0000-4000-8000-000000000303',
+    (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
+  );
+  if not exists (
+    select 1 from public.contract_acceptances acceptance
+    join public.contract_versions version on version.id = acceptance.contract_version_id
+    where version.contract_id = '00000000-0000-4000-8000-000000000303'
+      and acceptance.acting_profile_id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'The invited Contract Party could not accept a share-validated Version.';
+  end if;
 end;
 $$;
 
@@ -292,10 +288,7 @@ begin
   where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1;
   perform public.update_contract_draft(
     '00000000-0000-4000-8000-000000000303',
-    '{"title":"RLS draft revision","description":"A corrected participant-only durable Contract draft."}'::jsonb,
-    '[{"title":"Discovery","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]'::jsonb,
-    1000,
-    250,
+    '{"parties":{"buyer":{"partyRef":"initiating_party","responsibility":"Funds the agreed allocation."},"serviceProvider":{"partyRef":"counterparty","responsibility":"Delivers the agreed outcomes."}},"scope":{"title":"RLS draft revision","description":"A corrected participant-only durable Contract draft.","outcome":"A documented service handoff.","includedDeliverables":["Discovery findings","Handoff"],"excludedWork":["Ongoing operations"],"projectStartDateUtc":"2030-01-02T09:00:00.000Z","clientDependencies":[]},"milestones":{"items":[{"title":"Discovery","deliveryOutcome":"Annotated findings","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":72},{"title":"Handoff","deliveryOutcome":"Production-ready handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]},"payment":{"settlementToken":"eUSD testnet demonstration token","network":"Base Sepolia","totalAllocation":1000,"fundingDeadlineUtc":"2030-01-05T09:00:00.000Z","successFeeBps":250,"feeRecipient":"PactFlow demonstration fee recipient"},"evidence":{"reviewDecision":"Buyer records acceptance or a specific change request.","dependencyAcknowledgementRequired":false},"intellectual_property":{"outcome":"provider_retains_ownership_with_client_license","licenseScope":"Project delivery use","confidentiality":"mutual_confidentiality","confidentialityDuration":"Two years"},"change_control":{"proposalProcess":"Either Contract Party may propose a written change request.","bilateralAmendmentOnly":true},"notices":{"buyerContact":"party@example.test","serviceProviderContact":"invitee@example.test","exactVersionAcknowledgement":true}}'::jsonb,
     '00000000-0000-4000-8000-000000000201'
   );
   select id into replacement_version_id from public.contract_versions

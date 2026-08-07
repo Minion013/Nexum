@@ -25,6 +25,6 @@ export async function authenticatedRequest(path, options = {}) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}`, ...(options.headers || {}) }
   });
   const payload = response.status === 204 ? {} : await response.json();
-  if (!response.ok) { const error = new Error(payload.error || 'The request failed.'); error.code = payload.code; throw error; }
+  if (!response.ok) { const error = new Error(payload.error || 'The request failed.'); error.code = payload.code; error.issues = payload.issues; throw error; }
   return payload;
 }
