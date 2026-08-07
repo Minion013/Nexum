@@ -144,7 +144,7 @@ function renderReview(review) {
     return reviewSection(sectionLabels[section.type], section.complete ? Object.entries(terms).map(([key, item]) => reviewLine(reviewLabel(key), reviewValue(item))) : [reviewLine('Status', 'Missing — this Version cannot be accepted yet')]);
   });
   document.querySelector('#contract-review-sections').replaceChildren(...rendered);
-  const acceptanceLines = review.parties.map(party => `${party.label}: ${party.acceptedAt ? 'Contract Acceptance recorded' : 'Contract Acceptance required'}`);
+  const acceptanceLines = review.parties.map(party => `${party.label}: ${party.acceptedAt ? `Wallet signature recorded${party.walletAddress ? ` (${party.walletAddress.slice(0, 8)}â€¦${party.walletAddress.slice(-4)})` : ''}` : 'Contract Acceptance required'}`);
   document.querySelector('#contract-acceptance-status').textContent = `${acceptanceLines.join(' · ')}. A later correction creates a new Version and does not carry these Acceptances forward.`;
   const accept = document.querySelector('#accept-contract-version');
   accept.dataset.versionId = version.id;
@@ -208,7 +208,15 @@ document.querySelector('#sign-out').onclick = async () => { await (await supabas
 document.querySelector('#accept-contract-version').onclick = async event => {
   const accept = event.currentTarget; accept.disabled = true;
   document.querySelector('#contract-review-status').textContent = 'Recording your Contract Acceptance for this exact Version…';
-  try { const response = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/versions/${encodeURIComponent(accept.dataset.versionId)}/acceptances`, { method: 'POST' }); renderReview(response.review); document.querySelector('#contract-review-status').textContent = 'Contract Acceptance recorded. Wallet signatures and payment authority are not configured.'; }
+  try {
+    const versionHash = document.querySelector('#contract-version-hash').textContent.replace('Version hash: ', '');
+    document.querySelector('#contract-review-status').textContent = 'Requesting your Base Sepolia wallet signature for this exact Version.';
+    const { signContractAcceptance } = await import('./contract-wallet.js');
+    const walletAcceptance = await signContractAcceptance({ contractId, versionId: accept.dataset.versionId, versionHash });
+    const response = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/versions/${encodeURIComponent(accept.dataset.versionId)}/acceptances`, { method: 'POST', body: JSON.stringify(walletAcceptance) });
+    renderReview(response.review);
+    document.querySelector('#contract-review-status').textContent = 'Your wallet signature was recorded for this exact Contract Version. It does not fund or settle the Contract.';
+  }
   catch (requestError) { document.querySelector('#contract-review-status').textContent = requestError.message; } finally { accept.disabled = false; }
 };
 (async () => {

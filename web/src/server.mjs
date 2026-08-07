@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+import { getAddress, verifyTypedData } from 'ethers';
 class ValidationError extends Error {}
 class DraftValidationError extends ValidationError {
   constructor(issue) {
@@ -12,6 +13,25 @@ class DraftValidationError extends ValidationError {
   }
 }
 const requiredContractSectionTypes = ['parties', 'scope', 'milestones', 'payment', 'evidence', 'intellectual_property', 'change_control', 'dispute_resolution', 'notices'];
+const contractAcceptanceStatement = 'I accept this exact PactFlow Contract Version. This signature does not move funds.';
+const baseSepoliaChainId = 84532;
+
+export function contractAcceptanceTypedData({ contractId, versionId, versionHash }) {
+  return {
+    domain: { name: 'PactFlow Contract Acceptance', version: '1', chainId: baseSepoliaChainId },
+    types: { ContractAcceptance: [{ name: 'contractId', type: 'string' }, { name: 'versionId', type: 'string' }, { name: 'versionHash', type: 'string' }, { name: 'statement', type: 'string' }] },
+    message: { contractId, versionId, versionHash, statement: contractAcceptanceStatement }
+  };
+}
+
+function verifiedWalletAcceptance({ contractId, versionId, versionHash, walletAddress, walletSignature }) {
+  const address = getAddress(requiredText(walletAddress, 'Wallet address', 42));
+  const signature = requiredText(walletSignature, 'Wallet signature', 256);
+  const expectedHash = requiredText(versionHash, 'Contract Version hash', 256);
+  const typedData = contractAcceptanceTypedData({ contractId, versionId, versionHash: expectedHash });
+  if (getAddress(verifyTypedData(typedData.domain, typedData.types, typedData.message, signature)) !== address) throw new ValidationError('The wallet signature does not belong to the supplied wallet address.');
+  return { walletAddress: address, walletSignature: signature, versionHash: expectedHash };
+}
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const publicRoot = join(root, 'public');
@@ -63,7 +83,7 @@ function standalonePage(urlPath) {
 }
 function bearerToken(request) { const match = typeof request.headers.authorization === 'string' && request.headers.authorization.match(/^Bearer\s+(.+)$/i); return match?.[1]; }
 
-function publicSupabaseConfigFromEnvironment() { return { url: process.env.SUPABASE_URL ?? null, publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? null, ...(process.env.PRIVY_APP_ID?.trim() ? { privyAppId: process.env.PRIVY_APP_ID.trim() } : {}) }; }
+function publicSupabaseConfigFromEnvironment() { return { url: process.env.SUPABASE_URL ?? null, publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? null, serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? null, ...(process.env.PRIVY_APP_ID?.trim() ? { privyAppId: process.env.PRIVY_APP_ID.trim() } : {}) }; }
 function createSupabaseSessionVerifier(config = publicSupabaseConfigFromEnvironment()) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   const supabase = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -335,7 +355,7 @@ function mapContractReview(contract) {
     id: party.id,
     label: party.profiles?.display_name ?? party.profiles?.email ?? party.workspaces?.name ?? 'Contract Party'
   }));
-  const acceptanceByPartyId = new Map((version.contract_acceptances ?? []).map(acceptance => [acceptance.contract_party_id, acceptance.accepted_at]));
+  const acceptanceByPartyId = new Map((version.contract_acceptances ?? []).map(acceptance => [acceptance.contract_party_id, { acceptedAt: acceptance.accepted_at, walletAddress: acceptance.signer_wallet_address ?? null }]));
   const presentSectionTypes = new Set((version.contract_sections ?? []).map(section => section.section_type));
   return {
     id: contract.id,
@@ -350,7 +370,7 @@ function mapContractReview(contract) {
         .sort((left, right) => left.position - right.position)
         .map(section => ({ type: section.section_type, terms: section.terms }))
     },
-    parties: parties.map(party => ({ ...party, acceptedAt: acceptanceByPartyId.get(party.id) ?? null })),
+    parties: parties.map(party => ({ ...party, acceptedAt: acceptanceByPartyId.get(party.id)?.acceptedAt ?? null, walletAddress: acceptanceByPartyId.get(party.id)?.walletAddress ?? null })),
     requiredSections: requiredContractSectionTypes.map(type => ({ type, complete: presentSectionTypes.has(type) })),
     canAccept: Boolean(version.acceptance_ready_at) && parties.length === 2 && requiredContractSectionTypes.every(type => presentSectionTypes.has(type)),
     paymentAuthority: 'not configured'
@@ -383,7 +403,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
   const getReview = async ({ accessToken, contractId }) => {
     const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
       .from('contracts')
-      .select('id, status, contract_parties(id, profiles(display_name, email), workspaces(name)), contract_versions(id, version_number, version_hash, acceptance_ready_at, authority_snapshot, contract_sections(section_type, position, terms), contract_acceptances(contract_party_id, accepted_at))')
+      .select('id, status, contract_parties(id, profiles(display_name, email), workspaces(name)), contract_versions(id, version_number, version_hash, acceptance_ready_at, authority_snapshot, contract_sections(section_type, position, terms), contract_acceptances(contract_party_id, accepted_at, signer_wallet_address))')
       .eq('id', requiredText(contractId, 'Contract'))
       .single();
     if (error || !data) throw new ValidationError('This Contract review is unavailable.');
@@ -404,12 +424,24 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     }, 'This Contract invitation cannot be accepted.') }),
     getDraft,
     getReview,
-    acceptVersion: async ({ accessToken, contractId, versionId }) => {
-      await call({ accessToken }, 'accept_contract_version', {
-        target_contract_id: requiredText(contractId, 'Contract'),
-        target_version_id: requiredText(versionId, 'Contract Version')
-      }, 'This Contract Version cannot be accepted.');
-      return getReview({ accessToken, contractId });
+    acceptVersion: async ({ userId, accessToken, contractId, versionId, walletAddress, walletSignature, versionHash }) => {
+      const targetContractId = requiredText(contractId, 'Contract');
+      const targetVersionId = requiredText(versionId, 'Contract Version');
+      const review = await getReview({ accessToken, contractId: targetContractId });
+      if (review.version.id !== targetVersionId) throw new ValidationError('This Contract Version cannot be accepted.');
+      if (review.version.hash !== versionHash) throw new ValidationError('The wallet signature must cover the latest exact Contract Version hash.');
+      const walletAcceptance = verifiedWalletAcceptance({ contractId: targetContractId, versionId: targetVersionId, versionHash, walletAddress, walletSignature });
+      if (!config.serviceRoleKey) throw new ValidationError('Wallet-backed Contract Acceptance is not configured.');
+      const { data, error } = await createSupabaseClient(config.url, config.serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } }).rpc('record_wallet_contract_acceptance', {
+        target_contract_id: targetContractId,
+        target_version_id: targetVersionId,
+        expected_version_hash: walletAcceptance.versionHash,
+        signer_wallet_address: walletAcceptance.walletAddress,
+        signer_signature: walletAcceptance.walletSignature,
+        acting_profile_id: requiredUuid(userId, 'Authenticated Profile')
+      });
+      if (error || !data) throw new ValidationError('This Contract Version cannot be accepted.');
+      return getReview({ accessToken, contractId: targetContractId });
     },
     saveDraft: async ({ accessToken, contractId, ...draft }) => {
       const validated = validatedDraft(draft);
@@ -434,6 +466,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
 export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+  const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const authenticate = async () => {
@@ -444,7 +477,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
     };
     try {
       if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
-      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { ...publicSupabaseConfig, mode: 'supabase-auth' });
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { ...browserSupabaseConfig, mode: 'supabase-auth' });
       if (url.pathname === '/api/session' && request.method === 'GET') {
         const session = await authenticate();
         const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
@@ -488,7 +521,8 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       const contractAcceptanceMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/versions\/([^/]+)\/acceptances$/);
       if (contractAcceptanceMatch && request.method === 'POST') {
         const session = await authenticate();
-        const review = await contractWorkflow.acceptVersion({ userId: session.userId, accessToken: session.accessToken, contractId: contractAcceptanceMatch[1], versionId: contractAcceptanceMatch[2] });
+        const payload = await json(request);
+        const review = await contractWorkflow.acceptVersion({ userId: session.userId, accessToken: session.accessToken, contractId: contractAcceptanceMatch[1], versionId: contractAcceptanceMatch[2], ...payload });
         return respond(response, 200, { review });
       }
       const contractInvitationMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/invitations$/);

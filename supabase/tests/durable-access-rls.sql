@@ -230,14 +230,18 @@ begin
       end if;
   end;
   begin
-    perform public.accept_contract_version(
+    perform public.record_wallet_contract_acceptance(
       '00000000-0000-4000-8000-000000000303',
-      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
+      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1),
+      (select version_hash from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1),
+      '0x0000000000000000000000000000000000000002',
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '00000000-0000-4000-8000-000000000102'
     );
     raise exception 'An unrelated Profile unexpectedly accepted a private Contract Version.';
   exception
     when others then
-      if position('Only a Contract Party can accept this Version' in sqlerrm) = 0 then
+      if position('permission denied' in sqlerrm) = 0 then
         raise;
       end if;
   end;
@@ -263,18 +267,19 @@ begin
     or not exists (select 1 from public.private_evidence_references where id = '00000000-0000-4000-8000-000000000702') then
     raise exception 'The invited Profile could not read private Contract coordination data after acceptance.';
   end if;
-  perform public.accept_contract_version(
-    '00000000-0000-4000-8000-000000000303',
-    (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
-  );
-  if not exists (
-    select 1 from public.contract_acceptances acceptance
-    join public.contract_versions version on version.id = acceptance.contract_version_id
-    where version.contract_id = '00000000-0000-4000-8000-000000000303'
-      and acceptance.acting_profile_id = '00000000-0000-4000-8000-000000000104'
-  ) then
-    raise exception 'The invited Contract Party could not accept a share-validated Version.';
-  end if;
+  begin
+    perform public.record_wallet_contract_acceptance(
+      '00000000-0000-4000-8000-000000000303',
+      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1),
+      (select version_hash from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1),
+      '0x0000000000000000000000000000000000000004',
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '00000000-0000-4000-8000-000000000104'
+    );
+    raise exception 'A browser-authenticated Contract Party unexpectedly bypassed the signature-verifying server boundary.';
+  exception when others then
+    if position('permission denied' in sqlerrm) = 0 then raise; end if;
+  end;
 end;
 $$;
 

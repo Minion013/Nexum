@@ -13,7 +13,7 @@ npm.cmd --prefix web start
 
 Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the application boundary and confirms that payment authority is not configured.
 
-To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy JWT-based authentication to validate the Supabase JWKS endpoint. Supabase must use asymmetric JWT signing. The browser passes its current Supabase access token to Privy; only the non-secret Privy app ID is sent to the browser. Do not expose `PRIVY_APP_SECRET`.
+To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy JWT-based authentication to validate the Supabase JWKS endpoint. Supabase must use asymmetric JWT signing. The browser passes its current Supabase access token to Privy; only the non-secret Privy app ID is sent to the browser. Do not expose `PRIVY_APP_SECRET`. Wallet-backed Contract Acceptance additionally requires `SUPABASE_SERVICE_ROLE_KEY` on the application server; it is never returned to the browser and is used only after the server verifies the participant's EIP-712 signature.
 
 ## Current workflow
 

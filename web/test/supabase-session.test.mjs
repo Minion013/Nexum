@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
+import { Wallet } from 'ethers';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -422,15 +423,21 @@ test('a verified Contract Party can read and save a validated durable Contract d
   }
 });
 
-test('a verified Contract Party reviews and accepts one exact durable Contract Version', async () => {
+test('a verified Contract Party records a wallet signature over one exact durable Contract Version', async () => {
   const calls = [];
+  const wallet = Wallet.createRandom();
+  const contractId = 'contract-id';
+  const versionId = 'version-id';
+  const versionHash = 'version-hash';
+  const typedData = contractAcceptanceTypedData({ contractId, versionId, versionHash });
+  const walletSignature = await wallet.signTypedData(typedData.domain, typedData.types, typedData.message);
   const review = {
-    id: 'contract-id',
+    id: contractId,
     status: 'negotiation',
     version: {
-      id: 'version-id',
+      id: versionId,
       number: 2,
-      hash: 'version-hash',
+      hash: versionHash,
       sections: [{ type: 'scope', terms: { title: 'Checkout redesign', description: 'Redesign the checkout flow.' } }]
     },
     acceptances: [{ contractPartyId: 'buyer-party-id', acceptedAt: '2026-08-07T00:00:00.000Z' }],
@@ -448,18 +455,18 @@ test('a verified Contract Party reviews and accepts one exact durable Contract V
     }
   });
   try {
-    assert.equal((await request(origin, '/api/contracts/contract-id/review')).status, 401);
-    const loaded = await request(origin, '/api/contracts/contract-id/review', { token: 'party-jwt' });
+    assert.equal((await request(origin, `/api/contracts/${contractId}/review`)).status, 401);
+    const loaded = await request(origin, `/api/contracts/${contractId}/review`, { token: 'party-jwt' });
     assert.equal(loaded.status, 200);
     assert.deepEqual(await loaded.json(), { review });
 
-    assert.equal((await request(origin, '/api/contracts/contract-id/versions/version-id/acceptances', { method: 'POST' })).status, 401);
-    const accepted = await request(origin, '/api/contracts/contract-id/versions/version-id/acceptances', { method: 'POST', token: 'party-jwt' });
+    assert.equal((await request(origin, `/api/contracts/${contractId}/versions/${versionId}/acceptances`, { method: 'POST' })).status, 401);
+    const accepted = await request(origin, `/api/contracts/${contractId}/versions/${versionId}/acceptances`, { method: 'POST', token: 'party-jwt', body: { walletAddress: wallet.address, walletSignature, versionHash } });
     assert.equal(accepted.status, 200);
     assert.deepEqual(await accepted.json(), { review });
     assert.deepEqual(calls, [
-      { operation: 'getReview', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id' } },
-      { operation: 'acceptVersion', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id' } }
+      { operation: 'getReview', input: { userId: 'party-id', accessToken: 'party-jwt', contractId } },
+      { operation: 'acceptVersion', input: { userId: 'party-id', accessToken: 'party-jwt', contractId, versionId, walletAddress: wallet.address, walletSignature, versionHash } }
     ]);
   } finally {
     await new Promise(resolve => server.close(resolve));
@@ -468,8 +475,11 @@ test('a verified Contract Party reviews and accepts one exact durable Contract V
 
 test('the review workflow reads RLS-visible Version terms and accepts only its returned Version ID', async () => {
   const calls = [];
+  const wallet = Wallet.createRandom();
+  const typedData = contractAcceptanceTypedData({ contractId: 'contract-id', versionId: 'version-id', versionHash: 'version-hash' });
+  const walletSignature = await wallet.signTypedData(typedData.domain, typedData.types, typedData.message);
   const workflow = createContractWorkflow(
-    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example', serviceRoleKey: 'service-role-key' },
     () => ({
       rpc: async (name, args) => {
         calls.push({ operation: 'rpc', name, args });
@@ -503,7 +513,7 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
     })
   );
 
-  const review = await workflow.acceptVersion({ accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id' });
+  const review = await workflow.acceptVersion({ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id', versionHash: 'version-hash', walletAddress: wallet.address, walletSignature });
   assert.deepEqual(review, {
     id: 'contract-id', status: 'negotiation',
     version: {
@@ -511,8 +521,8 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
       sections: [{ type: 'scope', terms: { title: 'Checkout redesign' } }]
     },
     parties: [
-      { id: 'buyer-party-id', label: 'Buyer', acceptedAt: '2026-08-07T00:00:00.000Z' },
-      { id: 'seller-party-id', label: 'Seller', acceptedAt: null }
+      { id: 'buyer-party-id', label: 'Buyer', acceptedAt: '2026-08-07T00:00:00.000Z', walletAddress: null },
+      { id: 'seller-party-id', label: 'Seller', acceptedAt: null, walletAddress: null }
     ],
     requiredSections: [
       { type: 'parties', complete: false }, { type: 'scope', complete: true }, { type: 'milestones', complete: false },
@@ -522,7 +532,7 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
     canAccept: false,
     paymentAuthority: 'not configured'
   });
-  assert.ok(calls.some(call => call.operation === 'rpc' && call.name === 'accept_contract_version' && call.args.target_contract_id === 'contract-id' && call.args.target_version_id === 'version-id'));
+  assert.ok(calls.some(call => call.operation === 'rpc' && call.name === 'record_wallet_contract_acceptance' && call.args.target_contract_id === 'contract-id' && call.args.target_version_id === 'version-id' && call.args.expected_version_hash === 'version-hash' && call.args.signer_wallet_address === wallet.address && call.args.signer_signature === walletSignature && call.args.acting_profile_id === '11111111-1111-4111-8111-111111111111'));
   assert.ok(calls.some(call => call.operation === 'review-query' && call.table === 'contracts' && call.column === 'id' && call.value === 'contract-id'));
 });
 
