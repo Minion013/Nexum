@@ -17,7 +17,7 @@ contract EscrowVaultFactory {
     function agreementHash(VaultInit calldata init) public pure returns (bytes32) {
         return keccak256(abi.encode(
             address(init.token), init.buyer, init.seller, init.resolver, init.feeRecipient, init.feeBps,
-            init.versionHash, init.fundingDeadline, keccak256(abi.encode(init.amounts)),
+            init.versionHash, init.acceptanceDeadline, init.fundingDeadline, keccak256(abi.encode(init.amounts)),
             keccak256(abi.encode(init.deadlines)), keccak256(abi.encode(init.reviewWindows))
         ));
     }
@@ -33,6 +33,7 @@ contract EscrowVaultFactory {
         bytes calldata sellerSignature
     ) external returns (EscrowVault vault) {
         require(init.versionHash != bytes32(0), "version hash required");
+        require(block.timestamp <= init.acceptanceDeadline, "acceptance expired");
         bytes32 hash = agreementHash(init);
         require(vaultForAgreement[hash] == address(0), "vault already exists");
         bytes32 digest = approvalDigest(hash);

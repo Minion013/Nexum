@@ -28,8 +28,8 @@ To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy
 `contracts/` contains a compiled Solidity 0.8.30 reference foundation. It is not connected to the browser workflow:
 
 - `MockEUSD.sol`: an explicitly valueless, six-decimal demo token with a capped public faucet.
-- `EscrowVault.sol`: an unfunded, isolated, non-upgradeable, non-administered vault foundation. It contains no owner, pause, rescue, platform-withdrawal, funding, or settlement function.
-- `EscrowVaultFactory.sol`: an EIP-712 approval verifier that lets only buyer or seller create one vault for jointly signed terms.
+- `EscrowVault.sol`: an isolated, non-upgradeable, non-administered vault foundation. Only its fixed buyer can fund the exact allocation once before the funding and first-delivery deadlines; it contains no owner, pause, rescue, platform-withdrawal, or settlement function.
+- `EscrowVaultFactory.sol`: an EIP-712 Contract Acceptance verifier that lets only buyer or seller create one vault for jointly signed terms.
 
 Do not deploy or use the contracts with real value. Any future testnet integration needs separate EVM-level tests and review.
 
