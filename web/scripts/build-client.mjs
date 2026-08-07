@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 const webRoot = resolve(fileURLToPath(new URL('../', import.meta.url)));
 
 await build({
-  entryPoints: [join(webRoot, 'public', 'home.js'), join(webRoot, 'public', 'login.js'), join(webRoot, 'public', 'contract.js')],
+  entryPoints: [join(webRoot, 'public', 'home.js'), join(webRoot, 'public', 'login.js'), join(webRoot, 'public', 'contract.js'), join(webRoot, 'public', 'invitation.js')],
   bundle: true,
   format: 'esm',
   platform: 'browser',

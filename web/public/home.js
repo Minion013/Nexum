@@ -79,6 +79,15 @@ function renderHome(profile, home) {
   renderContracts(contracts);
 }
 function showError(error) { const message = $('#request-error'); if (message) { message.hidden = false; message.textContent = error.message; } }
+function showInvitationLink(invitationId) {
+  const link = document.createElement('a');
+  link.className = 'home-row-link';
+  link.href = `/invitations/${encodeURIComponent(invitationId)}`;
+  link.textContent = 'Open acceptance link';
+  const prefix = document.createTextNode('Private Contract created. Send this exact acceptance link to the invited counterparty through your agreed private channel. ');
+  const contractStatus = $('#contract-form-status');
+  contractStatus.replaceChildren(prefix, link);
+}
 
 const contractForm = $('#new-contract-form');
 if (contractForm) {
@@ -93,14 +102,13 @@ if (contractForm) {
     contractStatus.textContent = 'Creating your private Contract…';
     try {
       const data = Object.fromEntries(new FormData(contractForm));
-      await authenticatedRequest('/api/contracts', { method: 'POST', body: JSON.stringify(data) });
-      contractStatus.textContent = 'Private Contract created and invitation sent. It is visible only to you until the counterparty accepts.';
+      const created = await authenticatedRequest('/api/contracts', { method: 'POST', body: JSON.stringify(data) });
+      showInvitationLink(created.invitation.id);
       contractForm.reset();
       const response = await authenticatedRequest('/api/home');
       renderContracts(response.home.contracts ?? []);
       const count = $('#attention-count');
       if (count) count.textContent = String((response.home.contracts ?? []).filter(requiresAttention).length);
-      window.setTimeout(() => toggleContractForm(false), 1_200);
     } catch (error) { contractStatus.textContent = error.message; } finally { submit.disabled = false; }
   });
 }

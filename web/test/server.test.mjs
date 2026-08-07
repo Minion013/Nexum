@@ -55,6 +55,21 @@ test('authenticated area pages are served from their canonical URLs', async () =
   }
 });
 
+test('the exact invitation route serves the client-authenticated acceptance page', async () => {
+  const server = createApp();
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const invitation = await request(server, '/invitations/not-an-invitation');
+    assert.equal(invitation.status, 200);
+    const markup = await invitation.text();
+    assert.match(markup, /Accept Contract invitation/);
+    assert.match(markup, /invitation\.bundle\.js/);
+    assert.equal((await request(server, '/invitations/not-an-invitation/extra')).status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('runtime configuration requires public Supabase authentication settings and keeps secrets out of it', () => {
   assert.throws(
     () => runtimeConfigurationFromEnvironment({ PORT: '3000' }),

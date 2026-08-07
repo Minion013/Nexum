@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Accept a private PactFlow Contract invitation." />
+    <title>Accept Contract invitation - PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/home.css" />
+  </head>
+  <body class="home-page">
+    <a class="skip-link" href="#main-content">Skip to invitation</a>
+    <header class="home-header"><a class="brand" href="/home">Pact<span>Flow</span></a></header>
+    <main id="main-content" class="home-main" tabindex="-1">
+      <section class="home-intro" aria-labelledby="invitation-title">
+        <p class="eyebrow">Private Contract</p>
+        <h1 id="invitation-title">Accept Contract invitation</h1>
+        <p>This invitation is available only to the signed-in Profile whose exact email address was invited.</p>
+      </section>
+      <section class="home-panel invitation-panel" aria-label="Contract invitation acceptance">
+        <p id="invitation-error" class="home-error" aria-live="polite" hidden></p>
+        <p id="invitation-status" class="home-form-status" aria-live="polite">Checking your signed-in session...</p>
+        <button id="accept-invitation" class="home-primary-action" type="button" hidden>Accept invitation</button>
+      </section>
+    </main>
+    <script type="module" src="/invitation.bundle.js"></script>
+  </body>
+</html>

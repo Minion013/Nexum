@@ -286,6 +286,28 @@ test('the authenticated API does not create a durable Contract without a Supabas
   }
 });
 
+test('only a verified signed-in Profile can submit an invitation acceptance to the durable workflow', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'invited-profile-jwt') throw new Error('invalid token');
+      return { id: 'invited-profile-id', email: 'seller@example.com' };
+    },
+    contractWorkflow: {
+      accept: async input => { calls.push(input); return { id: 'invitation-id' }; }
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/invitations/invitation-id/accept', { method: 'POST' })).status, 401);
+    const accepted = await request(origin, '/api/invitations/invitation-id/accept', { method: 'POST', token: 'invited-profile-jwt' });
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(await accepted.json(), { invitation: { id: 'invitation-id' } });
+    assert.deepEqual(calls, [{ userId: 'invited-profile-id', accessToken: 'invited-profile-jwt', invitationId: 'invitation-id' }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('a verified Contract Party can read and save a validated durable Contract draft', async () => {
   const calls = [];
   const draft = {

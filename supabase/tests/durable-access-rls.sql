@@ -8,7 +8,8 @@ insert into auth.users (
 values
   ('00000000-0000-4000-8000-000000000101', 'authenticated', 'authenticated', 'party@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Party"}', now(), now(), false, false, false),
   ('00000000-0000-4000-8000-000000000102', 'authenticated', 'authenticated', 'other@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Other"}', now(), now(), false, false, false),
-  ('00000000-0000-4000-8000-000000000103', 'authenticated', 'authenticated', 'officer@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Case Officer"}', now(), now(), false, false, false);
+  ('00000000-0000-4000-8000-000000000103', 'authenticated', 'authenticated', 'officer@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Case Officer"}', now(), now(), false, false, false),
+  ('00000000-0000-4000-8000-000000000104', 'authenticated', 'authenticated', 'invitee@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Invitee"}', now(), now(), false, false, false);
 
 select public.provision_simulated_case_officer('officer@example.test');
 
@@ -60,6 +61,9 @@ values (
   '00000000-0000-4000-8000-000000000201',
   '00000000-0000-4000-8000-000000000101'
 );
+
+insert into public.private_evidence_references (id, contract_id, milestone_key, reference_hash, created_by_profile_id)
+values ('00000000-0000-4000-8000-000000000702', '00000000-0000-4000-8000-000000000303', 'draft-evidence', 'private-draft-evidence-hash', '00000000-0000-4000-8000-000000000101');
 
 do $$
 begin
@@ -127,6 +131,8 @@ set local role authenticated;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', true);
 do $$
+declare
+  invitation_id uuid;
 begin
   if (select count(*) from public.workspaces) <> 1 then
     raise exception 'A party must see only its provisioned personal workspace.';
@@ -178,12 +184,32 @@ begin
   ) then
     raise exception 'A Contract Party must be able to save its validated durable milestone schedule.';
   end if;
+  invitation_id := public.create_contract_invitation('00000000-0000-4000-8000-000000000303', 'invitee@example.test');
+  perform set_config('test.invitation_id', invitation_id::text, true);
 end;
 $$;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000102', true);
 do $$
 begin
+  begin
+    perform public.accept_contract_invitation(current_setting('test.invitation_id')::uuid);
+    raise exception 'An unrelated Profile unexpectedly accepted a private Contract invitation.';
+  exception
+    when others then
+      if position('invalid, expired, or addressed to another Profile' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
+  if exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
+    raise exception 'An unrelated Profile unexpectedly read a private Contract after changing the invitation identifier.';
+  end if;
+  if exists (select 1 from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303')
+    or exists (select 1 from public.contract_sections section join public.contract_versions version on version.id = section.contract_version_id where version.contract_id = '00000000-0000-4000-8000-000000000303')
+    or exists (select 1 from public.private_evidence_references where id = '00000000-0000-4000-8000-000000000702')
+    or exists (select 1 from public.contract_invitations where id = current_setting('test.invitation_id')::uuid) then
+    raise exception 'An unrelated Profile unexpectedly read private Contract coordination data.';
+  end if;
   begin
     perform public.update_contract_draft(
       '00000000-0000-4000-8000-000000000303',
@@ -200,6 +226,28 @@ begin
         raise;
       end if;
   end;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000104', true);
+do $$
+begin
+  perform public.accept_contract_invitation(current_setting('test.invitation_id')::uuid);
+  if not exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
+    raise exception 'The invited Profile could not read its accepted private Contract.';
+  end if;
+  if not exists (
+    select 1 from public.contract_parties
+    where contract_id = '00000000-0000-4000-8000-000000000303'
+      and profile_id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'Accepting the invitation did not create the invited Profile Contract Party.';
+  end if;
+  if not exists (select 1 from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303')
+    or not exists (select 1 from public.contract_sections section join public.contract_versions version on version.id = section.contract_version_id where version.contract_id = '00000000-0000-4000-8000-000000000303')
+    or not exists (select 1 from public.private_evidence_references where id = '00000000-0000-4000-8000-000000000702') then
+    raise exception 'The invited Profile could not read private Contract coordination data after acceptance.';
+  end if;
 end;
 $$;
 

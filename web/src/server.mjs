@@ -342,7 +342,8 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
       const contractPageMatch = url.pathname.match(/^\/contracts\/[^/]+$/);
-      const file = contractPageMatch ? join(publicRoot, 'contract.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
+      const invitationPageMatch = url.pathname.match(/^\/invitations\/[^/]+$/);
+      const file = contractPageMatch ? join(publicRoot, 'contract.html') : invitationPageMatch ? join(publicRoot, 'invitation.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
       if (!file || !existsSync(file) || !statSync(file).isFile()) { response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found'); return; }
       response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'x-content-type-options': 'nosniff' });
       if (request.method === 'HEAD') return response.end();
