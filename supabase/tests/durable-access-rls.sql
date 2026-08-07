@@ -62,6 +62,15 @@ values (
   '00000000-0000-4000-8000-000000000101'
 );
 
+insert into public.contract_sections (contract_version_id, section_type, position, terms)
+values
+  ('00000000-0000-4000-8000-000000000353', 'parties', 1, '{"proposer_profile_id":"00000000-0000-4000-8000-000000000101","counterparty_email":"invitee@example.test"}'::jsonb),
+  ('00000000-0000-4000-8000-000000000353', 'change_control', 2, '{"rule":"Future uncompleted work changes only through bilateral amendment."}'::jsonb),
+  ('00000000-0000-4000-8000-000000000353', 'evidence', 5, '{"rule":"Evidence must use a private Contract reference."}'::jsonb),
+  ('00000000-0000-4000-8000-000000000353', 'intellectual_property', 6, '{"outcome":"provider_retains_ownership_with_client_license","license_scope":"Project delivery use"}'::jsonb),
+  ('00000000-0000-4000-8000-000000000353', 'dispute_resolution', 7, '{"authority":"RLS Test Simulation Authority","ruleset":"v1"}'::jsonb),
+  ('00000000-0000-4000-8000-000000000353', 'notices', 8, '{"acknowledgement":"Acceptance applies to this exact Version."}'::jsonb);
+
 insert into public.private_evidence_references (id, contract_id, milestone_key, reference_hash, created_by_profile_id)
 values ('00000000-0000-4000-8000-000000000702', '00000000-0000-4000-8000-000000000303', 'draft-evidence', 'private-draft-evidence-hash', '00000000-0000-4000-8000-000000000101');
 
@@ -226,6 +235,18 @@ begin
         raise;
       end if;
   end;
+  begin
+    perform public.accept_contract_version(
+      '00000000-0000-4000-8000-000000000303',
+      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
+    );
+    raise exception 'An unrelated Profile unexpectedly accepted a private Contract Version.';
+  exception
+    when others then
+      if position('Only a Contract Party can accept this Version' in sqlerrm) = 0 then
+        raise;
+      end if;
+  end;
 end;
 $$;
 
@@ -247,6 +268,41 @@ begin
     or not exists (select 1 from public.contract_sections section join public.contract_versions version on version.id = section.contract_version_id where version.contract_id = '00000000-0000-4000-8000-000000000303')
     or not exists (select 1 from public.private_evidence_references where id = '00000000-0000-4000-8000-000000000702') then
     raise exception 'The invited Profile could not read private Contract coordination data after acceptance.';
+  end if;
+  begin
+    perform public.accept_contract_version(
+      '00000000-0000-4000-8000-000000000303',
+      (select id from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1)
+    );
+    raise exception 'An unvalidated Contract Version unexpectedly accepted a Contract Acceptance.';
+  exception
+    when others then
+      if position('incomplete and cannot be accepted' in sqlerrm) = 0 then raise; end if;
+  end;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', true);
+do $$
+declare
+  reviewed_version_id uuid;
+  replacement_version_id uuid;
+begin
+  select id into reviewed_version_id from public.contract_versions
+  where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1;
+  perform public.update_contract_draft(
+    '00000000-0000-4000-8000-000000000303',
+    '{"title":"RLS draft revision","description":"A corrected participant-only durable Contract draft."}'::jsonb,
+    '[{"title":"Discovery","allocation":400,"evidenceRequirement":"Annotated findings","deliveryDeadlineUtc":"2030-01-10T09:00:00.000Z","reviewWindowHours":48},{"title":"Handoff","allocation":600,"evidenceRequirement":"Production-ready handoff","deliveryDeadlineUtc":"2030-01-24T09:00:00.000Z","reviewWindowHours":72}]'::jsonb,
+    1000,
+    250,
+    '00000000-0000-4000-8000-000000000201'
+  );
+  select id into replacement_version_id from public.contract_versions
+  where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1;
+  if replacement_version_id = reviewed_version_id
+    or exists (select 1 from public.contract_acceptances where contract_version_id = replacement_version_id) then
+    raise exception 'A corrected Contract Version must not carry prior acceptances forward.';
   end if;
 end;
 $$;

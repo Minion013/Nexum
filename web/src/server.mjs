@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 class ValidationError extends Error {}
+const requiredContractSectionTypes = ['parties', 'scope', 'milestones', 'payment', 'evidence', 'intellectual_property', 'change_control', 'dispute_resolution', 'notices'];
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const publicRoot = join(root, 'public');
@@ -214,13 +215,43 @@ function mapContractDraft(contract, authorities = []) {
     paymentAuthority: 'not configured'
   };
 }
+function mapContractReview(contract) {
+  const version = [...(contract.contract_versions ?? [])].sort((left, right) => right.version_number - left.version_number)[0];
+  if (!version) throw new ValidationError('This Contract has no readable version.');
+  const parties = (contract.contract_parties ?? []).map(party => ({
+    id: party.id,
+    label: party.profiles?.display_name ?? party.profiles?.email ?? party.workspaces?.name ?? 'Contract Party'
+  }));
+  const acceptanceByPartyId = new Map((version.contract_acceptances ?? []).map(acceptance => [acceptance.contract_party_id, acceptance.accepted_at]));
+  const presentSectionTypes = new Set((version.contract_sections ?? []).map(section => section.section_type));
+  return {
+    id: contract.id,
+    status: contract.status,
+    version: {
+      id: version.id,
+      number: version.version_number,
+      hash: version.version_hash,
+      acceptanceReadyAt: version.acceptance_ready_at,
+      authority: version.authority_snapshot ?? {},
+      sections: [...(version.contract_sections ?? [])]
+        .sort((left, right) => left.position - right.position)
+        .map(section => ({ type: section.section_type, terms: section.terms }))
+    },
+    parties: parties.map(party => ({ ...party, acceptedAt: acceptanceByPartyId.get(party.id) ?? null })),
+    requiredSections: requiredContractSectionTypes.map(type => ({ type, complete: presentSectionTypes.has(type) })),
+    canAccept: Boolean(version.acceptance_ready_at) && parties.length === 2 && requiredContractSectionTypes.every(type => presentSectionTypes.has(type)),
+    paymentAuthority: 'not configured'
+  };
+}
 export function createContractWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return {
     create: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     invite: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     accept: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
-    saveDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
+    saveDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    getReview: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    acceptVersion: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); }
   };
   const call = async ({ accessToken }, name, args, unavailableMessage) => {
     const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc(name, args);
@@ -236,6 +267,15 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     if (contractResult.error || !contractResult.data || authorityResult.error) throw new ValidationError('This Contract is unavailable.');
     return mapContractDraft(contractResult.data, authorityResult.data ?? []);
   };
+  const getReview = async ({ accessToken, contractId }) => {
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
+      .from('contracts')
+      .select('id, status, contract_parties(id, profiles(display_name, email), workspaces(name)), contract_versions(id, version_number, version_hash, acceptance_ready_at, authority_snapshot, contract_sections(section_type, position, terms), contract_acceptances(contract_party_id, accepted_at))')
+      .eq('id', requiredText(contractId, 'Contract'))
+      .single();
+    if (error || !data) throw new ValidationError('This Contract review is unavailable.');
+    return mapContractReview(data);
+  };
   return {
     create: async ({ accessToken, name, scope, counterpartyEmail }) => ({ id: await call({ accessToken }, 'create_private_contract', {
       contract_name: requiredText(name, 'Contract name', 160),
@@ -250,6 +290,14 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
       target_invitation_id: requiredText(invitationId, 'Invitation')
     }, 'This Contract invitation cannot be accepted.') }),
     getDraft,
+    getReview,
+    acceptVersion: async ({ accessToken, contractId, versionId }) => {
+      await call({ accessToken }, 'accept_contract_version', {
+        target_contract_id: requiredText(contractId, 'Contract'),
+        target_version_id: requiredText(versionId, 'Contract Version')
+      }, 'This Contract Version cannot be accepted.');
+      return getReview({ accessToken, contractId });
+    },
     saveDraft: async ({ accessToken, contractId, ...draft }) => {
       const validated = validatedDraft(draft);
       await call({ accessToken }, 'update_contract_draft', {
@@ -320,6 +368,18 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const payload = await json(request);
         const contract = await contractWorkflow.saveDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1], ...payload });
         return respond(response, 200, { contract });
+      }
+      const contractReviewMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/review$/);
+      if (contractReviewMatch && request.method === 'GET') {
+        const session = await authenticate();
+        const review = await contractWorkflow.getReview({ userId: session.userId, accessToken: session.accessToken, contractId: contractReviewMatch[1] });
+        return respond(response, 200, { review });
+      }
+      const contractAcceptanceMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/versions\/([^/]+)\/acceptances$/);
+      if (contractAcceptanceMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const review = await contractWorkflow.acceptVersion({ userId: session.userId, accessToken: session.accessToken, contractId: contractAcceptanceMatch[1], versionId: contractAcceptanceMatch[2] });
+        return respond(response, 200, { review });
       }
       const contractInvitationMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/invitations$/);
       if (contractInvitationMatch && request.method === 'POST') {

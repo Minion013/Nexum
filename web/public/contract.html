@@ -21,6 +21,13 @@
         <div class="contract-draft-footer"><p><strong>No payment authority.</strong> This draft has no wallet connection, vault, funding, or settlement capability.</p><button class="home-primary-action" type="submit">Save private draft</button></div>
         <p id="contract-form-status" class="home-form-status" aria-live="polite"></p>
       </form>
+      <section id="contract-review" class="home-panel contract-review" hidden aria-labelledby="contract-review-title">
+        <div class="home-panel-heading"><div><p class="eyebrow">Version review</p><h2 id="contract-review-title">Review the exact shared Version</h2><p id="contract-review-summary"></p></div><span id="contract-version-number" class="home-status-note"></span></div>
+        <p id="contract-version-hash" class="contract-version-hash"></p>
+        <div id="contract-review-sections" class="contract-review-sections"></div>
+        <div class="contract-review-footer"><p id="contract-acceptance-status"></p><button id="accept-contract-version" class="home-primary-action" type="button">Record Contract Acceptance</button></div>
+        <p id="contract-review-status" class="home-form-status" aria-live="polite"></p>
+      </section>
     </main>
     <script type="module" src="/contract.bundle.js"></script>
   </body>

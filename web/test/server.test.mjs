@@ -48,6 +48,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
     const detail = await request(server, '/contracts/not-a-contract');
     assert.equal(detail.status, 200);
     assert.match(await detail.text(), /Contract draft/);
+    assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /Review the exact shared Version/);
     assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /contract\.bundle\.js/);
     assert.equal((await request(server, '/contracts/not-a-contract/extra')).status, 404);
   } finally {

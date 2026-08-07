@@ -34,7 +34,7 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 The application includes durable Profile and Workspace provisioning, authenticated Home data, durable private Contract creation, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
 
-The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page, typed milestone editor, version review, wallet linking, EIP-712 signatures, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
+The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page now presents the latest immutable Version, its canonical terms hash, missing template sections, and each Party's Acceptance state. It blocks Acceptance until a Version is complete and is not a wallet signature or payment approval. Completing the typed builder, wallet linking, EIP-712 signatures, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
 
 ## Implementation tracking
 

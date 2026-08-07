@@ -119,3 +119,11 @@ Each ticket may retain partial evidence in its notes, but must not tick a testne
 - [x] The linked-project rollback proof now exercises an invitation identifier returned by the same durable RPC: an unrelated Profile cannot accept it or read the private Contract, versions, sections, evidence, or invitation, while the exact-email invitee becomes a Contract Party and can read them.
 - [ ] Ticket 03 remains **Partial** until the signed-in browser path is verified end to end against the linked project. Storage-object denial is out of scope until private object storage is introduced.
 - [ ] No wallet, payment, evidence, dispute, or Contract-version acceptance capability is implied by this UI. Those remain separate ticket scopes.
+
+## 7 August 2026 update — durable Contract Version review and acceptance
+
+- [x] An authenticated Contract Party can open the Contract-specific read-only review surface and see the latest immutable Version number, canonical terms hash, typed terms, Resolution Authority snapshot, testnet allocation/fee summary, each Party's Acceptance state, and missing template sections.
+- [x] The authenticated API and linked `accept_contract_version` boundary permit Contract Acceptance only for a latest, template-complete Version that a future share validator has explicitly marked ready and that has exactly two Parties. It will retain the canonical terms hash alongside each Party's Acceptance and does not grant access from a route or Version identifier.
+- [x] Migrations `20260807130000` through `20260807135000` are applied to the linked project. The rollback-only RLS proof verifies denial for an unrelated Profile and denial of an unvalidated Version, while a later draft revision still creates a new Version with no carried-forward Acceptances. `supabase db lint --linked` reports no schema errors.
+- [x] `npm.cmd --prefix web test` passes 26 tests; typecheck and the client build pass.
+- [ ] The current limited builder does not yet produce all nine required template sections or the validator-ready marker, so its review page correctly blocks Contract Acceptance. Completing the typed builder and share validator, then Privy custom-JWT wallet linking, an EIP-712 signature over the exact Version hash, Base Sepolia funding/settlement, and chain reconciliation remain unimplemented. Ticket 05 therefore remains **Partial**.

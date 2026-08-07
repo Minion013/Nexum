@@ -5,6 +5,7 @@ const milestoneList = document.querySelector('#milestone-list');
 const status = document.querySelector('#contract-form-status');
 const error = document.querySelector('#request-error');
 const contractId = decodeURIComponent(window.location.pathname.split('/').at(-1));
+const reviewPanel = document.querySelector('#contract-review');
 
 function localDateTime(utc) {
   if (!utc) return '';
@@ -69,6 +70,67 @@ function renderDraft(contract) {
   renderMilestones(contract.milestones.length ? contract.milestones : [newMilestone(), newMilestone()]);
   form.hidden = false;
 }
+function reviewLine(label, value) {
+  const line = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = `${label}: `;
+  line.append(strong, value);
+  return line;
+}
+function reviewSection(title, lines) {
+  const section = document.createElement('article');
+  section.className = 'contract-review-section';
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  section.append(heading, ...lines);
+  return section;
+}
+function reviewLabel(key) { return key.replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, letter => letter.toUpperCase()); }
+function reviewValue(value) {
+  if (Array.isArray(value)) return value.map(reviewValue).join(', ');
+  if (value && typeof value === 'object') return Object.entries(value).map(([key, item]) => `${reviewLabel(key)}: ${reviewValue(item)}`).join('; ');
+  return String(value ?? 'Not provided');
+}
+function renderReview(review) {
+  const { version } = review;
+  reviewPanel.hidden = false;
+  document.querySelector('#contract-version-number').textContent = `Version ${version.number}`;
+  document.querySelector('#contract-review-summary').textContent = 'This is a read-only record of the latest immutable Version. Contract Acceptance applies only to this Version and does not move funds.';
+  document.querySelector('#contract-version-hash').textContent = `Version hash: ${version.hash}`;
+  const sections = new Map(version.sections.map(section => [section.type, section.terms]));
+  const scope = sections.get('scope') ?? {};
+  const milestones = sections.get('milestones')?.items ?? [];
+  const payment = sections.get('payment') ?? {};
+  const authority = version.authority ?? {};
+  const sectionLabels = { parties: 'Parties', scope: 'Engagement scope', milestones: 'Milestone schedule', payment: 'Payment and authority', evidence: 'Evidence and review', intellectual_property: 'Intellectual property and confidentiality', change_control: 'Change control', dispute_resolution: 'Dispute resolution', notices: 'Notices and version acknowledgement' };
+  const rendered = [
+    reviewSection('Engagement scope', [reviewLine(scope.title || 'Scope', scope.description || 'Not provided')]),
+    reviewSection('Milestone schedule', milestones.map((milestone, index) => reviewLine(`Milestone ${index + 1}`, `${milestone.title} · ${milestone.allocation} testnet eUSD units · evidence: ${milestone.evidenceRequirement} · deadline ${milestone.deliveryDeadlineUtc} · ${milestone.reviewWindowHours}-hour review`))),
+    reviewSection('Payment and authority', [
+      reviewLine('Total allocation', `${payment.total_allocation ?? payment.totalAllocation ?? 'Not provided'} testnet eUSD units`),
+      reviewLine('Network and token', payment.settlement_token ?? payment.settlementToken ?? 'Not provided'),
+      reviewLine('Funding deadline', payment.funding_deadline_utc ?? payment.fundingDeadlineUtc ?? 'Not provided'),
+      reviewLine('Fee recipient', payment.fee_recipient ?? payment.feeRecipient ?? 'Not provided'),
+      reviewLine('Success fee', `${payment.success_fee_bps ?? payment.successFeeBps ?? 'Not provided'} basis points`),
+      reviewLine('Resolution Authority', `${authority.authority_name ?? 'Not provided'} · ${authority.jurisdiction_label ?? ''} · ${authority.ruleset_version ?? ''}`),
+      reviewLine('Payment authority', review.paymentAuthority)
+    ]),
+    reviewSection('Change control', [reviewLine('Rule', sections.get('change_control')?.rule ?? 'Not provided')]),
+    ...review.requiredSections.filter(section => !['scope', 'milestones', 'payment', 'change_control'].includes(section.type)).map(section => {
+      const terms = sections.get(section.type);
+      return reviewSection(sectionLabels[section.type], section.complete
+        ? Object.entries(terms).map(([key, value]) => reviewLine(reviewLabel(key), reviewValue(value)))
+        : [reviewLine('Status', 'Missing — this Version cannot be accepted yet')]);
+    })
+  ];
+  document.querySelector('#contract-review-sections').replaceChildren(...rendered);
+  const acceptanceLines = review.parties.map(party => `${party.label}: ${party.acceptedAt ? 'Contract Acceptance recorded' : 'Contract Acceptance required'}`);
+  document.querySelector('#contract-acceptance-status').textContent = `${acceptanceLines.join(' · ')}. A later correction creates a new Version and does not carry these Acceptances forward.`;
+  const accept = document.querySelector('#accept-contract-version');
+  accept.dataset.versionId = version.id;
+  accept.disabled = !review.canAccept;
+  if (!review.canAccept) document.querySelector('#contract-review-status').textContent = 'This Version needs every required template section and exactly two Contract Parties before it can be accepted.';
+}
 
 document.querySelector('#add-milestone').onclick = () => {
   renderMilestones([...milestonesFromForm({ preserveLocalDeadline: true }), newMilestone()]);
@@ -85,7 +147,24 @@ form.addEventListener('submit', async event => {
   } catch (requestError) { status.textContent = requestError.message; } finally { submit.disabled = false; }
 });
 document.querySelector('#sign-out').onclick = async () => { await (await supabase()).auth.signOut(); window.location.assign('/'); };
+document.querySelector('#accept-contract-version').onclick = async event => {
+  const accept = event.currentTarget;
+  accept.disabled = true;
+  document.querySelector('#contract-review-status').textContent = 'Recording your Contract Acceptance for this exact Version…';
+  try {
+    const response = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/versions/${encodeURIComponent(accept.dataset.versionId)}/acceptances`, { method: 'POST' });
+    renderReview(response.review);
+    document.querySelector('#contract-review-status').textContent = 'Contract Acceptance recorded. Wallet signatures and payment authority are not configured.';
+  } catch (requestError) { document.querySelector('#contract-review-status').textContent = requestError.message; } finally { accept.disabled = false; }
+};
 (async () => {
-  try { renderDraft((await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}`)).contract); }
+  try {
+    const [draftResponse, reviewResponse] = await Promise.all([
+      authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}`),
+      authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/review`)
+    ]);
+    renderDraft(draftResponse.contract);
+    renderReview(reviewResponse.review);
+  }
   catch (requestError) { error.hidden = false; error.textContent = requestError.message; window.setTimeout(() => window.location.assign('/contracts'), 1_200); }
 })();

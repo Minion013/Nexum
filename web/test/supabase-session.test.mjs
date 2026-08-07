@@ -358,6 +358,110 @@ test('a verified Contract Party can read and save a validated durable Contract d
   }
 });
 
+test('a verified Contract Party reviews and accepts one exact durable Contract Version', async () => {
+  const calls = [];
+  const review = {
+    id: 'contract-id',
+    status: 'negotiation',
+    version: {
+      id: 'version-id',
+      number: 2,
+      hash: 'version-hash',
+      sections: [{ type: 'scope', terms: { title: 'Checkout redesign', description: 'Redesign the checkout flow.' } }]
+    },
+    acceptances: [{ contractPartyId: 'buyer-party-id', acceptedAt: '2026-08-07T00:00:00.000Z' }],
+    requiredPartyCount: 2,
+    paymentAuthority: 'not configured'
+  };
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'party-jwt') throw new Error('invalid token');
+      return { id: 'party-id', email: 'party@example.com' };
+    },
+    contractWorkflow: {
+      getReview: async input => { calls.push({ operation: 'getReview', input }); return review; },
+      acceptVersion: async input => { calls.push({ operation: 'acceptVersion', input }); return review; }
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/contracts/contract-id/review')).status, 401);
+    const loaded = await request(origin, '/api/contracts/contract-id/review', { token: 'party-jwt' });
+    assert.equal(loaded.status, 200);
+    assert.deepEqual(await loaded.json(), { review });
+
+    assert.equal((await request(origin, '/api/contracts/contract-id/versions/version-id/acceptances', { method: 'POST' })).status, 401);
+    const accepted = await request(origin, '/api/contracts/contract-id/versions/version-id/acceptances', { method: 'POST', token: 'party-jwt' });
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(await accepted.json(), { review });
+    assert.deepEqual(calls, [
+      { operation: 'getReview', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id' } },
+      { operation: 'acceptVersion', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id' } }
+    ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the review workflow reads RLS-visible Version terms and accepts only its returned Version ID', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      rpc: async (name, args) => {
+        calls.push({ operation: 'rpc', name, args });
+        return { data: 'acceptance-id', error: null };
+      },
+      from: table => ({
+        select: fields => ({
+          eq: (column, value) => ({
+            single: async () => {
+              calls.push({ operation: 'review-query', table, fields, column, value });
+              return {
+                data: {
+                  id: 'contract-id',
+                  status: 'negotiation',
+                  contract_parties: [
+                    { id: 'buyer-party-id', profiles: { display_name: 'Buyer' } },
+                    { id: 'seller-party-id', profiles: { display_name: 'Seller' } }
+                  ],
+                  contract_versions: [{
+                    id: 'version-id', version_number: 2, version_hash: 'version-hash', authority_snapshot: { authority_name: 'PactFlow Simulation Authority' },
+                    contract_sections: [{ section_type: 'scope', position: 0, terms: { title: 'Checkout redesign' } }],
+                    contract_acceptances: [{ contract_party_id: 'buyer-party-id', accepted_at: '2026-08-07T00:00:00.000Z' }]
+                  }]
+                },
+                error: null
+              };
+            }
+          })
+        })
+      })
+    })
+  );
+
+  const review = await workflow.acceptVersion({ accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id' });
+  assert.deepEqual(review, {
+    id: 'contract-id', status: 'negotiation',
+    version: {
+      id: 'version-id', number: 2, hash: 'version-hash', acceptanceReadyAt: undefined, authority: { authority_name: 'PactFlow Simulation Authority' },
+      sections: [{ type: 'scope', terms: { title: 'Checkout redesign' } }]
+    },
+    parties: [
+      { id: 'buyer-party-id', label: 'Buyer', acceptedAt: '2026-08-07T00:00:00.000Z' },
+      { id: 'seller-party-id', label: 'Seller', acceptedAt: null }
+    ],
+    requiredSections: [
+      { type: 'parties', complete: false }, { type: 'scope', complete: true }, { type: 'milestones', complete: false },
+      { type: 'payment', complete: false }, { type: 'evidence', complete: false }, { type: 'intellectual_property', complete: false },
+      { type: 'change_control', complete: false }, { type: 'dispute_resolution', complete: false }, { type: 'notices', complete: false }
+    ],
+    canAccept: false,
+    paymentAuthority: 'not configured'
+  });
+  assert.ok(calls.some(call => call.operation === 'rpc' && call.name === 'accept_contract_version' && call.args.target_contract_id === 'contract-id' && call.args.target_version_id === 'version-id'));
+  assert.ok(calls.some(call => call.operation === 'review-query' && call.table === 'contracts' && call.column === 'id' && call.value === 'contract-id'));
+});
+
 test('the durable draft workflow rejects a non-conserving milestone allocation before it reaches Supabase', async () => {
   const calls = [];
   const workflow = createContractWorkflow(
