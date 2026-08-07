@@ -40,7 +40,8 @@ export function runtimeConfigurationFromEnvironment(environment = process.env) {
     port,
     publicSupabaseConfig: {
       url: configuredHttpUrl(environment, 'SUPABASE_URL'),
-      publishableKey: configuredValue(environment, 'SUPABASE_PUBLISHABLE_KEY')
+      publishableKey: configuredValue(environment, 'SUPABASE_PUBLISHABLE_KEY'),
+      ...(environment.PRIVY_APP_ID?.trim() ? { privyAppId: environment.PRIVY_APP_ID.trim() } : {})
     }
   };
 }
@@ -62,7 +63,7 @@ function standalonePage(urlPath) {
 }
 function bearerToken(request) { const match = typeof request.headers.authorization === 'string' && request.headers.authorization.match(/^Bearer\s+(.+)$/i); return match?.[1]; }
 
-function publicSupabaseConfigFromEnvironment() { return { url: process.env.SUPABASE_URL ?? null, publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? null }; }
+function publicSupabaseConfigFromEnvironment() { return { url: process.env.SUPABASE_URL ?? null, publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? null, ...(process.env.PRIVY_APP_ID?.trim() ? { privyAppId: process.env.PRIVY_APP_ID.trim() } : {}) }; }
 function createSupabaseSessionVerifier(config = publicSupabaseConfigFromEnvironment()) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   const supabase = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });

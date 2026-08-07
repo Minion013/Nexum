@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, createContractWorkflow, createHomeLoader, createProfileLoader } from '../src/server.mjs';
+import { createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -77,6 +77,41 @@ test('a verified Supabase session exposes the durable profile and protects appli
     assert.deepEqual(calls, ['current-supabase-jwt']);
     assert.deepEqual(profileCalls, [{ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'current-supabase-jwt' }]);
     assert.equal((await request(origin, '/api/home', { token: 'expired-supabase-jwt' })).status, 401);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('runtime configuration exposes the Privy app identifier without exposing privileged wallet credentials', () => {
+  assert.deepEqual(runtimeConfigurationFromEnvironment({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_example',
+    PRIVY_APP_ID: 'privy-app-id',
+    PRIVY_APP_SECRET: 'must-not-reach-the-browser'
+  }).publicSupabaseConfig, {
+    url: 'https://project.supabase.co',
+    publishableKey: 'sb_publishable_example',
+    privyAppId: 'privy-app-id'
+  });
+});
+
+test('the public browser configuration exposes the Privy app identifier without exposing privileged wallet credentials', async () => {
+  const { server, origin } = await start({
+    publicSupabaseConfig: {
+      url: 'https://project.supabase.co',
+      publishableKey: 'sb_publishable_example',
+      privyAppId: 'privy-app-id'
+    }
+  });
+  try {
+    const response = await request(origin, '/api/auth/config');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      url: 'https://project.supabase.co',
+      publishableKey: 'sb_publishable_example',
+      privyAppId: 'privy-app-id',
+      mode: 'supabase-auth'
+    });
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

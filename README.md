@@ -13,12 +13,15 @@ npm.cmd --prefix web start
 
 Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the application boundary and confirms that payment authority is not configured.
 
+To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy JWT-based authentication to validate the Supabase JWKS endpoint. Supabase must use asymmetric JWT signing. The browser passes its current Supabase access token to Privy; only the non-secret Privy app ID is sent to the browser. Do not expose `PRIVY_APP_SECRET`.
+
 ## Current workflow
 
 1. Open the app, enter an email address, and complete the Supabase magic-link flow.
 2. Finish onboarding to provision your durable Profile and personal Workspace.
 3. Create a private Contract with a scope and exact counterparty email address. The server creates the Contract and its expiring invitation under the caller's Supabase identity.
 4. The Contract is private until the invited, authenticated recipient accepts that exact invitation. Payment, approval, evidence, disputes, and on-chain settlement are not yet available in the browser.
+5. When Privy is configured, select **Set up wallet** on Home to create an embedded wallet or link an external EVM wallet for Base Sepolia use. The panel can request a Base Sepolia typed-data check and a zero-value self-transaction; neither is a Contract Acceptance or has payment authority.
 
 ## Reference contracts
 
@@ -34,7 +37,7 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 The application includes durable Profile and Workspace provisioning, authenticated Home data, durable private Contract creation, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
 
-The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page now presents the latest immutable Version, its canonical terms hash, missing template sections, and each Party's Acceptance state. It blocks Acceptance until a Version is complete and is not a wallet signature or payment approval. Completing the typed builder, wallet linking, EIP-712 signatures, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
+The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page now presents the latest immutable Version, its canonical terms hash, missing template sections, and each Party's Acceptance state. A Supabase-linked Privy capability can create or link a Base Sepolia wallet and request a wallet signature or a valueless test transaction, but those actions are not yet persisted as Version-specific Contract Acceptances and have no payment authority. Completing durable EIP-712 Contract Acceptance, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
 
 ## Implementation tracking
 

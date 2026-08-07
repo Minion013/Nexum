@@ -15,7 +15,9 @@ test('public entry and health check are safe to render', async () => {
     assert.deepEqual(await health.json(), { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
     const authConfig = await request(server, '/api/auth/config');
     assert.equal(authConfig.status, 200);
-    assert.deepEqual(Object.keys(await authConfig.json()).sort(), ['mode', 'publishableKey', 'url']);
+    const browserConfig = await authConfig.json();
+    assert.deepEqual(Object.keys(browserConfig).filter(key => key !== 'privyAppId').sort(), ['mode', 'publishableKey', 'url']);
+    assert.equal('privyAppSecret' in browserConfig, false);
     const entry = await request(server, '/');
     assert.equal(entry.status, 200);
     assert.match(await entry.text(), /PactFlow/);
@@ -45,6 +47,8 @@ test('authenticated area pages are served from their canonical URLs', async () =
     for (const href of ['/home', '/contracts', '/workspace', '/contacts', '/authorities']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
+    assert.match(homeMarkup, /id="wallet-capability"/);
+    assert.match(homeMarkup, /wallet\.bundle\.js/);
     const detail = await request(server, '/contracts/not-a-contract');
     assert.equal(detail.status, 200);
     assert.match(await detail.text(), /Contract draft/);
