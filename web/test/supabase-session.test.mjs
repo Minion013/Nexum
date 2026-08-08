@@ -289,14 +289,14 @@ test('a verified user can complete first-time setup without choosing a local dem
   }
 });
 
-test('a verified Contract Party can create a durable private Contract and invite an exact email address', async () => {
+test('a verified Workspace member creates a role-led Proposal before explicitly sharing an exact-email invitation', async () => {
   const calls = [];
   const workflow = createContractWorkflow(
     { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
     () => ({
       rpc: async (name, args) => {
         calls.push({ name, args });
-        if (name === 'create_private_contract') return { data: 'contract-id', error: null };
+        if (name === 'create_role_led_proposal') return { data: 'contract-id', error: null };
         if (name === 'create_contract_invitation') return { data: 'invitation-id', error: null };
         return { data: null, error: { message: 'unexpected call' } };
       }
@@ -308,7 +308,9 @@ test('a verified Contract Party can create a durable private Contract and invite
     accessToken: 'access-token',
     name: 'Checkout redesign',
     scope: 'Redesign the checkout flow.',
-    counterpartyEmail: 'seller@example.com'
+    counterpartyEmail: 'seller@example.com',
+    workspaceId: '00000000-0000-4000-8000-000000000001',
+    initiatorResponsibility: 'buyer'
   });
   assert.deepEqual(contract, { id: 'contract-id' });
   const invitation = await workflow.invite({
@@ -319,7 +321,7 @@ test('a verified Contract Party can create a durable private Contract and invite
   });
   assert.deepEqual(invitation, { id: 'invitation-id' });
   assert.deepEqual(calls, [
-    { name: 'create_private_contract', args: { contract_name: 'Checkout redesign', contract_scope: 'Redesign the checkout flow.', counterparty_email: 'seller@example.com' } },
+    { name: 'create_role_led_proposal', args: { owning_workspace_id: '00000000-0000-4000-8000-000000000001', contract_name: 'Checkout redesign', contract_scope: 'Redesign the checkout flow.', counterparty_email: 'seller@example.com', initiator_responsibility: 'buyer' } },
     { name: 'create_contract_invitation', args: { target_contract_id: 'contract-id', invitee_email: 'seller@example.com' } }
   ]);
 });
@@ -337,14 +339,13 @@ test('the authenticated API does not create a durable Contract without a Supabas
     }
   });
   try {
-    const body = { name: 'Checkout redesign', scope: 'Redesign the checkout flow.', counterpartyEmail: 'seller@example.com' };
+    const body = { name: 'Checkout redesign', scope: 'Redesign the checkout flow.', counterpartyEmail: 'seller@example.com', workspaceId: '00000000-0000-4000-8000-000000000001', initiatorResponsibility: 'buyer' };
     assert.equal((await request(origin, '/api/contracts', { method: 'POST', body })).status, 401);
     const created = await request(origin, '/api/contracts', { method: 'POST', token: 'durable-jwt', body });
     assert.equal(created.status, 201);
-    assert.deepEqual(await created.json(), { contract: { id: 'contract-id' }, invitation: { id: 'invitation-id' } });
+    assert.deepEqual(await created.json(), { contract: { id: 'contract-id' } });
     assert.deepEqual(calls, [
-      { operation: 'create', input: { ...body, userId: 'profile-id', accessToken: 'durable-jwt' } },
-      { operation: 'invite', input: { userId: 'profile-id', accessToken: 'durable-jwt', contractId: 'contract-id', email: 'seller@example.com' } }
+      { operation: 'create', input: { ...body, userId: 'profile-id', accessToken: 'durable-jwt' } }
     ]);
   } finally {
     await new Promise(resolve => server.close(resolve));

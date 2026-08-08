@@ -81,7 +81,9 @@ function standalonePage(urlPath) {
     '/home': 'home.html',
     '/contracts': 'contracts.html',
     '/workspace': 'workspace-list.html',
-    '/contacts': 'contacts.html',
+    '/people': 'people.html',
+    '/contacts': 'people.html',
+    '/settings': 'settings.html',
     '/authorities': 'authorities.html'
   };
   if (authenticatedPages[urlPath]) return join(publicRoot, authenticatedPages[urlPath]);
@@ -157,6 +159,41 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
           .find(Boolean) ?? personalWorkspace?.name ?? 'Personal Contract'
       }))
     };
+  };
+}
+export function createPeopleLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ accessToken, search = '' }) => {
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    const [discoverResult, connectionResult] = await Promise.all([
+      supabase.rpc('discover_people', { search_text: typeof search === 'string' ? search.slice(0, 160) : '' }),
+      supabase.rpc('list_people_connections')
+    ]);
+    if (discoverResult.error || connectionResult.error) throw new AuthenticationError('People is unavailable.');
+    return { discover: discoverResult.data ?? [], connections: connectionResult.data ?? [] };
+  };
+}
+export function createPeopleWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ accessToken, profileId, action }) => {
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc('manage_profile_connection', {
+      target_profile_id: requiredUuid(profileId, 'Profile'), action: enumValue(action, ['send', 'accept', 'decline', 'withdraw', 'remove', 'block'], 'connection', 'action', 'Connection action')
+    });
+    if (error || !data) throw new ValidationError('This connection action is unavailable.');
+    return { id: data };
+  };
+}
+export function createProfileSettingsWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ userId, accessToken, displayName, professionalHeadline, discoverable }) => {
+    const update = {
+      ...(displayName !== undefined ? { display_name: requiredText(displayName, 'Display name', 120) } : {}),
+      ...(professionalHeadline !== undefined ? { professional_headline: professionalHeadline ? requiredText(professionalHeadline, 'Professional headline', 160) : null } : {}),
+      ...(discoverable !== undefined ? { discoverable: Boolean(discoverable) } : {})
+    };
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).from('profiles').update(update).eq('id', userId).select('id, email, display_name, professional_headline, discoverable').single();
+    if (error || !data) throw new AuthenticationError('We could not save your Profile Settings.');
+    return { id: data.id, email: data.email, displayName: data.display_name, professionalHeadline: data.professional_headline, discoverable: data.discoverable };
   };
 }
 function requiredText(value, label, limit = 4_000) {
@@ -488,11 +525,13 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     return mapContractReview(data);
   };
   return {
-    create: async ({ accessToken, name, scope, counterpartyEmail }) => ({ id: await call({ accessToken }, 'create_private_contract', {
+    create: async ({ accessToken, workspaceId, name, scope, counterpartyEmail, initiatorResponsibility }) => ({ id: await call({ accessToken }, 'create_role_led_proposal', {
+      owning_workspace_id: requiredUuid(workspaceId, 'Owning Workspace'),
       contract_name: requiredText(name, 'Contract name', 160),
       contract_scope: requiredText(scope, 'Contract scope'),
-      counterparty_email: requiredEmail(counterpartyEmail)
-    }, 'We could not create this private Contract.') }),
+      counterparty_email: requiredEmail(counterpartyEmail),
+      initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Proposal responsibility')
+    }, 'We could not create this Proposal.') }),
     invite: async ({ accessToken, contractId, email }) => ({ id: await call({ accessToken }, 'create_contract_invitation', {
       target_contract_id: requiredText(contractId, 'Contract'),
       invitee_email: requiredEmail(email)
@@ -544,7 +583,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -572,12 +611,27 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const home = await loadHome({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { home });
       }
+      if (url.pathname === '/api/people' && request.method === 'GET') {
+        const session = await authenticate();
+        const people = await loadPeople({ userId: session.userId, accessToken: session.accessToken, search: url.searchParams.get('q') ?? '' });
+        return respond(response, 200, { people });
+      }
+      if (url.pathname === '/api/people/connections' && request.method === 'POST') {
+        const session = await authenticate();
+        const { profileId, action } = await json(request);
+        const connection = await peopleWorkflow({ userId: session.userId, accessToken: session.accessToken, profileId, action });
+        return respond(response, 200, { connection });
+      }
+      if (url.pathname === '/api/profile/settings' && request.method === 'PUT') {
+        const session = await authenticate();
+        const profile = await profileSettingsWorkflow({ userId: session.userId, accessToken: session.accessToken, ...await json(request) });
+        return respond(response, 200, { profile });
+      }
       if (url.pathname === '/api/contracts' && request.method === 'POST') {
         const session = await authenticate();
         const payload = await json(request);
         const contract = await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
-        const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contract.id, email: payload.counterpartyEmail });
-        return respond(response, 201, { contract, invitation });
+        return respond(response, 201, { contract });
       }
       const contractSuggestionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/copilot-suggestions$/);
       if (contractSuggestionMatch && request.method === 'POST') {

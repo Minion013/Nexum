@@ -35,7 +35,8 @@ test('authenticated area pages are served from their canonical URLs', async () =
       '/home',
       '/contracts',
       '/workspace',
-      '/contacts',
+      '/people',
+      '/settings',
       '/authorities'
     ]) {
       const response = await request(server, path);
@@ -44,7 +45,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
     }
     const home = await request(server, '/home');
     const homeMarkup = await home.text();
-    for (const href of ['/home', '/contracts', '/workspace', '/contacts', '/authorities']) {
+    for (const href of ['/home', '/contracts', '/workspace', '/people', '/settings']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
     assert.match(homeMarkup, /id="wallet-capability"/);
@@ -55,6 +56,24 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /Review the exact shared Version/);
     assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /contract\.bundle\.js/);
     assert.equal((await request(server, '/contracts/not-a-contract/extra')).status, 404);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('People is the canonical signed-in directory and legacy Contacts links safely reach it', async () => {
+  const server = createApp();
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    for (const path of ['/people', '/contacts', '/settings']) {
+      const response = await request(server, path);
+      assert.equal(response.status, 200, path);
+      assert.match(await response.text(), /PactFlow/, path);
+    }
+    const people = await (await request(server, '/people')).text();
+    assert.match(people, /Discover/);
+    assert.match(people, /My network/);
+    assert.match(people, /Requests/);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
