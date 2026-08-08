@@ -17,6 +17,6 @@ Last foundation commits: `16048d3`, `2454c2a`; the follow-up work is committed.
 ## Completion coverage
 
 - Authenticated endpoint coverage now proves People discovery, connection actions, and Profile Settings are scoped to the verified session; unauthenticated requests remain rejected.
-- The linked Supabase RLS script now covers discoverability, unrelated-Profile rejection, and the accepted, declined, withdrawn, removed, and blocked connection lifecycle states.
-- Browser acceptance covered the shared shell at desktop and 390px widths: keyboard-operable controls, mobile drawer state, filters and Proposal controls, visible error handling, desktop/mobile records, and no horizontal overflow.
+- The linked Supabase RLS script now proves private Profiles stay absent, unrelated Profiles are rejected, accepted connections grant no Contract access, and covers the accepted, declined, withdrawn, removed, and blocked lifecycle states.
+- Browser acceptance covered the shared shell at 375px, 768px, 1024px, and 1440px: semantic keyboard-operable controls, mobile drawer state, filters and Proposal controls, visible error handling, desktop/mobile records, and no horizontal overflow.
 - Proposal coverage preserves the protected exact-email creation boundary; the established-Person control is verified to be a prefill-only entry point, with its privacy guidance keeping invitation, Workspace membership, and Contract sharing as explicit later steps.

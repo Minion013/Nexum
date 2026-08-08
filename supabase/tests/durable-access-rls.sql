@@ -9,7 +9,8 @@ values
   ('00000000-0000-4000-8000-000000000101', 'authenticated', 'authenticated', 'party@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Party"}', now(), now(), false, false, false),
   ('00000000-0000-4000-8000-000000000102', 'authenticated', 'authenticated', 'other@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Other"}', now(), now(), false, false, false),
   ('00000000-0000-4000-8000-000000000103', 'authenticated', 'authenticated', 'officer@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Case Officer"}', now(), now(), false, false, false),
-  ('00000000-0000-4000-8000-000000000104', 'authenticated', 'authenticated', 'invitee@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Invitee"}', now(), now(), false, false, false);
+  ('00000000-0000-4000-8000-000000000104', 'authenticated', 'authenticated', 'invitee@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Invitee"}', now(), now(), false, false, false),
+  ('00000000-0000-4000-8000-000000000105', 'authenticated', 'authenticated', 'private@example.test', '', now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Private"}', now(), now(), false, false, false);
 
 select public.provision_simulated_case_officer('officer@example.test');
 
@@ -162,6 +163,12 @@ begin
   ) then
     raise exception 'A discoverable Profile was not available through the signed-in People directory.';
   end if;
+  if exists (
+    select 1 from public.discover_people() person
+    where person.id = '00000000-0000-4000-8000-000000000105'
+  ) then
+    raise exception 'A private Profile was unexpectedly available through the signed-in People directory.';
+  end if;
   perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'send');
   insert into public.workspaces (owner_profile_id, name, kind)
   values ('00000000-0000-4000-8000-000000000101', 'Party collaboration', 'collaborative');
@@ -291,6 +298,9 @@ begin
       and status = 'accepted'
   ) then
     raise exception 'A connection recipient could not accept its pending request.';
+  end if;
+  if exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
+    raise exception 'An accepted connection unexpectedly granted Contract access before invitation acceptance.';
   end if;
   perform public.accept_contract_invitation(current_setting('test.invitation_id')::uuid);
   if not exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then

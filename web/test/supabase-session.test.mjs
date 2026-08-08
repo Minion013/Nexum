@@ -450,7 +450,7 @@ test('a verified user saves Profile Settings only through their own protected wo
     }
   });
   try {
-    const body = { displayName: 'Member', professionalHeadline: 'Product designer', discoverable: true, id: 'another-profile-id' };
+    const body = { displayName: 'Member', professionalHeadline: 'Product designer', discoverable: true, userId: 'another-profile-id' };
     assert.equal((await request(origin, '/api/profile/settings', { method: 'PUT', body })).status, 401);
     const response = await request(origin, '/api/profile/settings', { token: 'settings-jwt', method: 'PUT', body });
     assert.equal(response.status, 200);
@@ -466,7 +466,9 @@ test('a verified user saves Profile Settings only through their own protected wo
     assert.deepEqual(calls, [{
       userId: '66666666-6666-4666-8666-666666666666',
       accessToken: 'settings-jwt',
-      ...body
+      displayName: 'Member',
+      professionalHeadline: 'Product designer',
+      discoverable: true
     }]);
   } finally {
     await new Promise(resolve => server.close(resolve));

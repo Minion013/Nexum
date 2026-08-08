@@ -644,7 +644,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/profile/settings' && request.method === 'PUT') {
         const session = await authenticate();
-        const profile = await profileSettingsWorkflow({ userId: session.userId, accessToken: session.accessToken, ...await json(request) });
+        const profile = await profileSettingsWorkflow({ ...await json(request), userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { profile });
       }
       if (url.pathname === '/api/contracts' && request.method === 'POST') {
