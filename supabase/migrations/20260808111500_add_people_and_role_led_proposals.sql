@@ -17,6 +17,16 @@ create table public.profile_connections (
   unique (requester_profile_id, recipient_profile_id)
 );
 
+create table public.proposal_workspace_access (
+  contract_id uuid primary key references public.contracts(id) on delete cascade,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade
+);
+
+alter table public.proposal_workspace_access enable row level security;
+create policy "Members can read their Proposal workspace access"
+  on public.proposal_workspace_access for select
+  using (public.is_workspace_member(workspace_id));
+
 create unique index profile_connections_one_relationship
   on public.profile_connections (least(requester_profile_id, recipient_profile_id), greatest(requester_profile_id, recipient_profile_id));
 
@@ -83,7 +93,7 @@ begin
   if authority_id is null then raise exception 'No published Resolution Authority is available.'; end if;
   counterparty_responsibility := case initiator_responsibility when 'buyer' then 'service_provider' else 'buyer' end;
   insert into public.contracts (created_by_profile_id, status) values (auth.uid(), 'private_draft') returning id into new_contract_id;
-  insert into public.contract_parties (contract_id, party_kind, workspace_id) values (new_contract_id, 'workspace', owning_workspace_id);
+  insert into public.proposal_workspace_access (contract_id, workspace_id) values (new_contract_id, owning_workspace_id);
   insert into public.contract_parties (contract_id, party_kind, profile_id) values (new_contract_id, 'profile', auth.uid());
   insert into public.contacts (owner_profile_id, display_name, email) values (auth.uid(), normalized_email, normalized_email)
     on conflict (owner_profile_id, email) do nothing;
@@ -100,11 +110,11 @@ end;
 $$;
 
 create function public.list_people_connections()
-returns table (id uuid, other_profile_id uuid, display_name text, professional_headline text, status text, direction text)
+returns table (id uuid, other_profile_id uuid, display_name text, email text, professional_headline text, status text, direction text)
 language sql stable security definer set search_path = '' as $$
   select connection.id,
     case when connection.requester_profile_id = auth.uid() then connection.recipient_profile_id else connection.requester_profile_id end,
-    profile.display_name, profile.professional_headline, connection.status,
+    profile.display_name, profile.email, profile.professional_headline, connection.status,
     case when connection.requester_profile_id = auth.uid() then 'outgoing' else 'incoming' end
   from public.profile_connections connection
   join public.profiles profile on profile.id = case when connection.requester_profile_id = auth.uid() then connection.recipient_profile_id else connection.requester_profile_id end
@@ -143,7 +153,7 @@ create or replace function public.has_contract_access(target_contract_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.contracts contract where contract.id = target_contract_id and contract.created_by_profile_id = auth.uid())
     or exists (select 1 from public.contract_parties party where party.contract_id = target_contract_id and party.profile_id = auth.uid())
-    or exists (select 1 from public.contract_parties party where party.contract_id = target_contract_id and party.workspace_id is not null and public.is_workspace_member(party.workspace_id))
+    or exists (select 1 from public.proposal_workspace_access access where access.contract_id = target_contract_id and public.is_workspace_member(access.workspace_id))
     or exists (select 1 from public.delegated_project_access delegation join public.contract_parties party on party.id = delegation.contract_party_id where party.contract_id = target_contract_id and delegation.profile_id = auth.uid() and delegation.revoked_at is null);
 $$;
 

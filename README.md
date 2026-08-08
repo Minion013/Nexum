@@ -19,8 +19,8 @@ To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy
 
 1. Open the app, enter an email address, and complete the Supabase magic-link flow.
 2. Finish onboarding to provision your durable Profile and personal Workspace.
-3. Create a private Contract with a scope and exact counterparty email address. The server creates the Contract and its expiring invitation under the caller's Supabase identity.
-4. The Contract is private until the invited, authenticated recipient accepts that exact invitation. Payment, approval, evidence, disputes, and on-chain settlement are not yet available in the browser.
+3. Create a Proposal in an owning Workspace, choose whether the initiating Contract Party is the Buyer or Service Provider, and name an exact-email counterparty. The Proposal is visible only to authorised members of its owning Workspace.
+4. Share the Proposal explicitly when ready; the server then creates its expiring exact-email invitation under the caller's Supabase identity. The Contract remains scoped until the invited, authenticated recipient accepts it. Payment, approval, evidence, disputes, and on-chain settlement are not yet available in the browser.
 5. When Privy is configured, select **Set up wallet** on Home to create an embedded wallet or link an external EVM wallet for Base Sepolia use. The panel can request a Base Sepolia typed-data check and a zero-value self-transaction; neither is a Contract Acceptance or has payment authority.
 
 ## Reference contracts
@@ -35,7 +35,7 @@ Do not deploy or use the contracts with real value. Any future testnet integrati
 
 ## Implemented scope and remaining integrations
 
-The application includes durable Profile and Workspace provisioning, authenticated Home data, durable private Contract creation, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
+The application includes durable Profile and Workspace provisioning, an authenticated action-first Dashboard, role-led Proposal creation, opt-in People discovery and private connection requests, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
 
 The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page now presents the latest immutable Version, its canonical terms hash, missing template sections, and each Party's Acceptance state. A Supabase-linked Privy capability can create or link a Base Sepolia wallet and request a wallet signature or a valueless test transaction, but those actions are not yet persisted as Version-specific Contract Acceptances and have no payment authority. Completing durable EIP-712 Contract Acceptance, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
 
