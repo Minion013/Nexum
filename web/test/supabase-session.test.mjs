@@ -368,6 +368,111 @@ test('the authenticated API does not create a durable Contract without a Supabas
   }
 });
 
+test('a verified user can discover only the People payload scoped by their session', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'people-jwt') throw new Error('invalid token');
+      return { id: '11111111-1111-4111-8111-111111111111', email: 'member@example.com' };
+    },
+    loadPeople: async input => {
+      calls.push(input);
+      return {
+        discover: [{ id: '22222222-2222-4222-8222-222222222222', display_name: 'Alex', professional_headline: 'Service designer' }],
+        connections: []
+      };
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/people?q=Alex')).status, 401);
+    const response = await request(origin, '/api/people?q=Alex', { token: 'people-jwt' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      people: {
+        discover: [{ id: '22222222-2222-4222-8222-222222222222', display_name: 'Alex', professional_headline: 'Service designer' }],
+        connections: []
+      }
+    });
+    assert.deepEqual(calls, [{
+      userId: '11111111-1111-4111-8111-111111111111',
+      accessToken: 'people-jwt',
+      search: 'Alex'
+    }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a verified user can manage only their own connection workflow', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'connection-jwt') throw new Error('invalid token');
+      return { id: '33333333-3333-4333-8333-333333333333', email: 'member@example.com' };
+    },
+    peopleWorkflow: async input => {
+      calls.push(input);
+      return { id: '44444444-4444-4444-8444-444444444444' };
+    }
+  });
+  try {
+    const body = { profileId: '55555555-5555-4555-8555-555555555555', action: 'accept' };
+    assert.equal((await request(origin, '/api/people/connections', { method: 'POST', body })).status, 401);
+    const response = await request(origin, '/api/people/connections', { token: 'connection-jwt', method: 'POST', body });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { connection: { id: '44444444-4444-4444-8444-444444444444' } });
+    assert.deepEqual(calls, [{
+      userId: '33333333-3333-4333-8333-333333333333',
+      accessToken: 'connection-jwt',
+      ...body
+    }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a verified user saves Profile Settings only through their own protected workflow', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'settings-jwt') throw new Error('invalid token');
+      return { id: '66666666-6666-4666-8666-666666666666', email: 'member@example.com' };
+    },
+    profileSettingsWorkflow: async input => {
+      calls.push(input);
+      return {
+        id: input.userId,
+        email: 'member@example.com',
+        displayName: input.displayName,
+        professionalHeadline: input.professionalHeadline,
+        discoverable: input.discoverable
+      };
+    }
+  });
+  try {
+    const body = { displayName: 'Member', professionalHeadline: 'Product designer', discoverable: true, id: 'another-profile-id' };
+    assert.equal((await request(origin, '/api/profile/settings', { method: 'PUT', body })).status, 401);
+    const response = await request(origin, '/api/profile/settings', { token: 'settings-jwt', method: 'PUT', body });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      profile: {
+        id: '66666666-6666-4666-8666-666666666666',
+        email: 'member@example.com',
+        displayName: 'Member',
+        professionalHeadline: 'Product designer',
+        discoverable: true
+      }
+    });
+    assert.deepEqual(calls, [{
+      userId: '66666666-6666-4666-8666-666666666666',
+      accessToken: 'settings-jwt',
+      ...body
+    }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('only a verified signed-in Profile can submit an invitation acceptance to the durable workflow', async () => {
   const calls = [];
   const { server, origin } = await start({

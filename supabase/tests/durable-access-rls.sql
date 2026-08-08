@@ -136,6 +136,16 @@ begin
 end;
 $$;
 
+update public.profiles
+set discoverable = true,
+    professional_headline = 'RLS test participant'
+where id in (
+  '00000000-0000-4000-8000-000000000101',
+  '00000000-0000-4000-8000-000000000102',
+  '00000000-0000-4000-8000-000000000103',
+  '00000000-0000-4000-8000-000000000104'
+);
+
 set local role authenticated;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', true);
@@ -146,6 +156,13 @@ begin
   if (select count(*) from public.workspaces) <> 1 then
     raise exception 'A party must see only its provisioned personal workspace.';
   end if;
+  if not exists (
+    select 1 from public.discover_people('RLS test') person
+    where person.id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'A discoverable Profile was not available through the signed-in People directory.';
+  end if;
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'send');
   insert into public.workspaces (owner_profile_id, name, kind)
   values ('00000000-0000-4000-8000-000000000101', 'Party collaboration', 'collaborative');
   if not exists (
@@ -197,7 +214,22 @@ $$;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000102', true);
 do $$
+declare
+  blocked_by_unrelated_profile boolean := false;
 begin
+  begin
+    perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'block');
+  exception
+    when others then
+      if position('connection is unavailable' in sqlerrm) > 0 then
+        blocked_by_unrelated_profile := true;
+      else
+        raise;
+      end if;
+  end;
+  if not blocked_by_unrelated_profile then
+    raise exception 'An unrelated Profile unexpectedly managed another pair''s connection.';
+  end if;
   begin
     perform public.accept_contract_invitation(current_setting('test.invitation_id')::uuid);
     raise exception 'An unrelated Profile unexpectedly accepted a private Contract invitation.';
@@ -251,6 +283,15 @@ $$;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000104', true);
 do $$
 begin
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000101', 'accept');
+  if not exists (
+    select 1 from public.profile_connections
+    where requester_profile_id = '00000000-0000-4000-8000-000000000101'
+      and recipient_profile_id = '00000000-0000-4000-8000-000000000104'
+      and status = 'accepted'
+  ) then
+    raise exception 'A connection recipient could not accept its pending request.';
+  end if;
   perform public.accept_contract_invitation(current_setting('test.invitation_id')::uuid);
   if not exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
     raise exception 'The invited Profile could not read its accepted private Contract.';
@@ -289,6 +330,26 @@ declare
   reviewed_version_id uuid;
   replacement_version_id uuid;
 begin
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'remove');
+  if exists (
+    select 1 from public.profile_connections
+    where requester_profile_id = '00000000-0000-4000-8000-000000000101'
+      and recipient_profile_id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'A requester could not remove an accepted connection.';
+  end if;
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000102', 'send');
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000102', 'withdraw');
+  if not exists (
+    select 1 from public.profile_connections
+    where requester_profile_id = '00000000-0000-4000-8000-000000000101'
+      and recipient_profile_id = '00000000-0000-4000-8000-000000000102'
+      and status = 'withdrawn'
+  ) then
+    raise exception 'A requester could not withdraw its pending connection.';
+  end if;
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000103', 'send');
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'send');
   select id into reviewed_version_id from public.contract_versions
   where contract_id = '00000000-0000-4000-8000-000000000303' order by version_number desc limit 1;
   perform public.update_contract_draft(
@@ -308,6 +369,15 @@ $$;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000103', true);
 do $$
 begin
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000101', 'decline');
+  if not exists (
+    select 1 from public.profile_connections
+    where requester_profile_id = '00000000-0000-4000-8000-000000000101'
+      and recipient_profile_id = '00000000-0000-4000-8000-000000000103'
+      and status = 'declined'
+  ) then
+    raise exception 'A connection recipient could not decline its pending request.';
+  end if;
   if (select count(*) from public.workspaces) <> 1 then
     raise exception 'A Case Officer must see only its provisioned personal workspace.';
   end if;
@@ -316,6 +386,21 @@ begin
   end if;
   if not exists (select 1 from public.dispute_cases where id = '00000000-0000-4000-8000-000000000501') then
     raise exception 'An assigned Case Officer must see its dispute case.';
+  end if;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000104', true);
+do $$
+begin
+  perform public.manage_profile_connection('00000000-0000-4000-8000-000000000101', 'block');
+  if not exists (
+    select 1 from public.profile_connections
+    where requester_profile_id = '00000000-0000-4000-8000-000000000101'
+      and recipient_profile_id = '00000000-0000-4000-8000-000000000104'
+      and status = 'blocked'
+  ) then
+    raise exception 'A connection recipient could not block its pending request.';
   end if;
 end;
 $$;

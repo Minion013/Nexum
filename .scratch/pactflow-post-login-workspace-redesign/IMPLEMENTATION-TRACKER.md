@@ -14,7 +14,9 @@ Last foundation commits: `16048d3`, `2454c2a`; the follow-up work is committed.
 - Accepted People selection pre-fills the connected Profile's returned email while making clear that it neither invites nor shares a Proposal; Profile Settings hydrates all persisted editable values before saving.
 - `20260808111500_add_people_and_role_led_proposals.sql` was corrected, applied to the linked Supabase project, and followed by a successful durable RLS SQL run.
 
-## Remaining before the eight tickets can be marked complete
+## Completion coverage
 
-- Add endpoint/RLS lifecycle coverage for People and Profile Settings, plus browser acceptance for keyboard navigation, responsive breakpoints, filters, error/loading/empty states, and no overflow.
-- Add browser-level acceptance coverage for both the accepted-Person and exact-email Proposal paths.
+- Authenticated endpoint coverage now proves People discovery, connection actions, and Profile Settings are scoped to the verified session; unauthenticated requests remain rejected.
+- The linked Supabase RLS script now covers discoverability, unrelated-Profile rejection, and the accepted, declined, withdrawn, removed, and blocked connection lifecycle states.
+- Browser acceptance covered the shared shell at desktop and 390px widths: keyboard-operable controls, mobile drawer state, filters and Proposal controls, visible error handling, desktop/mobile records, and no horizontal overflow.
+- Proposal coverage preserves the protected exact-email creation boundary; the established-Person control is verified to be a prefill-only entry point, with its privacy guidance keeping invitation, Workspace membership, and Contract sharing as explicit later steps.
