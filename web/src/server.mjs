@@ -107,9 +107,9 @@ export function createProfileLoader(config = publicSupabaseConfigFromEnvironment
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
     await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow profile.');
-    const { data, error } = await supabase.from('profiles').select('id, email, display_name, onboarding_completed_at').eq('id', userId).single();
+    const { data, error } = await supabase.from('profiles').select('id, email, display_name, professional_headline, discoverable, onboarding_completed_at').eq('id', userId).single();
     if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
-    return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
+    return { id: data.id, email: data.email, displayName: data.display_name, professionalHeadline: data.professional_headline, discoverable: data.discoverable, onboardingCompletedAt: data.onboarding_completed_at };
   };
 }
 function authenticatedSupabaseClient(config, createSupabaseClient, accessToken) {
@@ -142,7 +142,7 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
     await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow Home.');
     const [workspaceResult, contractResult] = await Promise.all([
       supabase.from('workspace_memberships').select('membership_role, workspaces!inner(id, name, kind)').eq('profile_id', userId),
-      supabase.from('contracts').select('id, status, contract_versions(version_number), contract_parties(workspace_id)').order('updated_at', { ascending: false })
+      supabase.from('contracts').select('id, status, updated_at, contract_versions(version_number, contract_sections(section_type, terms)), contract_parties(workspace_id, profile_id), proposal_workspace_access(workspace_id)').order('updated_at', { ascending: false })
     ]);
     if (workspaceResult.error || contractResult.error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
     const workspaces = mapWorkspaces(workspaceResult.data);
@@ -150,14 +150,34 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
     const workspaceNames = new Map(workspaces.map(workspace => [workspace.id, workspace.name]));
     return {
       workspaces,
-      contracts: contractResult.data.map(contract => ({
-        id: contract.id,
-        status: contract.status,
-        latestVersionNumber: Math.max(0, ...(contract.contract_versions ?? []).map(version => version.version_number)),
-        workspaceName: (contract.contract_parties ?? [])
-          .map(party => workspaceNames.get(party.workspace_id))
-          .find(Boolean) ?? personalWorkspace?.name ?? 'Personal Contract'
-      }))
+      contracts: contractResult.data.map(contract => {
+        const versions = contract.contract_versions ?? [];
+        const latestVersion = [...versions].sort((left, right) => right.version_number - left.version_number)[0] ?? { version_number: 0, contract_sections: [] };
+        const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
+        const parties = sections.get('parties') ?? {};
+        const notices = sections.get('notices') ?? {};
+        const milestones = sections.get('milestones')?.items ?? [];
+        const nextMilestone = milestones
+          .filter(item => item?.title && item?.deliveryDeadlineUtc && Date.parse(item.deliveryDeadlineUtc) > Date.now())
+          .sort((left, right) => Date.parse(left.deliveryDeadlineUtc) - Date.parse(right.deliveryDeadlineUtc))[0];
+        const initiatorIsBuyer = parties.initiator_responsibility === 'buyer' || parties.buyer?.partyRef === 'initiating_party';
+        const isInitiator = (contract.contract_parties ?? []).some(party => party.profile_id === userId);
+        const responsibility = isInitiator ? (initiatorIsBuyer ? 'Buyer' : 'Service Provider') : 'Workspace member';
+        const counterparty = parties.counterparty_email ?? parties.counterpartyEmail ?? (responsibility === 'Buyer' ? notices.serviceProviderContact : notices.buyerContact) ?? 'Counterparty to be confirmed';
+        const workspaceIds = [...(contract.contract_parties ?? []).map(party => party.workspace_id), ...(contract.proposal_workspace_access ?? []).map(access => access.workspace_id)];
+        return {
+          id: contract.id,
+          status: contract.status,
+          latestVersionNumber: latestVersion.version_number,
+          workspaceName: workspaceIds
+            .map(workspaceId => workspaceNames.get(workspaceId))
+            .find(Boolean) ?? personalWorkspace?.name ?? 'Personal Contract',
+          counterparty,
+          responsibility,
+          ...(nextMilestone ? { nextMilestone: { title: nextMilestone.title, deadlineUtc: nextMilestone.deliveryDeadlineUtc } } : {}),
+          lastActivityAt: contract.updated_at
+        };
+      })
     };
   };
 }

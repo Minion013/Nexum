@@ -199,7 +199,18 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
           select: fields => ({
             order: async (column, options) => {
               calls.push({ operation: 'contract-query', fields, column, options });
-              return { data: [{ id: 'contract-id', status: 'active', contract_versions: [{ version_number: 1 }, { version_number: 3 }], contract_parties: [{ workspace_id: 'workspace-id' }] }], error: null };
+              return { data: [{
+                id: 'contract-id', status: 'active', updated_at: '2030-09-01T00:00:00.000Z',
+                contract_versions: [{ version_number: 1 }, {
+                  version_number: 3,
+                  contract_sections: [
+                    { section_type: 'parties', terms: { initiator_responsibility: 'buyer', counterparty_email: 'seller@example.com' } },
+                    { section_type: 'milestones', terms: { items: [{ title: 'Research', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z' }, { title: 'Delivery', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z' }] } }
+                  ]
+                }],
+                contract_parties: [{ workspace_id: 'workspace-id', profile_id: 'profile-id' }],
+                proposal_workspace_access: [{ workspace_id: 'workspace-id' }]
+              }], error: null };
             }
           })
         };
@@ -209,11 +220,16 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
 
   assert.deepEqual(await loadHome({ userId: 'profile-id', accessToken: 'access-token' }), {
     workspaces: [{ id: 'workspace-id', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
-    contracts: [{ id: 'contract-id', status: 'active', latestVersionNumber: 3, workspaceName: 'Member' }]
+    contracts: [{
+      id: 'contract-id', status: 'active', latestVersionNumber: 3, workspaceName: 'Member',
+      counterparty: 'seller@example.com', responsibility: 'Buyer',
+      nextMilestone: { title: 'Research', deadlineUtc: '2030-09-10T09:00:00.000Z' },
+      lastActivityAt: '2030-09-01T00:00:00.000Z'
+    }]
   });
   assert.deepEqual(calls[0], { operation: 'rpc', name: 'ensure_profile' });
   assert.ok(calls.some(call => call.operation === 'workspace-query' && call.fields === 'membership_role, workspaces!inner(id, name, kind)' && call.column === 'profile_id' && call.value === 'profile-id'));
-  assert.ok(calls.some(call => call.operation === 'contract-query' && call.fields === 'id, status, contract_versions(version_number), contract_parties(workspace_id)' && call.column === 'updated_at' && call.options.ascending === false));
+  assert.ok(calls.some(call => call.operation === 'contract-query' && call.fields.includes('updated_at') && call.fields.includes('contract_sections') && call.column === 'updated_at' && call.options.ascending === false));
 });
 
 test('the browser receives only Supabase public configuration', async () => {
@@ -247,7 +263,7 @@ test('a verified user without a profile is provisioned into incomplete setup bef
           eq: (column, value) => ({
             single: async () => {
               calls.push({ operation: 'select', table, fields, column, value });
-              return { data: { id: value, email: 'new@example.com', display_name: 'New participant', onboarding_completed_at: null }, error: null };
+              return { data: { id: value, email: 'new@example.com', display_name: 'New participant', professional_headline: 'Product designer', discoverable: true, onboarding_completed_at: null }, error: null };
             }
           })
         })
@@ -257,11 +273,11 @@ test('a verified user without a profile is provisioned into incomplete setup bef
 
   assert.deepEqual(
     await loadProfile({ userId: '22222222-2222-4222-8222-222222222222', accessToken: 'new-participant-jwt' }),
-    { id: '22222222-2222-4222-8222-222222222222', email: 'new@example.com', displayName: 'New participant', onboardingCompletedAt: null }
+    { id: '22222222-2222-4222-8222-222222222222', email: 'new@example.com', displayName: 'New participant', professionalHeadline: 'Product designer', discoverable: true, onboardingCompletedAt: null }
   );
   assert.deepEqual(calls, [
     { operation: 'rpc', name: 'ensure_profile' },
-    { operation: 'select', table: 'profiles', fields: 'id, email, display_name, onboarding_completed_at', column: 'id', value: '22222222-2222-4222-8222-222222222222' }
+    { operation: 'select', table: 'profiles', fields: 'id, email, display_name, professional_headline, discoverable, onboarding_completed_at', column: 'id', value: '22222222-2222-4222-8222-222222222222' }
   ]);
 });
 

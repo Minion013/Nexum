@@ -1,3 +1,4 @@
+import './app-shell.js';
 import { authenticatedRequest } from './supabase-auth.js';
 
 const invitationId = decodeURIComponent(window.location.pathname.split('/').at(-1));

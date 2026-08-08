@@ -1,3 +1,4 @@
+import './app-shell.js';
 import { authenticatedRequest, supabase } from './supabase-auth.js';
 
 const $ = selector => document.querySelector(selector);

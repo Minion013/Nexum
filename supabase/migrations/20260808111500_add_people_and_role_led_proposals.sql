@@ -148,6 +148,7 @@ begin
   end if;
   return connection.id;
 end;
+$$;
 
 create or replace function public.has_contract_access(target_contract_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
