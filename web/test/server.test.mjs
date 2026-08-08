@@ -1,10 +1,71 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer as createTcpServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import { createApp, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
 
 async function request(server, path) {
   return fetch(`http://127.0.0.1:${server.address().port}${path}`);
 }
+
+const webRoot = fileURLToPath(new URL('..', import.meta.url));
+
+async function unusedPort() {
+  const listener = createTcpServer();
+  await new Promise(resolve => listener.listen(0, resolve));
+  const { port } = listener.address();
+  await new Promise(resolve => listener.close(resolve));
+  return port;
+}
+
+async function waitForHealth(url, process) {
+  let lastError;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (process.exitCode !== null) throw new Error(`PactFlow exited before becoming healthy (code ${process.exitCode}).`);
+    try { return await fetch(url); } catch (error) { lastError = error; }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw lastError;
+}
+
+async function stop(process) {
+  if (process.exitCode === null) {
+    process.kill();
+    await once(process, 'exit');
+  }
+}
+
+test('production startup validates public configuration and renders a safe public entry', async () => {
+  const port = await unusedPort();
+  const serverProcess = spawn(process.execPath, ['src/server.mjs'], {
+    cwd: webRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_smoke_test',
+      SUPABASE_SERVICE_ROLE_KEY: 'must-not-reach-the-browser'
+    },
+    stdio: 'ignore'
+  });
+
+  try {
+    const health = await waitForHealth(`http://127.0.0.1:${port}/health`, serverProcess);
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
+
+    const entry = await fetch(`http://127.0.0.1:${port}/`);
+    assert.equal(entry.status, 200);
+    assert.match(await entry.text(), /Testnet only\. No real funds\./);
+
+    const browserConfig = await (await fetch(`http://127.0.0.1:${port}/api/auth/config`)).json();
+    assert.equal('serviceRoleKey' in browserConfig, false);
+  } finally {
+    await stop(serverProcess);
+  }
+});
 
 test('public entry and health check are safe to render', async () => {
   const server = createApp();
@@ -20,7 +81,9 @@ test('public entry and health check are safe to render', async () => {
     assert.equal('privyAppSecret' in browserConfig, false);
     const entry = await request(server, '/');
     assert.equal(entry.status, 200);
-    assert.match(await entry.text(), /PactFlow/);
+    const entryMarkup = await entry.text();
+    assert.match(entryMarkup, /PactFlow/);
+    assert.match(entryMarkup, /Testnet only\. No real funds\./);
     assert.equal((await request(server, '/../.env')).status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));
