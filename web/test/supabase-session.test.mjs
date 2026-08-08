@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createProfileLoader, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createProfileLoader, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -116,6 +116,64 @@ test('the public browser configuration exposes the Privy app identifier without 
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('a verified Profile can list and mark only its private inbox notifications as read', async () => {
+  const calls = [];
+  const notifications = {
+    unreadCount: 1,
+    entries: [{ id: 'notification-id', title: 'Private Contract invitation', body: 'You have a Contract invitation to review.', href: '/invitations/invitation-id', createdAt: '2026-08-08T08:00:00.000Z', readAt: null }]
+  };
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'notification-jwt') throw new Error('invalid token');
+      return { id: 'notification-profile-id', email: 'member@example.com' };
+    },
+    loadNotifications: async input => { calls.push({ operation: 'list', input }); return notifications; },
+    notificationWorkflow: async input => { calls.push({ operation: 'mark-read', input }); return { id: 'notification-id', readAt: '2026-08-08T08:05:00.000Z' }; }
+  });
+  try {
+    assert.equal((await request(origin, '/api/notifications')).status, 401);
+    const listed = await request(origin, '/api/notifications', { token: 'notification-jwt' });
+    assert.equal(listed.status, 200);
+    assert.deepEqual(await listed.json(), { notifications });
+
+    assert.equal((await request(origin, '/api/notifications/notification-id/read', { method: 'POST' })).status, 401);
+    const markedRead = await request(origin, '/api/notifications/notification-id/read', { token: 'notification-jwt', method: 'POST', body: { profileId: 'another-profile-id' } });
+    assert.equal(markedRead.status, 200);
+    assert.deepEqual(await markedRead.json(), { notification: { id: 'notification-id', readAt: '2026-08-08T08:05:00.000Z' } });
+    assert.deepEqual(calls, [
+      { operation: 'list', input: { userId: 'notification-profile-id', accessToken: 'notification-jwt' } },
+      { operation: 'mark-read', input: { userId: 'notification-profile-id', accessToken: 'notification-jwt', notificationId: 'notification-id' } }
+    ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the inbox loader maps only RLS-returned entries and derives the unread count', async () => {
+  const calls = [];
+  const loadNotifications = createNotificationLoader(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      rpc: async name => {
+        calls.push(name);
+        if (name === 'ensure_profile') return { data: null, error: null };
+        return { data: [
+          { id: 'unread-id', category: 'invitation', title: 'Invitation', body: 'Review it.', href: '/invitations/invitation-id', created_at: '2026-08-08T08:00:00.000Z', read_at: null },
+          { id: 'read-id', category: 'approval', title: 'Version update', body: 'A Version changed.', href: '/contracts/contract-id', created_at: '2026-08-07T08:00:00.000Z', read_at: '2026-08-07T09:00:00.000Z' }
+        ], error: null };
+      }
+    })
+  );
+  assert.deepEqual(await loadNotifications({ accessToken: 'notification-jwt' }), {
+    unreadCount: 1,
+    entries: [
+      { id: 'unread-id', category: 'invitation', title: 'Invitation', body: 'Review it.', href: '/invitations/invitation-id', createdAt: '2026-08-08T08:00:00.000Z', readAt: null },
+      { id: 'read-id', category: 'approval', title: 'Version update', body: 'A Version changed.', href: '/contracts/contract-id', createdAt: '2026-08-07T08:00:00.000Z', readAt: '2026-08-07T09:00:00.000Z' }
+    ]
+  });
+  assert.deepEqual(calls, ['ensure_profile', 'list_my_notifications']);
 });
 
 test('an authenticated user can view only their provisioned workspaces', async () => {

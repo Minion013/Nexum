@@ -36,6 +36,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
       '/contracts',
       '/workspace',
       '/people',
+      '/notifications',
       '/settings',
       '/authorities'
     ]) {
@@ -50,6 +51,9 @@ test('authenticated area pages are served from their canonical URLs', async () =
     }
     assert.match(homeMarkup, /id="wallet-capability"/);
     assert.match(homeMarkup, /wallet\.bundle\.js/);
+    const notifications = await request(server, '/notifications');
+    assert.match(await notifications.text(), /Private inbox/);
+    assert.match(await (await request(server, '/notifications')).text(), /notifications\.bundle\.js/);
     const detail = await request(server, '/contracts/not-a-contract');
     assert.equal(detail.status, 200);
     assert.match(await detail.text(), /Contract draft/);

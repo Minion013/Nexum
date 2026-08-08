@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Your private PactFlow notifications." />
+    <title>Notifications — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/workspace.css" />
+    <link rel="stylesheet" href="/notifications.css" />
+  </head>
+  <body class="workspace-app">
+    <a class="skip-link" href="#main-content">Skip to Notifications</a>
+    <main id="main-content" class="app-content" tabindex="-1">
+      <p id="request-error" role="alert" hidden></p>
+      <p class="eyebrow">Private inbox</p>
+      <h1>Notifications</h1>
+      <p class="page-intro">Only activity relevant to your Profile, Workspaces, Contract Parties, and exact-email invitations appears here.</p>
+      <section class="app-panel notification-inbox" aria-label="Notification inbox">
+        <p id="notification-status" class="empty" aria-live="polite">Loading your private inbox…</p>
+        <div id="notification-list" class="notification-list" aria-live="polite"></div>
+      </section>
+    </main>
+    <script type="module" src="/notifications.bundle.js"></script>
+  </body>
+</html>

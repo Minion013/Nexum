@@ -216,6 +216,9 @@ begin
   end if;
   invitation_id := public.create_contract_invitation('00000000-0000-4000-8000-000000000303', 'invitee@example.test');
   perform set_config('test.invitation_id', invitation_id::text, true);
+  if exists (select 1 from public.profile_notifications where event_key = 'contract-invitation:' || invitation_id::text) then
+    raise exception 'An inviter unexpectedly received the invitee''s private inbox entry.';
+  end if;
 end;
 $$;
 
@@ -248,6 +251,12 @@ begin
   end;
   if exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
     raise exception 'An unrelated Profile unexpectedly read a private Contract after changing the invitation identifier.';
+  end if;
+  if exists (select 1 from public.profile_notifications where event_key = 'contract-invitation:' || current_setting('test.invitation_id')) then
+    raise exception 'An unrelated Profile unexpectedly read an invitee''s private notification.';
+  end if;
+  if exists (select 1 from public.mark_my_notification_read(current_setting('test.invitation_id')::uuid)) then
+    raise exception 'An unrelated Profile unexpectedly marked an invitee''s notification as read.';
   end if;
   if exists (select 1 from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303')
     or exists (select 1 from public.contract_sections section join public.contract_versions version on version.id = section.contract_version_id where version.contract_id = '00000000-0000-4000-8000-000000000303')
@@ -290,6 +299,16 @@ $$;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000104', true);
 do $$
 begin
+  if not exists (
+    select 1 from public.profile_notifications
+    where event_key = 'contract-invitation:' || current_setting('test.invitation_id')
+      and read_at is null
+  ) then
+    raise exception 'The exact-email invitee did not receive a private inbox notification.';
+  end if;
+  if not exists (select 1 from public.mark_my_notification_read((select id from public.profile_notifications where event_key = 'contract-invitation:' || current_setting('test.invitation_id')))) then
+    raise exception 'The exact-email invitee could not mark their own inbox notification as read.';
+  end if;
   perform public.manage_profile_connection('00000000-0000-4000-8000-000000000101', 'accept');
   if not exists (
     select 1 from public.profile_connections

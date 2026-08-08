@@ -1,4 +1,4 @@
-import { supabase } from './supabase-auth.js';
+import { authenticatedRequest, supabase } from './supabase-auth.js';
 
 const route = location.pathname === '/contacts' ? '/people' : location.pathname;
 const navigation = [
@@ -38,3 +38,28 @@ function mountShell() {
   const bottom = document.createElement('nav'); bottom.className = 'bottom-nav'; bottom.setAttribute('aria-label', 'Quick navigation'); [['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/contracts#new-proposal', 'Create']].forEach(([href, title]) => bottom.append(navLink(href, title))); document.body.append(bottom);
 }
 mountShell();
+
+async function mountNotificationControl() {
+  const topbar = document.querySelector('.app-topbar');
+  if (!topbar || topbar.querySelector('[data-notification-control]')) return;
+  const link = document.createElement('a');
+  link.className = 'notification-control';
+  link.dataset.notificationControl = 'true';
+  link.href = '/notifications';
+  link.textContent = 'Notifications';
+  topbar.append(link);
+  try {
+    const { notifications } = await authenticatedRequest('/api/notifications');
+    if (notifications.unreadCount > 0) {
+      const count = document.createElement('span');
+      count.className = 'notification-count';
+      count.textContent = String(notifications.unreadCount);
+      count.setAttribute('aria-label', `${notifications.unreadCount} unread notifications`);
+      link.append(' ', count);
+    }
+  } catch {
+    // The destination page surfaces an authenticated request failure where it can be acted on.
+  }
+}
+
+mountNotificationControl();

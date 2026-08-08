@@ -82,6 +82,7 @@ function standalonePage(urlPath) {
     '/contracts': 'contracts.html',
     '/workspace': 'workspace-list.html',
     '/people': 'people.html',
+    '/notifications': 'notifications.html',
     '/contacts': 'people.html',
     '/settings': 'settings.html',
     '/authorities': 'authorities.html'
@@ -191,6 +192,38 @@ export function createPeopleLoader(config = publicSupabaseConfigFromEnvironment(
     ]);
     if (discoverResult.error || connectionResult.error) throw new AuthenticationError('People is unavailable.');
     return { discover: discoverResult.data ?? [], connections: connectionResult.data ?? [] };
+  };
+}
+function mapNotifications(rows) {
+  const entries = (rows ?? []).map(notification => ({
+    id: notification.id,
+    category: notification.category,
+    title: notification.title,
+    body: notification.body,
+    href: notification.href,
+    createdAt: notification.created_at,
+    readAt: notification.read_at
+  }));
+  return { unreadCount: entries.filter(entry => !entry.readAt).length, entries };
+}
+export function createNotificationLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ accessToken }) => {
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow inbox.');
+    const { data, error } = await supabase.rpc('list_my_notifications');
+    if (error) throw new AuthenticationError('Your PactFlow inbox is unavailable.');
+    return mapNotifications(data);
+  };
+}
+export function createNotificationWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ accessToken, notificationId }) => {
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    const { data, error } = await supabase.rpc('mark_my_notification_read', { target_notification_id: requiredUuid(notificationId, 'Notification') });
+    const notification = data?.[0];
+    if (error || !notification) throw new ValidationError('This notification is unavailable.');
+    return { id: notification.id, readAt: notification.read_at };
   };
 }
 export function createPeopleWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
@@ -603,7 +636,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -635,6 +668,17 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const people = await loadPeople({ userId: session.userId, accessToken: session.accessToken, search: url.searchParams.get('q') ?? '' });
         return respond(response, 200, { people });
+      }
+      if (url.pathname === '/api/notifications' && request.method === 'GET') {
+        const session = await authenticate();
+        const notifications = await loadNotifications({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, { notifications });
+      }
+      const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
+      if (notificationReadMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const notification = await notificationWorkflow({ userId: session.userId, accessToken: session.accessToken, notificationId: notificationReadMatch[1] });
+        return respond(response, 200, { notification });
       }
       if (url.pathname === '/api/people/connections' && request.method === 'POST') {
         const session = await authenticate();
