@@ -21,7 +21,7 @@ The repository has a verified **local simulation, contract-foundation, and linke
 - The linked Supabase project has applied migrations for Profile-triggered personal Workspaces, collaborative membership, contacts, projects, Contract Parties, delegations, invitations, versions/sections/acceptances, the Authority Registry, Case Officers, disputes, and private evidence references.
 - The rollback-only `supabase/tests/durable-access-rls.sql` integration proof runs against that linked project. It verifies personal and collaborative workspace isolation, active-delegate access, authority/version/case binding, Case Officer case-only access, and contract/milestone-bound evidence. `supabase db lint --linked` also passes.
 - `web/src/server.mjs` verifies Supabase access tokens, provisions and loads Profiles, and exposes an authenticated role-free Home built from RLS-visible Workspaces and Contracts. Its browser agreement sessions, invitations, participants, and agreement state remain process-local simulation data.
-- No browser-backed durable contract write flow, invitation-acceptance workflow, Base Sepolia deployment, chain reader/indexer, browser EIP-712 signature, or real wallet transaction flow has been verified yet.
+- No browser-backed durable contract write flow, invitation-acceptance workflow, chain reader/indexer, browser EIP-712 signature, or real wallet transaction flow has been verified yet. The Base Sepolia MockEUSD token and EscrowVaultFactory are deployed, but no Contract-specific Escrow Vault, buyer funding, or settlement transaction has been verified.
 
 ## Account-profile scope
 
@@ -46,9 +46,9 @@ No implementation ticket may claim that this application foundation is complete 
 | 03 — Restrict agreement access to invited participants | Partial — durable browser and linked-project RLS evidence | The exact-email invitation has a signed-in durable browser/API path. The linked-project rollback proof verifies a different Profile cannot accept it or read the Contract, its versions, sections, evidence, or invitation, while the invited Profile becomes a Contract Party and can read them. Browser end-to-end verification remains open. |
 | 04 — Create a validated custom payment-agreement draft | Partial — local evidence plus schema foundation | Typed Contract Version/Section persistence exists, but the local draft editor does not write participant-scoped durable drafts. |
 | 05 — Review, version, and approve agreement terms | Partial — linked-project schema foundation | Immutable authority snapshots, version rows, and acceptance records are modelled with integrity constraints; durable review/acceptance UI and user-wallet EIP-712 approval are absent. |
-| 06 — Offer co-pilot-assisted agreement drafting | Partial — local evidence | Deterministic editable suggestions and authority notice exist; no production-quality provider integration is claimed. |
-| 07 — Deploy a non-administered vault foundation | Partial — contract foundation | Factory/vault scenario tests pass; no Base Sepolia deployment or full settlement implementation is complete. |
-| 08 — Fund a vault through an explicit buyer action | Partial — local evidence | The local engine enforces buyer-only simulated funding after approval; no wallet transaction or deployed vault funding exists. |
+| 06 — Offer co-pilot-assisted agreement drafting | Partial — durable browser/API evidence | An authenticated Contract Party can submit a plain-language brief from the durable Contract page and receive deterministic, editable scope, milestone, evidence, deadline, and review-window suggestions. Applying a suggestion does not persist or share it; the existing validated Version flow remains the only write/review boundary. No production-quality provider integration or live browser proof is claimed. |
+| 07 — Deploy a non-administered vault foundation | Partial — deployed contract evidence | The Base Sepolia MockEUSD token and EscrowVaultFactory are deployed and public; no browser-created Contract-specific Vault or settlement implementation is complete. |
+| 08 — Fund a vault through an explicit buyer action | Partial — contract-foundation evidence | An isolated Vault accepts its fixed buyer's exact eUSD allocation once before its funding and first-delivery deadlines; the token and Factory are deployed, but no Contract-specific Vault or browser funding transaction exists. |
 | 09 — Show chain-authoritative agreement status | Partial — local evidence | The UI renders local state and transaction-like outcomes; it has no chain read, refresh reconciliation, or authoritative vault state. |
 | 10 — Record final seller delivery evidence | Partial — linked-project schema foundation | Private evidence-reference records are RLS-protected and constrained to their Contract, dispute case, and milestone; the browser submission flow and on-chain anchor are absent. |
 | 11 — Release an accepted milestone | Partial — local evidence | Local accepted-release accounting and fee behavior are tested; no contract settlement transaction is available. |
@@ -147,3 +147,40 @@ Each ticket may retain partial evidence in its notes, but must not tick a testne
 - [x] `npm.cmd --prefix web test` passes 30 tests; typecheck, client build, and Solidity compilation pass. Configuration and route seams are automated; there is not yet a browser wallet test double or live Privy/Base Sepolia end-to-end proof.
 - [ ] This is **Partial — local browser evidence** for Ticket 02a, not target-architecture completion. A live signed-in browser must still verify creation/linking, reconnection after refresh, a signature, and a Base Sepolia transaction.
 - [ ] No wallet check or zero-value test transaction is a Contract Acceptance, funding action, payment authority, deployment, or settlement. Ticket 05 still requires a durable EIP-712 signature over the exact Version hash; Tickets 07–18 retain their stated gaps.
+
+## 7 August 2026 update - wallet-backed Contract Acceptance
+
+- [x] A ready Version can request a Base Sepolia EIP-712 signature from the authenticated participant's Privy wallet. The signed payload binds the Contract ID, Version ID, canonical Version hash, and a no-funds-moved statement.
+- [x] The application server recovers and verifies the signer before using a service-role-only Supabase write boundary. Browser-authenticated clients cannot invoke that RPC directly, and the service key is not returned to the browser.
+- [x] Migrations `20260807223000` through `20260807225000` are applied to the linked project. Schema lint and the rollback-only RLS proof pass; the proof includes denial of a browser-side bypass attempt. Commit `720f93b` records this work.
+- [x] `npm.cmd --prefix web test` passes 30 tests; typecheck, client build, and Solidity compilation pass.
+- [ ] Ticket 05 remains **Partial**. The server does not yet independently prove that the recovered signing address is linked to the authenticated Privy identity, and live two-party Privy acceptance plus revision-invalidation browser verification remain open. This records off-chain Version consent only; it does not deploy, fund, or settle an Escrow Vault.
+
+## 7 August 2026 update — durable Contract drafting co-pilot
+
+- [x] An authenticated Contract Party can submit a plain-language commercial brief from its private Contract page and receive deterministic, editable suggestions for scope, two milestones, private evidence requirements, canonical UTC deadlines, and 72-hour review windows.
+- [x] Applying a suggestion only populates the existing editable draft form. It does not persist or share a Contract Version; the same protected validation, immutable Version creation, and read-only review flow used by manual drafts remain the only write path.
+- [x] The UI and returned notice explicitly state that the co-pilot cannot approve terms, move or release funds, judge quality, or resolve disputes. The implementation is deterministic and makes no claim of a production AI-provider integration.
+- [x] `npm.cmd --prefix web test` passes 32 tests; typecheck, Solidity compilation, and the client build pass. Commit `a0937fe` records this work.
+- [ ] Ticket 06 remains **Partial**: live signed-in browser verification and any production-quality provider integration remain open. It does not confer Contract Acceptance, payment, funding, settlement, evidence, or dispute authority.
+
+## 7 August 2026 update — buyer-only vault funding foundation
+
+- [x] `EscrowVault` now permits only its immutable buyer to fund the exact milestone allocation once. It records the public funded state and funded amount, then still exposes no owner, pause, rescue, upgrade, platform-withdrawal, or settlement operation.
+- [x] Funding requires a successful exact ERC-20 transfer and rejects a non-buyer, insufficient balance or allowance, duplicate funding, an expired funding window, and an agreement whose first delivery deadline has elapsed. The Factory also rejects a pair of signed Contract Acceptances after its fixed acceptance deadline.
+- [x] `MockEUSD` is an explicitly valueless, six-decimal test token with a capped public faucet. Contract scenarios cover the factory approvals, non-administered Vault configuration, buyer-only funding, exact custody, and deadline rejections. `npm.cmd --prefix web test` passes 35 tests; typecheck, Solidity compilation, and the client build pass.
+
+## 7 August 2026 update - Base Sepolia deployment readiness
+
+- [x] `npm.cmd --prefix web run deploy:base-sepolia` loads the existing local environment, then compiles and deploys the explicitly valueless `MockEUSD` token and non-administered `EscrowVaultFactory` through the configured `BASE_SEPOLIA_RPC_URL`, but only when a local `BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY` is supplied at execution. The key is validated locally, never written to the deployment manifest, and never printed.
+- [x] The command refuses an RPC endpoint that does not report Base Sepolia chain ID `84532`, waits for both deployment confirmations, and writes only public chain ID, addresses, and deployment transaction hashes to `contracts/deployments/base-sepolia.json`.
+- [x] Deployment configuration, wrong-network refusal, and public-manifest behaviour are covered by focused tests. `npm.cmd --prefix web test` passes 39 tests; typecheck, Solidity compilation, and the client build pass.
+- [ ] No Base Sepolia transaction was sent in this workspace, so no deployment addresses or target-architecture payment authority are claimed. Ticket 07 remains **Partial - contract-foundation evidence**; Ticket 08 still needs the browser funding confirmation/transaction; Ticket 09 remains blocked on an actual deployed vault and that browser funding seam.
+- [ ] This is **Partial — contract-foundation evidence** for Ticket 08. There is no browser funding confirmation, wallet transaction, Base Sepolia deployment, chain reader, refresh reconciliation, or settlement flow. The next nominal ticket is 09, but its chain-authoritative status work remains blocked until those deployment and browser funding seams exist.
+
+## 8 August 2026 update - Base Sepolia contracts deployed
+
+- [x] The Base Sepolia deployment command completed against chain ID `84532`. It deployed the explicitly valueless `MockEUSD` token at `0xEcF583DcC9CA0c6E59b14df86412E4C0ED96FF3c` (`0xfb509385c572a2b92a9b207f701eebce3bd0f2a9a712ec9e0716ff02082362af`) and the non-administered `EscrowVaultFactory` at `0xafe47537eA51eF0D32D89369ecBB5FfE364fF39b` (`0x4333b04665fb0245f146b0b750aa00dacb208c4b18b6a6bdf9a1e2f301696e53`).
+- [x] The public deployment manifest is recorded at `contracts/deployments/base-sepolia.json`; it contains the chain ID, public deployer address, public contract addresses, and transaction hashes only. The deployer private key is neither persisted nor printed.
+- [x] Deployment configuration now accepts a valid 32-byte EVM private key with or without a `0x` prefix, normalizing it only in process. The focused deployment tests, full 39-test suite, typecheck, client build, and Solidity compilation pass.
+- [ ] Ticket 07 is **Partial - deployed contract evidence**. The application cannot yet create a Contract-specific Vault from its two durable, wallet-signed Contract Acceptances. Ticket 08 remains **Partial** because a buyer cannot inspect and submit a browser funding transaction, and Ticket 09 remains blocked on that Contract-specific Vault/funding chain-read seam. No settlement, chain reconciliation, or judge-ready end-to-end flow is claimed.

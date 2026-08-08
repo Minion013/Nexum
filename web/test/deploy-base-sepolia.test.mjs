@@ -31,6 +31,13 @@ test('Base Sepolia deployment configuration requires an RPC endpoint and dedicat
     }),
     { rpcUrl: 'https://sepolia.example', deployerPrivateKey: `0x${'11'.repeat(32)}` }
   );
+  assert.deepEqual(
+    deploymentConfigurationFromEnvironment({
+      BASE_SEPOLIA_RPC_URL: 'https://sepolia.example',
+      BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY: '11'.repeat(32)
+    }),
+    { rpcUrl: 'https://sepolia.example', deployerPrivateKey: `0x${'11'.repeat(32)}` }
+  );
 });
 
 test('the public deployment manifest records only public Base Sepolia deployment details', () => {

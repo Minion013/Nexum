@@ -1,0 +1,13 @@
+{
+  "chainId": 84532,
+  "network": "Base Sepolia",
+  "deployerAddress": "0x6d083B950923a4d1C50EBf0f16fA6E57E227cFF6",
+  "mockEusd": {
+    "address": "0xEcF583DcC9CA0c6E59b14df86412E4C0ED96FF3c",
+    "transactionHash": "0xfb509385c572a2b92a9b207f701eebce3bd0f2a9a712ec9e0716ff02082362af"
+  },
+  "escrowVaultFactory": {
+    "address": "0xafe47537eA51eF0D32D89369ecBB5FfE364fF39b",
+    "transactionHash": "0x4333b04665fb0245f146b0b750aa00dacb208c4b18b6a6bdf9a1e2f301696e53"
+  }
+}

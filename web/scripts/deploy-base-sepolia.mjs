@@ -20,7 +20,8 @@ export function deploymentConfigurationFromEnvironment(environment = process.env
   let parsedUrl;
   try { parsedUrl = new URL(rpcUrl); } catch { throw new Error('BASE_SEPOLIA_RPC_URL must be a valid HTTP(S) URL.'); }
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('BASE_SEPOLIA_RPC_URL must be a valid HTTP(S) URL.');
-  const deployerPrivateKey = requiredEnvironmentValue(environment, 'BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY');
+  const configuredPrivateKey = requiredEnvironmentValue(environment, 'BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY');
+  const deployerPrivateKey = configuredPrivateKey.startsWith('0x') ? configuredPrivateKey : `0x${configuredPrivateKey}`;
   if (!isHexString(deployerPrivateKey, 32)) throw new Error('BASE_SEPOLIA_DEPLOYER_PRIVATE_KEY must be a 32-byte hex private key.');
   return { rpcUrl: parsedUrl.toString().replace(/\/$/, ''), deployerPrivateKey };
 }
