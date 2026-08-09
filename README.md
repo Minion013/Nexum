@@ -41,4 +41,4 @@ The linked schema also provides the Contract Party, delegation, version, authori
 
 ## Implementation tracking
 
-The implementation tickets use a [testnet-MVP completion reference](.scratch/pactflow-testnet-mvp/issues/00-implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. A Base Sepolia payment path is required before any settlement functionality can be claimed.
+The implementation tickets use a [testnet-MVP completion reference](docs/wayfinder/implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. A Base Sepolia payment path is required before any settlement functionality can be claimed.

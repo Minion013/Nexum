@@ -1,1 +1,63 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Profile Settings — PactFlow</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/workspace.css"></head><body class="workspace-app" data-page="settings"><a class="skip-link" href="#main-content">Skip to Profile Settings</a><div class="app-shell"><aside class="app-sidebar"><a class="brand app-brand" href="/home">Pact<span>Flow</span></a><nav class="app-nav" aria-label="Primary navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/workspace">Workspaces</a><a data-route href="/settings">Settings</a></nav><div class="app-sidebar-footer"><details class="avatar-menu"><summary aria-label="Open profile menu"><span class="avatar">PF</span>Profile</summary><nav class="profile-menu" aria-label="Profile menu"><a href="/settings">Profile Settings</a><a href="/workspace">Workspace Settings</a><button id="sign-out" type="button">Sign out</button></nav></details></div></aside><main id="main-content" class="app-content" tabindex="-1"><header class="app-topbar"><button id="open-nav" class="mobile-toggle" type="button" aria-label="Open navigation">Menu</button></header><p id="request-error" role="alert" hidden></p><p class="eyebrow">Profile Settings</p><h1>Your personal identity and discovery.</h1><p class="page-intro">This is separate from <a href="/workspace">Workspace Settings</a>, where membership and operating context belong.</p><form id="settings-form" class="app-panel form-grid" style="margin-top:20px"><label>Display name<input name="displayName" maxlength="120" required></label><label>Professional headline<input name="professionalHeadline" maxlength="160" placeholder="e.g. Product designer"></label><label class="wide"><input name="discoverable" type="checkbox"> Allow signed-in PactFlow users to discover this Profile</label><p class="notice wide">Only this protected Profile setting controls whether you can appear in People. Preferences that do not yet have protected storage are not shown as controls.</p><div class="wide action-row"><button class="primary" type="submit">Save Profile Settings</button><span id="settings-status" aria-live="polite"></span></div></form></main></div><dialog id="nav-drawer" class="drawer"><button id="close-nav" type="button">Close navigation</button></dialog><nav class="bottom-nav" aria-label="Quick navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/contracts#new-proposal">Create</a></nav><script type="module" src="/workspace.bundle.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Profile Settings — PactFlow</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/workspace.css">
+  <link rel="stylesheet" href="/profile-presentation.css">
+  <link rel="stylesheet" href="/profile-identity.css">
+</head>
+<body class="workspace-app" data-page="settings">
+  <a class="skip-link" href="#main-content">Skip to Profile Settings</a>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <a class="brand app-brand" href="/home">Pact<span>Flow</span></a>
+      <nav class="app-nav" aria-label="Primary navigation">
+        <a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/workspace">Workspaces</a><a data-route href="/settings">Settings</a>
+      </nav>
+      <div class="app-sidebar-footer"><details class="avatar-menu"><summary class="profile-identity-loading" aria-label="Loading profile" aria-busy="true"><span class="avatar profile-avatar-loading" aria-hidden="true"></span><span class="profile-name profile-name-loading" aria-hidden="true"></span></summary><nav class="profile-menu" aria-label="Profile menu"><a href="/settings">Profile Settings</a><button id="sign-out" type="button">Sign out</button></nav></details></div>
+    </aside>
+    <main id="main-content" class="app-content" tabindex="-1">
+      <header class="app-topbar"><button id="open-nav" class="mobile-toggle" type="button" aria-label="Open navigation">Menu</button></header>
+      <p id="request-error" role="alert" hidden></p>
+      <p class="eyebrow">Profile Settings</p>
+      <h1>Your personal identity, in one clear place.</h1>
+      <p class="page-intro">Manage what collaborators can discover and the details that represent you in PactFlow. Workspace membership and operating context stay inside their owning Workspace.</p>
+      <form id="settings-form" class="profile-settings">
+        <section class="app-panel profile-card" aria-labelledby="identity-heading">
+          <div class="profile-card-heading"><div><h2 id="identity-heading">Identity</h2><p>Use the name and context you want collaborators to recognise.</p></div></div>
+          <div class="profile-fields">
+            <label>Display name<input name="displayName" maxlength="120" required autocomplete="name"></label>
+            <label>Professional headline<input name="professionalHeadline" maxlength="160" placeholder="e.g. Product designer"></label>
+            <label class="wide">Bio<textarea name="bio" maxlength="1000" rows="4" placeholder="A short introduction for your PactFlow profile"></textarea></label>
+          </div>
+        </section>
+        <section class="app-panel profile-card" aria-labelledby="avatar-heading">
+          <div class="profile-card-heading"><div><h2 id="avatar-heading">Avatar</h2><p>Choose a deterministic colour, or add a private image.</p></div></div>
+          <div class="profile-avatar-row"><span id="avatar-preview" class="avatar" aria-hidden="true">PF</span><div class="profile-avatar-copy"><strong>Your profile avatar</strong><span id="avatar-status">A deterministic colour avatar is used unless a private upload succeeds.</span></div></div>
+          <div class="profile-fields">
+            <label>Avatar colour<select name="avatarSeed"><option value="indigo">Indigo</option><option value="teal">Teal</option><option value="amber">Amber</option><option value="rose">Rose</option><option value="slate">Slate</option><option value="violet">Violet</option></select></label>
+            <div class="profile-image-field">
+              <input id="avatar-file-input" class="visually-hidden" name="avatarFile" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="avatar-file-help avatar-file-status">
+              <label class="image-picker" for="avatar-file-input"><span class="image-picker-icon" aria-hidden="true">↑</span><span class="image-picker-copy"><strong>Private profile image</strong><span>Use a photo that represents you.</span></span><span id="avatar-file-button" class="image-picker-button">Choose profile image</span></label>
+              <small id="avatar-file-help">JPEG, PNG, or WebP · up to 5 MB · visible only to you.</small>
+              <span id="avatar-file-status" class="file-selection-status" aria-live="polite">No new image selected.</span>
+            </div>
+          </div>
+        </section>
+        <section class="app-panel profile-card" aria-labelledby="visibility-heading">
+          <div class="profile-card-heading"><div><h2 id="visibility-heading">Discoverability</h2><p>Control whether signed-in PactFlow users can find this Profile in People.</p></div></div>
+          <label class="discoverability-control"><input name="discoverable" type="checkbox"> <span>Allow signed-in PactFlow users to discover this Profile</span></label>
+          <p class="notice">Profile images remain private to this signed-in Profile, whether or not you choose to appear in People.</p>
+          <div class="action-row profile-save"><span id="settings-status" aria-live="polite"></span><button class="primary" type="submit">Save changes</button></div>
+        </section>
+      </form>
+    </main>
+  </div>
+  <dialog id="nav-drawer" class="drawer"><button id="close-nav" type="button">Close navigation</button></dialog>
+  <nav class="bottom-nav" aria-label="Quick navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a href="/contracts#new-proposal">Create</a></nav>
+  <script type="module" src="/workspace.bundle.js"></script>
+</body>
+</html>

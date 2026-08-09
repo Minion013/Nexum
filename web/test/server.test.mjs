@@ -112,11 +112,30 @@ test('authenticated area pages are served from their canonical URLs', async () =
     for (const href of ['/home', '/contracts', '/workspace', '/people', '/settings']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
+    assert.match(homeMarkup, /What needs you now/);
+    assert.match(homeMarkup, /Milestone timeline/);
+    assert.match(homeMarkup, /Loading Contract actions/);
+    assert.ok(homeMarkup.indexOf('id="action-list"') < homeMarkup.indexOf('class="metric-grid"'));
     assert.match(homeMarkup, /id="wallet-capability"/);
     assert.match(homeMarkup, /wallet\.bundle\.js/);
+    assert.doesNotMatch(homeMarkup, />Workspace Settings</);
+    assert.match(homeMarkup, /class="profile-name profile-name-loading"/);
+    assert.match(homeMarkup, /aria-label="Loading profile" aria-busy="true"/);
+    const contractsMarkup = await (await request(server, '/contracts')).text();
+    for (const label of ['Workspace', 'Stage', 'Your responsibility', 'Counterparty', 'Next milestone', 'Last activity', 'Action']) {
+      assert.match(contractsMarkup, new RegExp(`>${label}<`), label);
+    }
+    assert.match(contractsMarkup, /<table class="contract-table">/);
+    assert.match(contractsMarkup, /id="contract-records" class="mobile-records" aria-live="polite"/);
+    assert.match(contractsMarkup, />Proposal</);
+    assert.doesNotMatch(contractsMarkup, /Private Draft|Private Contract/);
     const notifications = await request(server, '/notifications');
     assert.match(await notifications.text(), /Private inbox/);
     assert.match(await (await request(server, '/notifications')).text(), /notifications\.bundle\.js/);
+    const settings = await (await request(server, '/settings')).text();
+    assert.match(settings, /Choose profile image/);
+    assert.match(settings, /class="discoverability-control"/);
+    assert.doesNotMatch(settings, /Workspace Settings/);
     const detail = await request(server, '/contracts/not-a-contract');
     assert.equal(detail.status, 200);
     assert.match(await detail.text(), /Contract draft/);
@@ -138,9 +157,15 @@ test('People is the canonical signed-in directory and legacy Contacts links safe
       assert.match(await response.text(), /PactFlow/, path);
     }
     const people = await (await request(server, '/people')).text();
+    const contacts = await (await request(server, '/contacts')).text();
     assert.match(people, /Discover/);
     assert.match(people, /My network/);
     assert.match(people, /Requests/);
+    assert.match(people, /id="people-status"/);
+    assert.match(people, /id="people-access-note"/);
+    assert.equal(contacts, people);
+    assert.match(contacts, /href="\/people">People<\/a>/);
+    assert.doesNotMatch(contacts, /Contacts directory/);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

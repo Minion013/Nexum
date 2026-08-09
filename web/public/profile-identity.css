@@ -1,0 +1,19 @@
+.avatar-menu summary {
+  min-height: 48px;
+}
+
+.profile-identity-loading {
+  cursor: wait;
+}
+
+.profile-avatar-loading,
+.profile-name-loading {
+  background: #e5e7eb;
+}
+
+.profile-name-loading {
+  display: block;
+  width: 112px;
+  height: 15px;
+  border-radius: 999px;
+}

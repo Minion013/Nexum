@@ -108,9 +108,9 @@ export function createProfileLoader(config = publicSupabaseConfigFromEnvironment
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
     await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow profile.');
-    const { data, error } = await supabase.from('profiles').select('id, email, display_name, professional_headline, discoverable, onboarding_completed_at').eq('id', userId).single();
+    const { data, error } = await supabase.from('profiles').select('id, email, display_name, username, professional_headline, bio, avatar_seed, avatar_path, discoverable, onboarding_completed_at').eq('id', userId).single();
     if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
-    return { id: data.id, email: data.email, displayName: data.display_name, professionalHeadline: data.professional_headline, discoverable: data.discoverable, onboardingCompletedAt: data.onboarding_completed_at };
+    return profileResponse(data, true);
   };
 }
 function authenticatedSupabaseClient(config, createSupabaseClient, accessToken) {
@@ -136,6 +136,18 @@ export function createWorkspaceLoader(config = publicSupabaseConfigFromEnvironme
     return mapWorkspaces(data);
   };
 }
+export function createWorkspaceWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ userId, accessToken, name }) => {
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
+      .from('workspaces')
+      .insert({ owner_profile_id: userId, name: requiredText(name, 'Workspace name', 120), kind: 'collaborative' })
+      .select('id, name, kind')
+      .single();
+    if (error || !data) throw new ValidationError('We could not create this Workspace.');
+    return { id: data.id, name: data.name, kind: data.kind, membershipRole: 'owner' };
+  };
+}
 export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
@@ -155,6 +167,7 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
         const versions = contract.contract_versions ?? [];
         const latestVersion = [...versions].sort((left, right) => right.version_number - left.version_number)[0] ?? { version_number: 0, contract_sections: [] };
         const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
+        const scope = sections.get('scope') ?? {};
         const parties = sections.get('parties') ?? {};
         const notices = sections.get('notices') ?? {};
         const milestones = sections.get('milestones')?.items ?? [];
@@ -168,6 +181,7 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
         const workspaceIds = [...(contract.contract_parties ?? []).map(party => party.workspace_id), ...(contract.proposal_workspace_access ?? []).map(access => access.workspace_id)];
         return {
           id: contract.id,
+          title: typeof scope.title === 'string' && scope.title.trim() ? scope.title.trim() : null,
           status: contract.status,
           latestVersionNumber: latestVersion.version_number,
           workspaceName: workspaceIds
@@ -191,7 +205,15 @@ export function createPeopleLoader(config = publicSupabaseConfigFromEnvironment(
       supabase.rpc('list_people_connections')
     ]);
     if (discoverResult.error || connectionResult.error) throw new AuthenticationError('People is unavailable.');
-    return { discover: discoverResult.data ?? [], connections: connectionResult.data ?? [] };
+    return {
+      discover: (discoverResult.data ?? []).map(person => ({
+        id: person.id,
+        display_name: person.display_name,
+        username: person.username,
+        professional_headline: person.professional_headline
+      })),
+      connections: connectionResult.data ?? []
+    };
   };
 }
 function mapNotifications(rows) {
@@ -238,20 +260,37 @@ export function createPeopleWorkflow(config = publicSupabaseConfigFromEnvironmen
 }
 export function createProfileSettingsWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
-  return async ({ userId, accessToken, displayName, professionalHeadline, discoverable }) => {
+  return async ({ userId, accessToken, displayName, professionalHeadline, bio, avatarSeed, avatarPath, discoverable }) => {
     const update = {
       ...(displayName !== undefined ? { display_name: requiredText(displayName, 'Display name', 120) } : {}),
       ...(professionalHeadline !== undefined ? { professional_headline: professionalHeadline ? requiredText(professionalHeadline, 'Professional headline', 160) : null } : {}),
+      ...(bio !== undefined ? { bio: bio ? requiredText(bio, 'Bio', 1_000) : null } : {}),
+      ...(avatarSeed !== undefined ? { avatar_seed: enumValue(avatarSeed, ['indigo', 'teal', 'amber', 'rose', 'slate', 'violet'], 'profile', 'avatarSeed', 'Avatar colour') } : {}),
+      ...(avatarPath !== undefined ? { avatar_path: avatarPath ? requiredAvatarPath(avatarPath, userId) : null } : {}),
       ...(discoverable !== undefined ? { discoverable: Boolean(discoverable) } : {})
     };
-    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).from('profiles').update(update).eq('id', userId).select('id, email, display_name, professional_headline, discoverable').single();
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).from('profiles').update(update).eq('id', userId).select('id, email, display_name, professional_headline, bio, avatar_seed, avatar_path, discoverable').single();
     if (error || !data) throw new AuthenticationError('We could not save your Profile Settings.');
-    return { id: data.id, email: data.email, displayName: data.display_name, professionalHeadline: data.professional_headline, discoverable: data.discoverable };
+    return profileResponse(data);
   };
 }
 function requiredText(value, label, limit = 4_000) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > limit) throw new ValidationError(`${label} is required.`);
   return value.trim();
+}
+function profileResponse(data, includeOnboarding = false) {
+  return {
+    id: data.id,
+    email: data.email,
+    displayName: data.display_name,
+    ...(data.username !== undefined ? { username: data.username } : {}),
+    professionalHeadline: data.professional_headline,
+    ...(data.bio !== undefined ? { bio: data.bio } : {}),
+    ...(data.avatar_seed !== undefined ? { avatarSeed: data.avatar_seed } : {}),
+    ...(data.avatar_path !== undefined ? { avatarPath: data.avatar_path } : {}),
+    discoverable: data.discoverable,
+    ...(includeOnboarding ? { onboardingCompletedAt: data.onboarding_completed_at } : {})
+  };
 }
 function requiredEmail(value) {
   const email = requiredText(value, 'Counterparty email', 320).toLowerCase();
@@ -262,6 +301,11 @@ function requiredUuid(value, label) {
   const text = requiredText(value, label, 36);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) throw new ValidationError(`${label} must be valid.`);
   return text;
+}
+function requiredAvatarPath(value, userId) {
+  const path = requiredText(value, 'Profile image path', 160);
+  if (!new RegExp(`^${userId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/avatar\\.(?:jpg|jpeg|png|webp)$`, 'i').test(path)) throw new ValidationError('Profile image path is invalid.');
+  return path;
 }
 function positiveWholeNumber(value, label, maximum = Number.MAX_SAFE_INTEGER) {
   const number = Number(value);
@@ -636,7 +680,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), workspaceWorkflow = createWorkspaceWorkflow(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -658,6 +702,11 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const workspaces = await loadWorkspaces({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { workspaces });
+      }
+      if (url.pathname === '/api/workspaces' && request.method === 'POST') {
+        const session = await authenticate();
+        const workspace = await workspaceWorkflow({ ...await json(request), userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 201, { workspace });
       }
       if (url.pathname === '/api/home' && request.method === 'GET') {
         const session = await authenticate();

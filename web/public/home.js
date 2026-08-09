@@ -18,17 +18,23 @@ function element(name, className, text) {
 }
 function emptyState(message) { return element('p', 'home-empty', message); }
 function workspaceLabel(contract) { return `Workspace: ${contract.workspaceName ?? 'Personal Contract'}`; }
+function selectedWorkspaceId() { return new URLSearchParams(window.location.search).get('workspace'); }
 function renderWorkspaces(workspaces) {
   const list = $('#workspace-list');
   if (!list) return;
   list.replaceChildren();
   if (!workspaces.length) return list.append(emptyState('Your personal Workspace is being prepared.'));
   workspaces.forEach(workspace => {
+    const selected = workspace.id === selectedWorkspaceId();
     const item = element('article', 'home-workspace-row');
     const initials = element('span', 'home-workspace-initials', workspace.name.slice(0, 2).toUpperCase());
     const copy = element('div');
     copy.append(element('strong', '', workspace.name), element('span', '', `${workspace.kind} · ${workspace.membershipRole}`));
-    item.append(initials, copy);
+    const switcher = element('button', 'home-row-link', selected ? 'Current Workspace' : 'Switch');
+    switcher.type = 'button';
+    switcher.disabled = selected;
+    switcher.addEventListener('click', () => window.location.assign(`/workspace?workspace=${encodeURIComponent(workspace.id)}`));
+    item.append(initials, copy, switcher);
     list.append(item);
   });
 }
@@ -116,6 +122,22 @@ if (contractForm) {
 
 const signOut = $('#sign-out');
 if (signOut) signOut.onclick = async () => { await (await supabase()).auth.signOut(); window.location.assign('/'); };
+const workspaceCreateForm = $('#workspace-create-form');
+if (workspaceCreateForm) {
+  workspaceCreateForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = workspaceCreateForm.querySelector('[type="submit"]');
+    const status = $('#workspace-create-status');
+    submit.disabled = true;
+    status.textContent = 'Creating Workspace…';
+    try {
+      const { workspace } = await authenticatedRequest('/api/workspaces', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(workspaceCreateForm))) });
+      workspaceCreateForm.reset();
+      status.textContent = `${workspace.name} is ready. You are its owner.`;
+      window.location.assign(`/workspace?workspace=${encodeURIComponent(workspace.id)}`);
+    } catch (error) { status.textContent = error.message; } finally { submit.disabled = false; }
+  });
+}
 (async () => {
   try {
     const [session, response] = await Promise.all([authenticatedRequest('/api/session'), authenticatedRequest('/api/home')]);

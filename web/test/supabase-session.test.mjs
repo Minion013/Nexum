@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createProfileLoader, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -203,6 +203,30 @@ test('an authenticated user can view only their provisioned workspaces', async (
   }
 });
 
+test('a verified Profile creates a named Workspace only for itself', async () => {
+  const workspaceCalls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'workspace-jwt') throw new Error('invalid token');
+      return { id: '33333333-3333-4333-8333-333333333333', email: 'member@example.com' };
+    },
+    workspaceWorkflow: async input => {
+      workspaceCalls.push(input);
+      return { id: '44444444-4444-4444-8444-444444444444', name: input.name, kind: 'collaborative', membershipRole: 'owner' };
+    }
+  });
+  try {
+    const body = { name: 'Design studio', userId: 'another-profile-id' };
+    assert.equal((await request(origin, '/api/workspaces', { method: 'POST', body })).status, 401);
+    const response = await request(origin, '/api/workspaces', { method: 'POST', token: 'workspace-jwt', body });
+    assert.equal(response.status, 201);
+    assert.deepEqual(await response.json(), { workspace: { id: '44444444-4444-4444-8444-444444444444', name: 'Design studio', kind: 'collaborative', membershipRole: 'owner' } });
+    assert.deepEqual(workspaceCalls, [{ name: 'Design studio', userId: '33333333-3333-4333-8333-333333333333', accessToken: 'workspace-jwt' }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('an authenticated user receives only their durable Home data', async () => {
   const homeCalls = [];
   const { server, origin } = await start({
@@ -262,6 +286,7 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
                 contract_versions: [{ version_number: 1 }, {
                   version_number: 3,
                   contract_sections: [
+                    { section_type: 'scope', terms: { title: 'Checkout redesign' } },
                     { section_type: 'parties', terms: { initiator_responsibility: 'buyer', counterparty_email: 'seller@example.com' } },
                     { section_type: 'milestones', terms: { items: [{ title: 'Research', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z' }, { title: 'Delivery', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z' }] } }
                   ]
@@ -279,7 +304,7 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
   assert.deepEqual(await loadHome({ userId: 'profile-id', accessToken: 'access-token' }), {
     workspaces: [{ id: 'workspace-id', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
     contracts: [{
-      id: 'contract-id', status: 'active', latestVersionNumber: 3, workspaceName: 'Member',
+      id: 'contract-id', title: 'Checkout redesign', status: 'active', latestVersionNumber: 3, workspaceName: 'Member',
       counterparty: 'seller@example.com', responsibility: 'Buyer',
       nextMilestone: { title: 'Research', deadlineUtc: '2030-09-10T09:00:00.000Z' },
       lastActivityAt: '2030-09-01T00:00:00.000Z'
@@ -321,7 +346,7 @@ test('a verified user without a profile is provisioned into incomplete setup bef
           eq: (column, value) => ({
             single: async () => {
               calls.push({ operation: 'select', table, fields, column, value });
-              return { data: { id: value, email: 'new@example.com', display_name: 'New participant', professional_headline: 'Product designer', discoverable: true, onboarding_completed_at: null }, error: null };
+              return { data: { id: value, email: 'new@example.com', display_name: 'New participant', professional_headline: 'Product designer', bio: 'Designing trustworthy services.', avatar_seed: 'teal', avatar_path: `${value}/avatar.png`, discoverable: true, onboarding_completed_at: null }, error: null };
             }
           })
         })
@@ -331,11 +356,11 @@ test('a verified user without a profile is provisioned into incomplete setup bef
 
   assert.deepEqual(
     await loadProfile({ userId: '22222222-2222-4222-8222-222222222222', accessToken: 'new-participant-jwt' }),
-    { id: '22222222-2222-4222-8222-222222222222', email: 'new@example.com', displayName: 'New participant', professionalHeadline: 'Product designer', discoverable: true, onboardingCompletedAt: null }
+    { id: '22222222-2222-4222-8222-222222222222', email: 'new@example.com', displayName: 'New participant', professionalHeadline: 'Product designer', bio: 'Designing trustworthy services.', avatarSeed: 'teal', avatarPath: '22222222-2222-4222-8222-222222222222/avatar.png', discoverable: true, onboardingCompletedAt: null }
   );
   assert.deepEqual(calls, [
     { operation: 'rpc', name: 'ensure_profile' },
-    { operation: 'select', table: 'profiles', fields: 'id, email, display_name, professional_headline, discoverable, onboarding_completed_at', column: 'id', value: '22222222-2222-4222-8222-222222222222' }
+      { operation: 'select', table: 'profiles', fields: 'id, email, display_name, username, professional_headline, bio, avatar_seed, avatar_path, discoverable, onboarding_completed_at', column: 'id', value: '22222222-2222-4222-8222-222222222222' }
   ]);
 });
 
@@ -461,6 +486,46 @@ test('a verified user can discover only the People payload scoped by their sessi
   }
 });
 
+test('People discovery returns only safe opted-in Profile fields and forwards the professional search term', async () => {
+  const calls = [];
+  const loadPeople = createPeopleLoader(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    (_url, _key, options) => ({
+      rpc: async (name, arguments_) => {
+        calls.push({ name, arguments_, authorization: options.global.headers.Authorization });
+        if (name === 'discover_people') {
+          return {
+            data: [{
+              id: '22222222-2222-4222-8222-222222222222',
+              display_name: 'Alex',
+              username: 'alex-designer',
+              professional_headline: 'Service designer',
+              email: 'alex@example.com',
+              bio: 'This private Profile field must not reach People discovery.'
+            }],
+            error: null
+          };
+        }
+        return { data: [], error: null };
+      }
+    })
+  );
+
+  assert.deepEqual(await loadPeople({ accessToken: 'people-jwt', search: 'alex-designer' }), {
+    discover: [{
+      id: '22222222-2222-4222-8222-222222222222',
+      display_name: 'Alex',
+      username: 'alex-designer',
+      professional_headline: 'Service designer'
+    }],
+    connections: []
+  });
+  assert.deepEqual(calls, [
+    { name: 'discover_people', arguments_: { search_text: 'alex-designer' }, authorization: 'Bearer people-jwt' },
+    { name: 'list_people_connections', arguments_: undefined, authorization: 'Bearer people-jwt' }
+  ]);
+});
+
 test('a verified user can manage only their own connection workflow', async () => {
   const calls = [];
   const { server, origin } = await start({
@@ -531,6 +596,36 @@ test('a verified user saves Profile Settings only through their own protected wo
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('Profile Settings accept only the caller-owned private image path and deterministic fallback', async () => {
+  const calls = [];
+  const profileId = '66666666-6666-4666-8666-666666666666';
+  const workflow = createProfileSettingsWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({
+      from: table => ({
+        update: update => ({
+          eq: (column, value) => ({
+            select: fields => ({
+              single: async () => {
+                calls.push({ table, update, column, value, fields });
+                return { data: { id: profileId, email: 'member@example.com', display_name: 'Member', professional_headline: null, bio: 'Trust-first collaboration.', avatar_seed: 'teal', avatar_path: `${profileId}/avatar.png`, discoverable: false }, error: null };
+              }
+            })
+          })
+        })
+      })
+    })
+  );
+  const profile = await workflow({ userId: profileId, accessToken: 'settings-jwt', displayName: 'Member', bio: 'Trust-first collaboration.', avatarSeed: 'teal', avatarPath: `${profileId}/avatar.png`, discoverable: false });
+  assert.deepEqual(profile, { id: profileId, email: 'member@example.com', displayName: 'Member', professionalHeadline: null, bio: 'Trust-first collaboration.', avatarSeed: 'teal', avatarPath: `${profileId}/avatar.png`, discoverable: false });
+  assert.equal(calls[0].update.avatar_path, `${profileId}/avatar.png`);
+  await assert.rejects(
+    workflow({ userId: profileId, accessToken: 'settings-jwt', avatarPath: '55555555-5555-4555-8555-555555555555/avatar.png' }),
+    /Profile image path is invalid/
+  );
+  assert.equal(calls.length, 1);
 });
 
 test('only a verified signed-in Profile can submit an invitation acceptance to the durable workflow', async () => {

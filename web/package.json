@@ -8,7 +8,7 @@
     "start": "npm run build && node src/server.mjs",
     "test": "node --test",
     "test:smoke": "node --test test/server.test.mjs",
-    "typecheck": "node --check src/server.mjs && node --check scripts/deploy-base-sepolia.mjs && node --check public/app-shell.js && node --check public/home.js && node --check public/workspace.js && node --check public/notifications.js && node --check public/login.js && node --check public/contract.js && node --check public/contract-wallet.js && node --check public/invitation.js && node --check public/wallet.js",
+    "typecheck": "node --check src/server.mjs && node --check scripts/deploy-base-sepolia.mjs && node --check public/app-shell.js && node --check public/home.js && node --check public/workspace.js && node --check public/contract-network.js && node --check public/notifications.js && node --check public/login.js && node --check public/contract.js && node --check public/contract-wallet.js && node --check public/invitation.js && node --check public/wallet.js",
     "contracts:check": "solcjs --optimize --base-path .. --include-path .. --bin --abi --output-dir ../.scratch/solc-output ../contracts/MockEUSD.sol ../contracts/EscrowVault.sol ../contracts/EscrowVaultFactory.sol",
     "deploy:base-sepolia": "node scripts/deploy-base-sepolia.mjs"
   },

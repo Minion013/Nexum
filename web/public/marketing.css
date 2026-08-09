@@ -1,0 +1,22 @@
+/* Homepage-specific interaction and layout refinements. */
+.marketing-page .site-header{position:fixed;inset:0 0 auto;z-index:20;backdrop-filter:blur(14px)}
+.marketing-page main{padding-top:76px}
+.marketing-page .hero-copy{width:min(100%,620px)}
+.marketing-page .section-heading{width:min(100%,720px);margin-inline:auto;text-align:center}
+.marketing-page .steps{max-width:920px;margin-inline:auto}
+.marketing-page .creator-section>div{width:min(100%,540px)}
+.marketing-page .closing-cta h2{width:min(100%,630px)}
+#how-it-works,#for-creators{scroll-margin-top:100px}
+
+@media (prefers-reduced-motion:no-preference){
+  html{scroll-behavior:smooth}
+  #how-it-works:target .section-heading,#for-creators:target>div{animation:section-arrival .6s cubic-bezier(.2,.8,.2,1) both}
+  #how-it-works:target .steps,#for-creators:target>aside{animation:section-arrival .6s .12s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes section-arrival{from{opacity:.25;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+}
+
+@media(max-width:760px){
+  .marketing-page .site-header{min-height:68px}
+  .marketing-page main{padding-top:68px}
+  #how-it-works,#for-creators{scroll-margin-top:88px}
+}

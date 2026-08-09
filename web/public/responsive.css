@@ -1,0 +1,86 @@
+/* Shared responsive rules for the landing page, sign-in flow, and workspace. */
+html,body{max-width:100%;overflow-x:hidden}
+button,.button{min-height:44px}
+input,select,textarea{font-size:max(16px,1em)}
+.workspace-page{overflow-wrap:anywhere}
+
+@media(max-width:960px){
+  .landing-hero{grid-template-columns:1fr;padding-top:78px;text-align:center}
+  .landing-hero .hero-copy{margin-inline:auto}
+  .landing-hero .hero-actions{justify-content:center}
+  .landing-hero .hero-art{justify-self:center;margin-top:8px}
+  .creator-section{grid-template-columns:1fr;gap:36px}
+  .creator-section>div{margin-inline:auto;text-align:center}
+  .creator-section aside{max-width:540px;margin-inline:auto}
+  .workspace-page main{max-width:760px}
+  .workspace-page .grid{grid-template-columns:1fr}
+  .workspace-page dl{grid-template-columns:repeat(3,1fr)}
+}
+
+/* Sign-in confirmation and post-verification access choice. */
+.auth-card{position:relative}
+.email-sent,.access-choice{animation:auth-enter .24s ease-out}
+.email-icon{display:grid;place-items:center;width:46px;height:46px;margin-bottom:21px;border-radius:14px;background:#e7f5ee;color:#16805a;font-size:21px;font-weight:850}
+.email-actions{display:grid;gap:10px;margin-top:27px}
+.text-button{padding:8px;border:0;background:transparent;color:#4259bb;text-decoration:underline;text-underline-offset:3px;font-size:13px}
+.auth-assurance{margin:18px 0 0;color:#687289;font-size:12px;line-height:1.55}
+.access-choice .role-prompt{margin-top:25px}
+.access-choice .role-options button{position:relative;padding:16px 46px 16px 15px}
+.access-choice .role-options button::after{content:'->';position:absolute;right:17px;top:50%;transform:translateY(-50%);color:#5262ba;font-size:15px}
+.access-choice .role-options button:hover::after{transform:translate(3px,-50%)}
+@keyframes auth-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:700px){
+  .site-header,.auth-header,.workspace-header{min-height:68px;padding-inline:20px}
+  .site-header nav{display:none}
+  .brand{font-size:21px}
+  .marketing-page main{padding-top:68px}
+  .landing-hero{min-height:auto;padding:62px 22px 42px;gap:16px}
+  .hero-copy h1{font-size:clamp(42px,13vw,58px)}
+  .lead{font-size:16px}
+  .trust-strip{padding:20px 22px;text-align:center}
+  .trust-strip div{justify-content:center}
+  .content-section{padding:72px 22px}
+  .steps{gap:28px}
+  .creator-section{margin:0 22px 72px;padding:36px 24px}
+  .creator-section aside{padding:24px 0 0;border-left:0;border-top:1px solid #a3c7b3}
+  .closing-cta{padding:72px 22px}
+  footer{padding:28px 22px;gap:12px;align-items:flex-start}
+  .auth-main{padding:44px 20px 28px}
+  .auth-card{padding:32px 24px}
+  .workspace-actions #wallet-state{display:none}
+  .workspace-page main{padding:26px 16px 48px}
+  .workspace-intro h1{font-size:clamp(29px,8vw,36px)}
+  .panel{padding:20px}
+  .workspace-page dl{grid-template-columns:1fr}
+  .workspace-page .timeline li{align-items:flex-start;flex-direction:column;gap:3px}
+  .workspace-page .timeline span{font-size:12px}
+  .milestone-fields{grid-template-columns:1fr;padding:12px}
+  .milestone-fields .wide{grid-column:auto}
+  .workspace-page .row{align-items:stretch}
+}
+
+@media(max-width:480px){
+  .site-header,.auth-header,.workspace-header{padding-inline:16px}
+  .site-header .button-small{padding-inline:14px}
+  .auth-header .back-link{font-size:12px}
+  .landing-hero{padding-inline:18px}
+  .hero-actions{align-items:center;flex-direction:column;gap:12px}
+  .hero-actions .button,.hero-actions .text-link{text-align:center}
+  .hero-art{min-height:268px;width:390px;max-width:none;transform:scale(.78);transform-origin:top center;margin:-8px auto -56px}
+  .card-top{left:0}.card-middle{right:0}.card-bottom{left:42px}
+  .content-section{padding-inline:18px}
+  .creator-section{margin-inline:16px;padding-inline:20px}
+  .creator-section blockquote{font-size:20px}
+  .closing-cta{padding-inline:18px}
+  footer{display:block;padding-inline:18px}footer span{display:block;margin-top:10px}
+  .auth-card{padding:28px 20px;border-radius:14px}
+  .auth-card h1{font-size:34px}
+  .workspace-page main{padding-inline:12px}
+  .workspace-header{gap:10px}
+  .workspace-header .ghost{padding-inline:12px}
+  .panel{padding:17px;border-radius:13px}
+  .workspace-page .actions{display:grid;grid-template-columns:1fr}
+  .workspace-page .actions>button,.workspace-page .actions>input{width:100%}
+  .workspace-page .status{margin-block:16px}
+}

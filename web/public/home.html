@@ -1,1 +1,83 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard — PactFlow</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/workspace.css"></head><body class="workspace-app" data-page="dashboard"><a class="skip-link" href="#main-content">Skip to Dashboard</a><div class="app-shell"><aside class="app-sidebar"><a class="brand app-brand" href="/home">Pact<span>Flow</span></a><nav class="app-nav" aria-label="Primary navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/workspace">Workspaces</a><a data-route href="/settings">Settings</a></nav><div class="app-sidebar-footer"><details class="avatar-menu"><summary aria-label="Open profile menu"><span class="avatar">PF</span><span id="profile-name">Profile</span></summary><nav class="profile-menu" aria-label="Profile menu"><a href="/settings">Profile Settings</a><a href="/workspace">Workspace Settings</a><button id="sign-out" type="button">Sign out</button></nav></details></div></aside><main id="main-content" class="app-content" tabindex="-1"><header class="app-topbar"><button id="open-nav" class="mobile-toggle" type="button" aria-label="Open navigation">Menu</button><span class="status">Signed in</span></header><p id="request-error" role="alert" hidden></p><section><p class="eyebrow">Dashboard</p><h1>Your work, with the next step clear.</h1><p id="dashboard-subtitle" class="page-intro">Loading your Workspace context…</p></section><section class="metric-grid" aria-label="Contract summary"><article class="app-panel metric"><strong id="attention-count">—</strong><span>Needs attention</span></article><article class="app-panel metric"><strong id="active-count">—</strong><span>In progress</span></article><article class="app-panel metric"><strong id="workspace-count">—</strong><span>Workspaces</span></article></section><section class="dashboard-grid"><article class="app-panel"><p class="eyebrow">Action board</p><h2>What needs you now</h2><div id="action-list" class="list" aria-live="polite"></div></article><aside class="app-panel"><p class="eyebrow">Active projects</p><h2>Milestone timeline</h2><div id="timeline" class="list" aria-live="polite"></div></aside></section><div id="wallet-capability"></div></main></div><dialog id="nav-drawer" class="drawer"><button id="close-nav" type="button">Close navigation</button><nav class="app-nav" aria-label="Mobile navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/workspace">Workspaces</a><a data-route href="/settings">Settings</a></nav></dialog><nav class="bottom-nav" aria-label="Quick navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/people">People</a><a data-route href="/contracts#new-proposal">Create</a></nav><script type="module" src="/workspace.bundle.js"></script><script type="module" src="/wallet.bundle.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard — PactFlow</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/workspace.css">
+  <link rel="stylesheet" href="/profile-identity.css">
+</head>
+<body class="workspace-app" data-page="dashboard">
+  <a class="skip-link" href="#main-content">Skip to Dashboard</a>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <a class="brand app-brand" href="/home">Pact<span>Flow</span></a>
+      <nav class="app-nav" aria-label="Primary navigation">
+        <a data-route href="/home">Dashboard</a>
+        <a data-route href="/contracts">Contracts</a>
+        <a data-route href="/people">People</a>
+        <a data-route href="/workspace">Workspaces</a>
+        <a data-route href="/settings">Settings</a>
+      </nav>
+      <div class="app-sidebar-footer">
+        <details class="avatar-menu">
+          <summary class="profile-identity-loading" aria-label="Loading profile" aria-busy="true"><span class="avatar profile-avatar-loading" aria-hidden="true"></span><span class="profile-name profile-name-loading" aria-hidden="true"></span></summary>
+          <nav class="profile-menu" aria-label="Profile menu">
+            <a href="/settings">Profile Settings</a>
+            <button id="sign-out" type="button">Sign out</button>
+          </nav>
+        </details>
+      </div>
+    </aside>
+    <main id="main-content" class="app-content" tabindex="-1">
+      <header class="app-topbar">
+        <button id="open-nav" class="mobile-toggle" type="button" aria-label="Open navigation">Menu</button>
+        <span class="status">Signed in</span>
+      </header>
+      <p id="request-error" role="alert" hidden></p>
+      <section>
+        <p class="eyebrow">Dashboard</p>
+        <h1>Your work, with the next step clear.</h1>
+        <p id="dashboard-subtitle" class="page-intro">Loading your Workspace context…</p>
+      </section>
+      <section class="dashboard-grid">
+        <article class="app-panel">
+          <p class="eyebrow">Action board</p>
+          <h2>What needs you now</h2>
+          <div id="action-list" class="list" aria-live="polite" aria-busy="true"><p class="empty">Loading Contract actions…</p></div>
+        </article>
+        <aside class="app-panel">
+          <p class="eyebrow">Active projects</p>
+          <h2>Milestone timeline</h2>
+          <div id="timeline" class="list" aria-live="polite" aria-busy="true"><p class="empty">Loading active milestones…</p></div>
+        </aside>
+      </section>
+      <section class="metric-grid" aria-label="Contract analytics">
+        <article class="app-panel metric"><strong id="attention-count">—</strong><span>Awaiting you</span></article>
+        <article class="app-panel metric"><strong id="active-count">—</strong><span>In progress</span></article>
+        <article class="app-panel metric"><strong id="workspace-count">—</strong><span>Completed</span></article>
+      </section>
+      <div id="wallet-capability"></div>
+    </main>
+  </div>
+  <dialog id="nav-drawer" class="drawer">
+    <button id="close-nav" type="button">Close navigation</button>
+    <nav class="app-nav" aria-label="Mobile navigation">
+      <a data-route href="/home">Dashboard</a>
+      <a data-route href="/contracts">Contracts</a>
+      <a data-route href="/people">People</a>
+      <a data-route href="/workspace">Workspaces</a>
+      <a data-route href="/settings">Settings</a>
+    </nav>
+  </dialog>
+  <nav class="bottom-nav" aria-label="Quick navigation">
+    <a data-route href="/home">Dashboard</a>
+    <a data-route href="/contracts">Contracts</a>
+    <a data-route href="/people">People</a>
+    <a data-route href="/contracts#new-proposal">Create</a>
+  </nav>
+  <script type="module" src="/workspace.bundle.js"></script>
+  <script type="module" src="/wallet.bundle.js"></script>
+</body>
+</html>

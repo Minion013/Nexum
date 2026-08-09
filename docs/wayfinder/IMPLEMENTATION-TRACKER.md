@@ -14,32 +14,11 @@ The [implementation completion reference](implementation-completion-reference.md
 
 ## Open decision queue
 
-- [Off-chain data and privacy model](tickets/008-off-chain-data-and-privacy-model.md)
-- [Application boundary and authorisation](tickets/009-application-boundary-and-authorisation.md)
-- [Wallet and transaction experience](tickets/010-wallet-transaction-experience.md)
-- [Chain-event index and consistency](tickets/011-chain-event-index-and-consistency.md)
-- [Monorepo, test, and deployment blueprint](tickets/012-monorepo-test-and-deployment-blueprint.md)
-- [Profile persistence and access model](tickets/017-profile-persistence-and-access-model.md)
-- [Account and directory experience](tickets/018-account-and-directory-experience.md)
-- [Connection record and safety model](tickets/019-connection-record-and-safety-model.md)
-- [Post-login shell and design system](tickets/020-post-login-shell-and-design-system.md)
-- [Action-first dashboard](tickets/021-action-first-dashboard.md)
-- [People directory and profile settings](tickets/022-people-directory-and-profile-settings.md)
-- [Workspace Contracts and Proposals](tickets/023-workspace-contracts-and-proposals.md)
-- [Profile-photo storage lifecycle](tickets/025-profile-photo-storage-lifecycle.md)
-- [People directory operations and safety policy](tickets/026-people-directory-operations-and-safety-policy.md)
-- [Profile deactivation and contract-history policy](tickets/027-profile-deactivation-and-contract-history-policy.md)
-- [Connection handoff to Proposal creation](tickets/028-connection-handoff-to-proposal-creation.md)
-- [Dashboard metrics and empty-state policy](tickets/029-dashboard-metrics-and-empty-state-policy.md)
-- [High-volume Workspace Contract operations](tickets/030-high-volume-workspace-contract-operations.md)
-- [Dark-mode scope and token policy](tickets/031-dark-mode-scope-and-token-policy.md)
-- [Authority Registry operating model](tickets/032-authority-registry-operating-model.md)
-- [Application integration scope boundary](tickets/033-application-integration-scope-boundary.md)
 
 ## Testnet MVP implementation queue
 
 - [Bootstrap the demo application safely](tickets/implementation-testnet-01-bootstrap-demo-application-safely.md) — complete 2026-08-08: production startup plus `/health` and public-config boundary were verified; smoke (6), typecheck, and full suite (46) pass.
-- [Establish secure profiles, sessions, and Workspaces](tickets/implementation-testnet-02-create-secure-participant-sessions-and-wallets.md) — partial local evidence.
+- [Establish secure profiles, sessions, and Workspaces](tickets/implementation-testnet-02-create-secure-participant-sessions-and-wallets.md) — blocked / check later 2026-08-09: an unrestricted local browser previously verified six-digit OTP sign-in, durable Profile hydration after refresh, the minimal account-aware confirmation, and sign-out before a different-account email flow. This session confirmed the linked-project OTP and Workspace switcher, but browser Workspace creation failed safely even though a privileged linked-database diagnostic can create the Workspace and owner membership. The port-3456 local server could not be restarted because the host denied termination. Revisit after that server can be restarted or the request failure is diagnosed; browser creation, cross-account private-image access, rejected-upload handling, and Gmail delivery confirmation remain. Typecheck and 58 tests pass.
 - [Link and present user-owned wallets](tickets/implementation-testnet-02a-link-user-owned-wallets-to-supabase-accounts.md) — partial wallet-capability evidence.
 - [Invite project participants without widening Workspace access](tickets/implementation-testnet-03-restrict-agreement-access-to-invited-participants.md) — partial local evidence.
 - [Create a Workspace-owned Project and standalone Proposal](tickets/implementation-testnet-04-create-a-validated-custom-payment-agreement-draft.md)
@@ -62,11 +41,12 @@ The [implementation completion reference](implementation-completion-reference.md
 
 ## Post-login workspace implementation queue
 
-- [Establish the responsive signed-in app shell](tickets/implementation-post-login-01-establish-responsive-signed-in-app-shell.md)
-- [Deliver the action-first Dashboard](tickets/implementation-post-login-02-deliver-action-first-dashboard.md)
-- [Deliver table-first Workspace Contracts](tickets/implementation-post-login-03-deliver-table-first-workspace-contracts.md)
+- [Establish the responsive signed-in app shell](tickets/implementation-post-login-01-establish-responsive-signed-in-app-shell.md) — complete 2026-08-08: accessible sidebar/drawer/avatar controls, responsive bottom navigation, canonical People alias coverage, typecheck, production build, and 48 tests pass.
+- [Deliver the action-first Dashboard](tickets/implementation-post-login-02-deliver-action-first-dashboard.md) — complete 2026-08-08: action-first hierarchy, RLS-scoped Home data, authoritative milestone timeline and analytics, loading/empty/error states, responsive browser acceptance, typecheck, and 48-test suite verified.
+- [Deliver table-first Workspace Contracts](tickets/implementation-post-login-03-deliver-table-first-workspace-contracts.md) — blocked / check later 2026-08-09: RLS-scoped Contract titles, semantic table/mobile records, user-facing stage labels, responsive no-overflow checks, typecheck, production build, `git diff --check`, and 58 tests pass. OTP and a linked RLS query verified one approved Buyer Proposal is durable and caller-visible, but browser Contracts and Dashboard reads now return generic `Request failed.` responses. Do not select again until that authenticated read failure is diagnosed; live filter acceptance and the second test Proposal remain.
+- [Deliver Profile Settings and discoverability foundation](tickets/implementation-post-login-05-deliver-profile-settings-and-discoverability-foundation.md) — complete 2026-08-09: accessible avatar contrast, hydrated/truncated signed-in identity, private-image upload card, short-lived owner image URLs in Settings and the sidebar, protected discoverability, API authorization, and linked-project cross-Profile RLS evidence verified; typecheck, full 53-test suite, and production build pass.
+- [Eliminate cross-route profile loading jitter](tickets/implementation-post-login-09-eliminate-cross-route-profile-loading-jitter.md) — in progress 2026-08-09: reserved loading identity, verified atomic image/fallback resolution, stale-result protection, focused tests (4), typecheck, production build, and full 57-test suite pass; authenticated browser navigation acceptance remains.
 - [Deliver role-led Proposal creation](tickets/implementation-post-login-04-deliver-role-led-proposal-creation.md)
-- [Deliver Profile Settings and discoverability foundation](tickets/implementation-post-login-05-deliver-profile-settings-and-discoverability-foundation.md)
-- [Deliver People discovery](tickets/implementation-post-login-06-deliver-people-discovery.md)
+- [Deliver People discovery](tickets/implementation-post-login-06-deliver-people-discovery.md) â€” in progress 2026-08-09: safe endpoint payload, username/blocked-profile RLS migration, and responsive Discover loading/empty/error/access-boundary UI are implemented; focused tests, full 58-test suite, typecheck, build, linked-project migration, and linked RLS regression pass. Live OTP succeeds but the server-side Supabase user lookup rejects the fresh browser session at `/api/session`, so authenticated browser privacy acceptance remains.
 - [Deliver My network and Requests](tickets/implementation-post-login-07-deliver-my-network-and-requests.md)
 - [Connect People to Proposal creation](tickets/implementation-post-login-08-connect-people-to-proposal-creation.md)

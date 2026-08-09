@@ -1,0 +1,4 @@
+@media (min-width: 761px) and (max-width: 900px) {
+  .contract-table { display: none; }
+  .mobile-records { display: grid; }
+}

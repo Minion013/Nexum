@@ -163,6 +163,12 @@ begin
   ) then
     raise exception 'A discoverable Profile was not available through the signed-in People directory.';
   end if;
+  if not exists (
+    select 1 from public.discover_people('pf-000000000104') person
+    where person.id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'A discoverable Profile was not available through its username.';
+  end if;
   if exists (
     select 1 from public.discover_people() person
     where person.id = '00000000-0000-4000-8000-000000000105'
@@ -227,6 +233,19 @@ do $$
 declare
   blocked_by_unrelated_profile boolean := false;
 begin
+  if exists (
+    select 1
+    from public.profiles
+    where id = '00000000-0000-4000-8000-000000000101'
+  ) then
+    raise exception 'An unrelated Profile unexpectedly read another Profile''s protected details.';
+  end if;
+  update public.profiles
+  set bio = 'unrelated profile write attempt'
+  where id = '00000000-0000-4000-8000-000000000101';
+  if found then
+    raise exception 'An unrelated Profile unexpectedly updated another Profile''s settings.';
+  end if;
   begin
     perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'block');
   exception
@@ -430,6 +449,18 @@ begin
       and status = 'blocked'
   ) then
     raise exception 'A connection recipient could not block its pending request.';
+  end if;
+end;
+$$;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000101', true);
+do $$
+begin
+  if exists (
+    select 1 from public.discover_people() person
+    where person.id = '00000000-0000-4000-8000-000000000104'
+  ) then
+    raise exception 'A blocked Profile was unexpectedly available through the signed-in People directory.';
   end if;
 end;
 $$;
