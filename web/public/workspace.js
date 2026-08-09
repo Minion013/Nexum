@@ -29,7 +29,8 @@ function dashboardError(error) {
   const subtitle = $('#dashboard-subtitle');
   if (subtitle) subtitle.textContent = 'Your Dashboard could not be loaded. Check your connection and sign-in, then try again.';
   [['#attention-count', '—'], ['#active-count', '—'], ['#workspace-count', '—']].forEach(([selector, value]) => { const node = $(selector); if (node) node.textContent = value; });
-  const message = error?.message || 'Dashboard data is unavailable.';
+  const rawMessage = error?.message || '';
+  const message = /^(?:the )?request failed\.?$/i.test(rawMessage) ? 'Dashboard data is temporarily unavailable. Please refresh the page.' : rawMessage || 'Dashboard data is unavailable.';
   const sessionExpired = /sign-in session has expired/i.test(message);
   ['#action-list', '#timeline'].forEach(selector => {
     const target = $(selector);
@@ -72,6 +73,74 @@ async function initDashboard() {
   const result = await authenticatedRequest('/api/home');
   $('#dashboard-subtitle').textContent = 'Your Contract actions stay scoped to the Workspaces and Contract Parties you can access.';
   renderDashboard(result.home);
+}
+function workspaceStatus(message, className = '') {
+  const status = $('#workspace-create-status');
+  if (!status) return;
+  status.className = className;
+  status.textContent = message;
+}
+function renderWorkspaceList(workspaces) {
+  const list = $('#workspace-list');
+  if (!list) return;
+  list.setAttribute('aria-busy', 'false');
+  const selectedId = new URLSearchParams(window.location.search).get('workspace');
+  list.replaceChildren();
+  if (!workspaces.length) {
+    list.append(text('p', 'Your personal Workspace is being prepared.', 'empty'));
+    return;
+  }
+  workspaces.forEach(workspace => {
+    const item = document.createElement('article');
+    item.className = 'list-item workspace-list-item';
+    const copy = document.createElement('div');
+    copy.append(text('strong', workspace.name), text('small', `${workspace.kind === 'personal' ? 'Personal' : 'Collaborative'} Workspace · ${workspace.membershipRole}`));
+    const current = workspace.id === selectedId;
+    const action = text('button', current ? 'Current Workspace' : 'Open Workspace', 'button');
+    action.type = 'button';
+    action.disabled = current;
+    action.addEventListener('click', () => selectWorkspace(workspace.id, workspaces));
+    item.append(copy, action);
+    list.append(item);
+  });
+}
+function selectWorkspace(workspaceId, workspaces) {
+  window.history.replaceState({}, '', `/workspace?workspace=${encodeURIComponent(workspaceId)}`);
+  renderWorkspaceList(workspaces);
+}
+async function initWorkspaces() {
+  const list = $('#workspace-list');
+  if (list) list.replaceChildren(text('p', 'Loading your Workspaces…', 'empty'));
+  let workspaces = (await authenticatedRequest('/api/workspaces')).workspaces ?? [];
+  renderWorkspaceList(workspaces);
+  const form = $('#workspace-create-form');
+  const name = form?.elements.name;
+  name?.addEventListener('input', () => name.setCustomValidity(''));
+  form?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const trimmedName = name.value.trim();
+    if (!trimmedName) {
+      name.setCustomValidity('Enter a Workspace name.');
+      name.reportValidity();
+      workspaceStatus('Enter a Workspace name before creating it.', 'error');
+      return;
+    }
+    name.setCustomValidity('');
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    workspaceStatus('Creating Workspace…');
+    try {
+      const { workspace } = await authenticatedRequest('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: trimmedName }) });
+      form.reset();
+      workspaces = [...workspaces, workspace];
+      selectWorkspace(workspace.id, workspaces);
+      workspaceStatus(`${workspace.name} is ready. You are its owner.`);
+    } catch (error) {
+      workspaceStatus(error.message || 'This Workspace could not be created.', 'error');
+    } finally {
+      submit.disabled = false;
+    }
+  });
 }
 function filteredContracts(home) { const workspace = $('#workspace-filter').value; const status = $('#stage-filter').value; const responsibility = $('#responsibility-filter').value; return (home.contracts ?? []).filter(contract => (!workspace || contract.workspaceName === workspace) && (!status || contract.status === status) && (!responsibility || responsibility === contract.responsibility)); }
 function appendField(record, label, value) { record.append(text('span', label, 'label'), text('span', value)); }
@@ -182,9 +251,9 @@ function ensureContractResponsibilityFilter() {
     select.append(option);
   }
 }
-const init = document.body.dataset.page === 'dashboard' ? initDashboard : document.body.dataset.page === 'contracts' ? initContracts : document.body.dataset.page === 'people' ? initPeopleEnhanced : document.body.dataset.page === 'settings' ? initRefinedSettings : null;
+const init = document.body.dataset.page === 'dashboard' ? initDashboard : document.body.dataset.page === 'workspace' ? initWorkspaces : document.body.dataset.page === 'contracts' ? initContracts : document.body.dataset.page === 'people' ? initPeopleEnhanced : document.body.dataset.page === 'settings' ? initRefinedSettings : null;
 Promise.resolve(init?.()).then(ensureContractResponsibilityFilter).catch(error => {
   const target = $('#request-error');
-  if (target) { target.hidden = false; target.textContent = error.message; }
+  if (target && document.body.dataset.page !== 'dashboard') { target.hidden = false; target.textContent = error.message; }
   if (document.body.dataset.page === 'dashboard') dashboardError(error);
 });

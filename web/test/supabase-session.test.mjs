@@ -227,6 +227,28 @@ test('a verified Profile creates a named Workspace only for itself', async () =>
   }
 });
 
+test('an empty Workspace name is rejected before the Workspace workflow runs', async () => {
+  let workflowCalled = false;
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'workspace-jwt') throw new Error('invalid token');
+      return { id: '33333333-3333-4333-8333-333333333333', email: 'member@example.com' };
+    },
+    workspaceWorkflow: async () => {
+      workflowCalled = true;
+      throw new Error('The workflow must not receive an empty Workspace name.');
+    }
+  });
+  try {
+    const response = await request(origin, '/api/workspaces', { method: 'POST', token: 'workspace-jwt', body: { name: '   ' } });
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), { error: 'Workspace name is required.' });
+    assert.equal(workflowCalled, false);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('an authenticated user receives only their durable Home data', async () => {
   const homeCalls = [];
   const { server, origin } = await start({

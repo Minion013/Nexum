@@ -705,7 +705,8 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/workspaces' && request.method === 'POST') {
         const session = await authenticate();
-        const workspace = await workspaceWorkflow({ ...await json(request), userId: session.userId, accessToken: session.accessToken });
+        const payload = await json(request);
+        const workspace = await workspaceWorkflow({ ...payload, name: requiredText(payload.name, 'Workspace name', 120), userId: session.userId, accessToken: session.accessToken });
         return respond(response, 201, { workspace });
       }
       if (url.pathname === '/api/home' && request.method === 'GET') {
