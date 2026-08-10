@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="A private PactFlow Contract draft." />
+    <meta name="description" content="A PactFlow Contract Draft." />
     <title>Contract draft — PactFlow</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/home.css" />
   </head>
   <body class="home-page">
-    <a class="skip-link" href="#main-content">Skip to Contract draft</a>
+    <a class="skip-link" href="#main-content">Skip to Contract</a>
     <header class="home-header"><a class="brand" href="/home">Pact<span>Flow</span></a><nav aria-label="Primary navigation"><a href="/home">Dashboard</a><a aria-current="page" href="/contracts">Contracts</a><a href="/people">People</a><a href="/settings">Profile Settings</a></nav><button id="sign-out" class="home-sign-out" type="button">Sign out</button></header>
     <main id="main-content" class="home-main" tabindex="-1">
       <p id="request-error" class="home-error" aria-live="polite" hidden></p>
-      <section class="home-intro"><p class="eyebrow">Private Contract draft</p><h1 id="contract-title">Loading Contract…</h1><p id="contract-summary">Only Contract Parties can view or edit this private draft. It cannot move funds.</p></section>
+      <section class="home-intro"><p class="eyebrow">Contract Draft</p><h1 id="contract-title">Loading Contract…</h1><p id="contract-summary">Only Contract Parties can view or edit this Contract Draft. It cannot move funds.</p></section>
       <section id="contract-copilot" class="home-panel" hidden aria-labelledby="contract-copilot-title">
         <div class="home-panel-heading"><div><p class="eyebrow">Drafting co-pilot</p><h2 id="contract-copilot-title">Turn a commercial brief into editable starting terms</h2><p>Suggestions are not saved or shared until you review, edit, and validate the Contract draft.</p></div></div>
         <form id="contract-copilot-form" class="home-contract-form"><label>Plain-language commercial brief<textarea name="brief" maxlength="3200" rows="4" required placeholder="Describe the outcomes, scope, and any delivery dates you have in mind."></textarea></label><p class="contract-form-help"><strong>No Contract or payment authority.</strong> The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes. Do not include passwords, private keys, or other secrets.</p><button class="home-secondary-action" type="submit">Suggest editable terms</button><p id="contract-copilot-status" class="home-form-status" aria-live="polite"></p></form>
@@ -30,6 +30,10 @@
         <div class="contract-draft-footer"><p><strong>No payment authority.</strong> Sharing creates an immutable Version for the Contract Parties; it has no wallet connection, vault, funding, or settlement capability.</p><button class="home-primary-action" type="submit">Validate and share Version</button></div>
         <p id="contract-form-status" class="home-form-status" aria-live="polite"></p>
       </form>
+      <section class="home-panel" aria-labelledby="contract-escrow-title">
+        <p class="eyebrow">Contract Escrow Vault</p><h2 id="contract-escrow-title">Escrow status</h2>
+        <p>No Escrow Vault has been deployed for this Contract. There is no on-chain balance or activity to display.</p>
+      </section>
       <section id="contract-review" class="home-panel contract-review" hidden aria-labelledby="contract-review-title">
         <div class="home-panel-heading"><div><p class="eyebrow">Version review</p><h2 id="contract-review-title">Review the exact shared Version</h2><p id="contract-review-summary"></p></div><span id="contract-version-number" class="home-status-note"></span></div>
         <p id="contract-version-hash" class="contract-version-hash"></p>

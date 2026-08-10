@@ -174,6 +174,7 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
           latestVersionNumber: latestVersion.version_number,
           counterparty,
           responsibility,
+          milestoneCount: milestones.length,
           ...(nextMilestone ? { nextMilestone: { title: nextMilestone.title, deadlineUtc: nextMilestone.deliveryDeadlineUtc } } : {}),
           lastActivityAt: contract.updated_at
         };

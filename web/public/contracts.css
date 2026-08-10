@@ -1,4 +1,1 @@
-@media (min-width: 761px) and (max-width: 900px) {
-  .contract-table { display: none; }
-  .mobile-records { display: grid; }
-}
+.contract-table td strong,.contract-table td small{display:block}.contract-table td small{margin-top:3px;color:var(--pf-muted)}.contract-table td{font-size:14px}.contract-table td:nth-child(5),.contract-table td:nth-child(6){color:var(--pf-muted);white-space:nowrap}.contract-table .button{padding:7px 10px;font-size:13px}.contract-record{grid-template-columns:1fr auto}.contract-record-heading{display:grid;gap:3px}.contract-record-heading small{color:var(--pf-muted)}.contract-record-action{grid-column:1/-1}.contract-record-action .button{width:100%}@media (min-width:761px) and (max-width:1020px){.contract-table{display:none}.mobile-records{display:grid}}@media(max-width:760px){.contract-record{gap:12px}.contract-record .status{justify-self:end}.contract-record .label{display:block;margin-bottom:2px}}

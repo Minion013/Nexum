@@ -1,5 +1,5 @@
 import './app-shell.js';
-import { authenticatedRequest, supabase } from './supabase-auth.js';
+import { authenticatedRequest } from './supabase-auth.js';
 
 const form = document.querySelector('#contract-draft-form');
 const milestoneList = document.querySelector('#milestone-list');
@@ -91,7 +91,7 @@ function renderDraft(contract) {
   const notices = sections.notices ?? {};
   document.title = `${scope.title || 'Contract draft'} — PactFlow`;
   document.querySelector('#contract-title').textContent = scope.title || 'Contract draft';
-  document.querySelector('#contract-summary').textContent = `Version ${contract.versionNumber} · ${contract.status.replaceAll('_', ' ')} · Only Contract Parties can view or edit this private draft.`;
+  document.querySelector('#contract-summary').textContent = `Version ${contract.versionNumber} · ${contract.status.replaceAll('_', ' ')} · Only Contract Parties can view or edit this Contract Draft.`;
   form.elements.buyerPartyRef.value = value(parties.buyer, 'partyRef', 'initiating_party');
   form.elements.buyerResponsibility.value = value(parties.buyer, 'responsibility');
   form.elements.serviceProviderPartyRef.value = value(parties.serviceProvider, 'partyRef', 'counterparty');
@@ -227,14 +227,13 @@ form.addEventListener('submit', async event => {
   clearValidationIssues();
   const submit = form.querySelector('[type="submit"]');
   submit.disabled = true;
-  status.textContent = 'Validating and saving your private Contract Version…';
+  status.textContent = 'Validating and saving your Contract Version…';
   try {
     const response = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}`, { method: 'PUT', body: JSON.stringify(draftFromForm()) });
     renderDraft(response.contract);
     status.textContent = 'Validated Version shared with its Contract Parties. It has no payment authority.';
   } catch (requestError) { showValidationIssues(requestError.issues); if (!status.textContent) status.textContent = requestError.message; } finally { submit.disabled = false; }
 });
-document.querySelector('#sign-out').onclick = async () => { await (await supabase()).auth.signOut(); window.location.assign('/'); };
 document.querySelector('#accept-contract-version').onclick = async event => {
   const accept = event.currentTarget; accept.disabled = true;
   document.querySelector('#contract-review-status').textContent = 'Recording your Contract Acceptance for this exact Version…';
@@ -250,6 +249,16 @@ document.querySelector('#accept-contract-version').onclick = async event => {
   catch (requestError) { document.querySelector('#contract-review-status').textContent = requestError.message; } finally { accept.disabled = false; }
 };
 (async () => {
-  try { const [draftResponse, reviewResponse] = await Promise.all([authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}`), authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/review`)]); renderDraft(draftResponse.contract); renderReview(reviewResponse.review); }
-  catch (requestError) { error.hidden = false; error.textContent = requestError.message; window.setTimeout(() => window.location.assign('/contracts'), 1_200); }
+  try {
+    const draftResponse = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}`);
+    renderDraft(draftResponse.contract);
+    try {
+      const reviewResponse = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contractId)}/review`);
+      renderReview(reviewResponse.review);
+    } catch (reviewError) {
+      if (draftResponse.contract.status !== 'private_draft') throw reviewError;
+      // A private one-party Contract Draft remains editable before its review context is available.
+    }
+  }
+  catch (requestError) { error.hidden = false; error.textContent = requestError.message; }
 })();

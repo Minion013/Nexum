@@ -288,7 +288,7 @@ test('the Home loader queries only RLS-visible profile-party Contracts', async (
   assert.deepEqual(await loadHome({ userId: 'profile-id', accessToken: 'access-token' }), {
     contracts: [{
       id: 'contract-id', title: 'Checkout redesign', status: 'active', latestVersionNumber: 3,
-      counterparty: 'seller@example.com', responsibility: 'Buyer',
+      counterparty: 'seller@example.com', responsibility: 'Buyer', milestoneCount: 2,
       nextMilestone: { title: 'Research', deadlineUtc: '2030-09-10T09:00:00.000Z' },
       lastActivityAt: '2030-09-01T00:00:00.000Z'
     }]
