@@ -5,16 +5,16 @@ import {EscrowVault, VaultInit} from "./EscrowVault.sol";
 
 /// @notice Permissionless factory with no ability to administer a deployed vault.
 contract EscrowVaultFactory {
-    bytes32 private constant APPROVAL_TYPEHASH = keccak256("AgreementApproval(bytes32 agreementHash)");
+    bytes32 private constant APPROVAL_TYPEHASH = keccak256("ContractAcceptance(bytes32 contractHash)");
     bytes32 private constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant NAME_HASH = keccak256("PactFlow");
     bytes32 private constant VERSION_HASH = keccak256("1");
 
-    mapping(bytes32 => address) public vaultForAgreement;
+    mapping(bytes32 => address) public vaultForContract;
 
-    event VaultCreated(bytes32 indexed agreementHash, address indexed vault, address indexed creator);
+    event VaultCreated(bytes32 indexed contractHash, address indexed vault, address indexed creator);
 
-    function agreementHash(VaultInit calldata init) public pure returns (bytes32) {
+    function contractHash(VaultInit calldata init) public pure returns (bytes32) {
         return keccak256(abi.encode(
             address(init.token), init.buyer, init.seller, init.resolver, init.feeRecipient, init.feeBps,
             init.versionHash, init.acceptanceDeadline, init.fundingDeadline, keccak256(abi.encode(init.amounts)),
@@ -34,14 +34,14 @@ contract EscrowVaultFactory {
     ) external returns (EscrowVault vault) {
         require(init.versionHash != bytes32(0), "version hash required");
         require(block.timestamp <= init.acceptanceDeadline, "acceptance expired");
-        bytes32 hash = agreementHash(init);
-        require(vaultForAgreement[hash] == address(0), "vault already exists");
+        bytes32 hash = contractHash(init);
+        require(vaultForContract[hash] == address(0), "vault already exists");
         bytes32 digest = approvalDigest(hash);
         require(_recover(digest, buyerSignature) == init.buyer && _recover(digest, sellerSignature) == init.seller, "invalid approval");
         require(msg.sender == init.buyer || msg.sender == init.seller, "signed participant only");
 
         vault = new EscrowVault(init);
-        vaultForAgreement[hash] = address(vault);
+        vaultForContract[hash] = address(vault);
         emit VaultCreated(hash, address(vault), msg.sender);
     }
 

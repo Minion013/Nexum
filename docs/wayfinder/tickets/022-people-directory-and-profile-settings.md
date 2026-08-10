@@ -1,5 +1,5 @@
 ---
-parent: ../post-login-workspace-redesign-map.md
+parent: ../post-login-contract-ux-migration-map.md
 status: closed
 type: prototype
 assignee: Codex
@@ -11,8 +11,8 @@ blocked_by:
 
 ## Question
 
-How should the People navigation area support Discover, My network, and Requests while making Profile Settings permanently reachable but clearly separate from Workspace Settings?
+How should the People navigation area support Discover, My network, and Requests while making Profile Settings permanently reachable but clearly separate from Profile Settings?
 
 ## Resolution
 
-Make People a peer navigation area with Discover, My network, and Requests. Keep Profile Settings permanently available as a personal-account destination, clearly separate from Workspace Settings and its administration scope.
+Make People a peer navigation area with Discover, My network, and Requests. Keep Profile Settings permanently available as a personal-account destination, clearly separate from Profile Settings and its administration scope.

@@ -21,10 +21,16 @@ insert into public.authority_case_officers (authority_id, profile_id)
 values ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000103');
 
 insert into public.contracts (id, created_by_profile_id, status)
-values ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000101', 'active');
+values ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000101', 'private_draft');
 
 insert into public.contract_parties (id, contract_id, party_kind, profile_id)
-values ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000301', 'profile', '00000000-0000-4000-8000-000000000101');
+values
+  ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000301', 'profile', '00000000-0000-4000-8000-000000000101'),
+  ('00000000-0000-4000-8000-000000000402', '00000000-0000-4000-8000-000000000301', 'profile', '00000000-0000-4000-8000-000000000104');
+
+update public.contracts
+set status = 'active'
+where id = '00000000-0000-4000-8000-000000000301';
 
 insert into public.contract_versions (id, contract_id, version_number, version_hash, authority_snapshot, selected_authority_id, created_by_profile_id)
 values (
@@ -75,6 +81,15 @@ values
 insert into public.private_evidence_references (id, contract_id, milestone_key, reference_hash, created_by_profile_id)
 values ('00000000-0000-4000-8000-000000000702', '00000000-0000-4000-8000-000000000303', 'draft-evidence', 'private-draft-evidence-hash', '00000000-0000-4000-8000-000000000101');
 
+insert into public.workspaces (id, owner_profile_id, name, kind)
+values ('00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-000000000101', 'Retired Contract access fixture', 'collaborative');
+
+insert into public.workspace_memberships (workspace_id, profile_id, membership_role)
+values ('00000000-0000-4000-8000-000000000601', '00000000-0000-4000-8000-000000000102', 'member');
+
+insert into public.proposal_workspace_access (contract_id, workspace_id)
+values ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-000000000601');
+
 do $$
 begin
   begin
@@ -83,7 +98,7 @@ begin
     raise exception 'A Profile Contract Party unexpectedly accepted a delegation.';
   exception
     when others then
-      if position('only by a Workspace Contract Party' in sqlerrm) = 0 then
+      if position('cannot grant Profile-owned Contract access' in sqlerrm) = 0 then
         raise;
       end if;
   end;
@@ -154,8 +169,8 @@ do $$
 declare
   invitation_id uuid;
 begin
-  if (select count(*) from public.workspaces) <> 1 then
-    raise exception 'A party must see only its provisioned personal workspace.';
+  if (select count(*) from public.workspaces) <> 2 then
+    raise exception 'A party must see only its personal workspace and retained-access regression fixture.';
   end if;
   if not exists (
     select 1 from public.discover_people('RLS test') person
@@ -176,6 +191,9 @@ begin
     raise exception 'A private Profile was unexpectedly available through the signed-in People directory.';
   end if;
   perform public.manage_profile_connection('00000000-0000-4000-8000-000000000104', 'send');
+  if (select public.create_profile_owned_contract('Profile-owned Contract', 'A durable Contract created directly by a User Profile.', 'invitee@example.test', 'buyer')) is null then
+    raise exception 'An authenticated User Profile could not create a Contract directly.';
+  end if;
   insert into public.workspaces (owner_profile_id, name, kind)
   values ('00000000-0000-4000-8000-000000000101', 'Party collaboration', 'collaborative');
   if not exists (
@@ -269,7 +287,7 @@ begin
       end if;
   end;
   if exists (select 1 from public.contracts where id = '00000000-0000-4000-8000-000000000303') then
-    raise exception 'An unrelated Profile unexpectedly read a private Contract after changing the invitation identifier.';
+    raise exception 'A non-party unexpectedly read a private Contract through retained Contract Draft access.';
   end if;
   if exists (select 1 from public.profile_notifications where event_key = 'contract-invitation:' || current_setting('test.invitation_id')) then
     raise exception 'An unrelated Profile unexpectedly read an invitee''s private notification.';
@@ -350,6 +368,9 @@ begin
       and profile_id = '00000000-0000-4000-8000-000000000104'
   ) then
     raise exception 'Accepting the invitation did not create the invited Profile Contract Party.';
+  end if;
+  if (select count(*) from public.contract_parties where contract_id = '00000000-0000-4000-8000-000000000303') <> 2 then
+    raise exception 'An invited Contract must have exactly two User Profile parties.';
   end if;
   if not exists (select 1 from public.contract_versions where contract_id = '00000000-0000-4000-8000-000000000303')
     or not exists (select 1 from public.contract_sections section join public.contract_versions version on version.id = section.contract_version_id where version.contract_id = '00000000-0000-4000-8000-000000000303')

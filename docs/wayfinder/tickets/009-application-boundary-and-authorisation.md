@@ -12,7 +12,7 @@ blocked_by:
 
 ## Question
 
-How should Next.js, **Supabase Auth as the participant-account system of record**, Supabase row-level access, user-controlled EVM test wallets, and server routes divide responsibility so users can coordinate agreements without the backend becoming a wallet custodian or payment decision-maker?
+How should Next.js, **Supabase Auth as the participant-account system of record**, Supabase row-level access, user-controlled EVM test wallets, and server routes divide responsibility so users can coordinate Contracts without the backend becoming a wallet custodian or payment decision-maker?
 
 ## Resolution
 

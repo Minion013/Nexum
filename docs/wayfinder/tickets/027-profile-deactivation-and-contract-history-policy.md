@@ -11,7 +11,7 @@ blocked_by:
 
 ## Question
 
-When a user with active or historical payment Contracts requests deletion or deactivation, which identity, access, notice, evidence, and agreement-history records remain, and which profile data is removed or anonymised?
+When a user with active or historical payment Contracts requests deletion or deactivation, which identity, access, notice, evidence, and Contract-history records remain, and which profile data is removed or anonymised?
 
 ## Resolution
 

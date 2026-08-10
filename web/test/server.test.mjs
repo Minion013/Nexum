@@ -97,7 +97,6 @@ test('authenticated area pages are served from their canonical URLs', async () =
     for (const path of [
       '/home',
       '/contracts',
-      '/workspace',
       '/people',
       '/notifications',
       '/settings',
@@ -109,7 +108,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
     }
     const home = await request(server, '/home');
     const homeMarkup = await home.text();
-    for (const href of ['/home', '/contracts', '/workspace', '/people', '/settings']) {
+    for (const href of ['/home', '/contracts', '/people', '/settings']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
     assert.match(homeMarkup, /What needs you now/);
@@ -122,12 +121,13 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(homeMarkup, /class="profile-name profile-name-loading"/);
     assert.match(homeMarkup, /aria-label="Loading profile" aria-busy="true"/);
     const contractsMarkup = await (await request(server, '/contracts')).text();
-    for (const label of ['Workspace', 'Stage', 'Your responsibility', 'Counterparty', 'Next milestone', 'Last activity', 'Action']) {
+    for (const label of ['Stage', 'Your responsibility', 'Counterparty', 'Next milestone', 'Last activity', 'Action']) {
       assert.match(contractsMarkup, new RegExp(`>${label}<`), label);
     }
     assert.match(contractsMarkup, /<table class="contract-table">/);
     assert.match(contractsMarkup, /id="contract-records" class="mobile-records" aria-live="polite"/);
-    assert.match(contractsMarkup, />Proposal</);
+    assert.match(contractsMarkup, /Create Contract Draft/);
+    assert.doesNotMatch(contractsMarkup, /Workspace|Proposal|Agreement/);
     assert.doesNotMatch(contractsMarkup, /Private Draft|Private Contract/);
     const notifications = await request(server, '/notifications');
     assert.match(await notifications.text(), /Private inbox/);
@@ -142,6 +142,9 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /Review the exact shared Version/);
     assert.match(await (await request(server, '/contracts/not-a-contract')).text(), /contract\.bundle\.js/);
     assert.equal((await request(server, '/contracts/not-a-contract/extra')).status, 404);
+    for (const retiredPath of ['/workspace', '/workspace-list.html', '/workspace.js', '/workspace.css', '/workspace.bundle.js', '/contacts.html', '/api/workspaces']) {
+      assert.equal((await request(server, retiredPath)).status, 404, retiredPath);
+    }
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

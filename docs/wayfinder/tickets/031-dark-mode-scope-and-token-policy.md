@@ -1,5 +1,5 @@
 ---
-parent: ../post-login-workspace-redesign-map.md
+parent: ../post-login-contract-ux-migration-map.md
 status: closed
 type: prototype
 assignee: Codex
@@ -15,4 +15,4 @@ Should the hackathon MVP provide dark mode, and if so which semantic tokens, con
 
 ## Resolution
 
-Do not offer a supported dark mode in the hackathon MVP. Keep the semantic-token architecture capable of supporting a future theme, but design, implement, and test only the established light workspace-utility experience.
+Do not offer a supported dark mode in the hackathon MVP. Keep the semantic-token architecture capable of supporting a future theme, but design, implement, and test only the established light Contract-focused experience.

@@ -80,7 +80,6 @@ function standalonePage(urlPath) {
   const authenticatedPages = {
     '/home': 'home.html',
     '/contracts': 'contracts.html',
-    '/workspace': 'workspace-list.html',
     '/people': 'people.html',
     '/notifications': 'notifications.html',
     '/contacts': 'people.html',
@@ -120,50 +119,18 @@ async function ensureProfileForAppData(supabase, unavailableMessage) {
   const { error } = await supabase.rpc('ensure_profile');
   if (error) throw new AuthenticationError(unavailableMessage);
 }
-function mapWorkspaces(rows) {
-  return rows.map(({ membership_role: membershipRole, workspaces }) => ({ id: workspaces.id, name: workspaces.name, kind: workspaces.kind, membershipRole }));
-}
-export function createWorkspaceLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
-  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
-  return async ({ userId, accessToken }) => {
-    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
-    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow workspace.');
-    const { data, error } = await supabase
-      .from('workspace_memberships')
-      .select('membership_role, workspaces!inner(id, name, kind)')
-      .eq('profile_id', userId);
-    if (error) throw new AuthenticationError('Your PactFlow workspaces are unavailable.');
-    return mapWorkspaces(data);
-  };
-}
-export function createWorkspaceWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
-  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
-  return async ({ userId, accessToken, name }) => {
-    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
-      .from('workspaces')
-      .insert({ owner_profile_id: userId, name: requiredText(name, 'Workspace name', 120), kind: 'collaborative' })
-      .select('id, name, kind')
-      .single();
-    if (error || !data) throw new ValidationError('We could not create this Workspace.');
-    return { id: data.id, name: data.name, kind: data.kind, membershipRole: 'owner' };
-  };
-}
 export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
     await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow Home.');
-    const [workspaceResult, contractResult] = await Promise.all([
-      supabase.from('workspace_memberships').select('membership_role, workspaces!inner(id, name, kind)').eq('profile_id', userId),
-      supabase.from('contracts').select('id, status, updated_at, contract_versions(version_number, contract_sections(section_type, terms)), contract_parties(workspace_id, profile_id), proposal_workspace_access(workspace_id)').order('updated_at', { ascending: false })
-    ]);
-    if (workspaceResult.error || contractResult.error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
-    const workspaces = mapWorkspaces(workspaceResult.data);
-    const personalWorkspace = workspaces.find(workspace => workspace.kind === 'personal');
-    const workspaceNames = new Map(workspaces.map(workspace => [workspace.id, workspace.name]));
+    const { data, error } = await supabase
+      .from('contracts')
+      .select('id, status, updated_at, contract_versions(version_number, contract_sections(section_type, terms)), contract_parties(profile_id)')
+      .order('updated_at', { ascending: false });
+    if (error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
     return {
-      workspaces,
-      contracts: contractResult.data.map(contract => {
+      contracts: (data ?? []).map(contract => {
         const versions = contract.contract_versions ?? [];
         const latestVersion = [...versions].sort((left, right) => right.version_number - left.version_number)[0] ?? { version_number: 0, contract_sections: [] };
         const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
@@ -176,17 +143,13 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
           .sort((left, right) => Date.parse(left.deliveryDeadlineUtc) - Date.parse(right.deliveryDeadlineUtc))[0];
         const initiatorIsBuyer = parties.initiator_responsibility === 'buyer' || parties.buyer?.partyRef === 'initiating_party';
         const isInitiator = (contract.contract_parties ?? []).some(party => party.profile_id === userId);
-        const responsibility = isInitiator ? (initiatorIsBuyer ? 'Buyer' : 'Service Provider') : 'Workspace member';
+        const responsibility = isInitiator ? (initiatorIsBuyer ? 'Buyer' : 'Service Provider') : (initiatorIsBuyer ? 'Service Provider' : 'Buyer');
         const counterparty = parties.counterparty_email ?? parties.counterpartyEmail ?? (responsibility === 'Buyer' ? notices.serviceProviderContact : notices.buyerContact) ?? 'Counterparty to be confirmed';
-        const workspaceIds = [...(contract.contract_parties ?? []).map(party => party.workspace_id), ...(contract.proposal_workspace_access ?? []).map(access => access.workspace_id)];
         return {
           id: contract.id,
           title: typeof scope.title === 'string' && scope.title.trim() ? scope.title.trim() : null,
           status: contract.status,
           latestVersionNumber: latestVersion.version_number,
-          workspaceName: workspaceIds
-            .map(workspaceId => workspaceNames.get(workspaceId))
-            .find(Boolean) ?? personalWorkspace?.name ?? 'Personal Contract',
           counterparty,
           responsibility,
           ...(nextMilestone ? { nextMilestone: { title: nextMilestone.title, deadlineUtc: nextMilestone.deliveryDeadlineUtc } } : {}),
@@ -564,7 +527,7 @@ function mapContractReview(contract) {
   if (!version) throw new ValidationError('This Contract has no readable version.');
   const parties = (contract.contract_parties ?? []).map(party => ({
     id: party.id,
-    label: party.profiles?.display_name ?? party.profiles?.email ?? party.workspaces?.name ?? 'Contract Party'
+    label: party.profiles?.display_name ?? party.profiles?.email ?? 'Contract Party'
   }));
   const acceptanceByPartyId = new Map((version.contract_acceptances ?? []).map(acceptance => [acceptance.contract_party_id, { acceptedAt: acceptance.accepted_at, walletAddress: acceptance.signer_wallet_address ?? null }]));
   const presentSectionTypes = new Set((version.contract_sections ?? []).map(section => section.section_type));
@@ -615,20 +578,19 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
   const getReview = async ({ accessToken, contractId }) => {
     const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
       .from('contracts')
-      .select('id, status, contract_parties(id, profiles(display_name, email), workspaces(name)), contract_versions(id, version_number, version_hash, acceptance_ready_at, authority_snapshot, contract_sections(section_type, position, terms), contract_acceptances(contract_party_id, accepted_at, signer_wallet_address))')
+      .select('id, status, contract_parties(id, profiles(display_name, email)), contract_versions(id, version_number, version_hash, acceptance_ready_at, authority_snapshot, contract_sections(section_type, position, terms), contract_acceptances(contract_party_id, accepted_at, signer_wallet_address))')
       .eq('id', requiredText(contractId, 'Contract'))
       .single();
     if (error || !data) throw new ValidationError('This Contract review is unavailable.');
     return mapContractReview(data);
   };
   return {
-    create: async ({ accessToken, workspaceId, name, scope, counterpartyEmail, initiatorResponsibility }) => ({ id: await call({ accessToken }, 'create_role_led_proposal', {
-      owning_workspace_id: requiredUuid(workspaceId, 'Owning Workspace'),
+    create: async ({ accessToken, name, scope, counterpartyEmail, initiatorResponsibility }) => ({ id: await call({ accessToken }, 'create_profile_owned_contract', {
       contract_name: requiredText(name, 'Contract name', 160),
       contract_scope: requiredText(scope, 'Contract scope'),
       counterparty_email: requiredEmail(counterpartyEmail),
-      initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Proposal responsibility')
-    }, 'We could not create this Proposal.') }),
+      initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility')
+    }, 'We could not create this Contract Draft.') }),
     invite: async ({ accessToken, contractId, email }) => ({ id: await call({ accessToken }, 'create_contract_invitation', {
       target_contract_id: requiredText(contractId, 'Contract'),
       invitee_email: requiredEmail(email)
@@ -680,7 +642,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadWorkspaces = createWorkspaceLoader(), workspaceWorkflow = createWorkspaceWorkflow(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
@@ -697,17 +659,6 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, sessionPayload(session, profile));
-      }
-      if (url.pathname === '/api/workspaces' && request.method === 'GET') {
-        const session = await authenticate();
-        const workspaces = await loadWorkspaces({ userId: session.userId, accessToken: session.accessToken });
-        return respond(response, 200, { workspaces });
-      }
-      if (url.pathname === '/api/workspaces' && request.method === 'POST') {
-        const session = await authenticate();
-        const payload = await json(request);
-        const workspace = await workspaceWorkflow({ ...payload, name: requiredText(payload.name, 'Workspace name', 120), userId: session.userId, accessToken: session.accessToken });
-        return respond(response, 201, { workspace });
       }
       if (url.pathname === '/api/home' && request.method === 'GET') {
         const session = await authenticate();
@@ -743,7 +694,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/contracts' && request.method === 'POST') {
         const session = await authenticate();
-        const payload = await json(request);
+        const { workspaceId: _legacyWorkspaceId, ...payload } = await json(request);
         const contract = await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
         return respond(response, 201, { contract });
       }

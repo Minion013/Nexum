@@ -30,7 +30,7 @@
 | Destructive | `#DC2626` | `--color-destructive` |
 | Ring | `#2563EB` | `--color-ring` |
 
-**Color Notes:** Product override: warm off-white surfaces, charcoal text, restrained cobalt actions, and blue/green/amber status tints. Never use saturated surface fills to communicate a Proposal's privacy.
+**Color Notes:** Product override: warm off-white surfaces, charcoal text, restrained cobalt actions, and blue/green/amber status tints. Never use saturated surface fills to communicate a Contract Draft's privacy.
 
 ### Typography
 

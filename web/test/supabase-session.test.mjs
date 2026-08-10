@@ -176,74 +176,14 @@ test('the inbox loader maps only RLS-returned entries and derives the unread cou
   assert.deepEqual(calls, ['ensure_profile', 'list_my_notifications']);
 });
 
-test('an authenticated user can view only their provisioned workspaces', async () => {
-  const workspaceCalls = [];
-  const { server, origin } = await start({
-    verifySupabaseSession: async token => {
-      if (token !== 'workspace-jwt') throw new Error('invalid token');
-      return { id: '33333333-3333-4333-8333-333333333333', email: 'case.officer@example.com' };
-    },
-    loadWorkspaces: async input => {
-      workspaceCalls.push(input);
-      return [{ id: '44444444-4444-4444-8444-444444444444', name: 'Case Officer', kind: 'personal', membershipRole: 'owner' }];
-    }
-  });
+test('retired Workspace endpoints are not exposed, regardless of authentication', async () => {
+  const { server, origin } = await start();
   try {
-    const response = await request(origin, '/api/workspaces', { token: 'workspace-jwt' });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      workspaces: [{ id: '44444444-4444-4444-8444-444444444444', name: 'Case Officer', kind: 'personal', membershipRole: 'owner' }]
-    });
-    assert.deepEqual(workspaceCalls, [{
-      userId: '33333333-3333-4333-8333-333333333333',
-      accessToken: 'workspace-jwt'
-    }]);
-  } finally {
-    await new Promise(resolve => server.close(resolve));
-  }
-});
-
-test('a verified Profile creates a named Workspace only for itself', async () => {
-  const workspaceCalls = [];
-  const { server, origin } = await start({
-    verifySupabaseSession: async token => {
-      if (token !== 'workspace-jwt') throw new Error('invalid token');
-      return { id: '33333333-3333-4333-8333-333333333333', email: 'member@example.com' };
-    },
-    workspaceWorkflow: async input => {
-      workspaceCalls.push(input);
-      return { id: '44444444-4444-4444-8444-444444444444', name: input.name, kind: 'collaborative', membershipRole: 'owner' };
+    for (const requestOptions of [{}, { method: 'POST', body: { name: 'Design studio' }, token: 'workspace-jwt' }]) {
+      const response = await request(origin, '/api/workspaces', requestOptions);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'Unknown endpoint.' });
     }
-  });
-  try {
-    const body = { name: 'Design studio', userId: 'another-profile-id' };
-    assert.equal((await request(origin, '/api/workspaces', { method: 'POST', body })).status, 401);
-    const response = await request(origin, '/api/workspaces', { method: 'POST', token: 'workspace-jwt', body });
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { workspace: { id: '44444444-4444-4444-8444-444444444444', name: 'Design studio', kind: 'collaborative', membershipRole: 'owner' } });
-    assert.deepEqual(workspaceCalls, [{ name: 'Design studio', userId: '33333333-3333-4333-8333-333333333333', accessToken: 'workspace-jwt' }]);
-  } finally {
-    await new Promise(resolve => server.close(resolve));
-  }
-});
-
-test('an empty Workspace name is rejected before the Workspace workflow runs', async () => {
-  let workflowCalled = false;
-  const { server, origin } = await start({
-    verifySupabaseSession: async token => {
-      if (token !== 'workspace-jwt') throw new Error('invalid token');
-      return { id: '33333333-3333-4333-8333-333333333333', email: 'member@example.com' };
-    },
-    workspaceWorkflow: async () => {
-      workflowCalled = true;
-      throw new Error('The workflow must not receive an empty Workspace name.');
-    }
-  });
-  try {
-    const response = await request(origin, '/api/workspaces', { method: 'POST', token: 'workspace-jwt', body: { name: '   ' } });
-    assert.equal(response.status, 422);
-    assert.deepEqual(await response.json(), { error: 'Workspace name is required.' });
-    assert.equal(workflowCalled, false);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
@@ -259,8 +199,7 @@ test('an authenticated user receives only their durable Home data', async () => 
     loadHome: async input => {
       homeCalls.push(input);
       return {
-        workspaces: [{ id: '66666666-6666-4666-8666-666666666666', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
-        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2, workspaceName: 'Member' }]
+        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2 }]
       };
     }
   });
@@ -270,8 +209,7 @@ test('an authenticated user receives only their durable Home data', async () => 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       home: {
-        workspaces: [{ id: '66666666-6666-4666-8666-666666666666', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
-        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2, workspaceName: 'Member' }]
+        contracts: [{ id: '77777777-7777-4777-8777-777777777777', status: 'negotiation', latestVersionNumber: 2 }]
       }
     });
     assert.deepEqual(homeCalls, [{
@@ -283,7 +221,7 @@ test('an authenticated user receives only their durable Home data', async () => 
   }
 });
 
-test('the Home loader queries the caller workspace membership and RLS-visible Contracts', async () => {
+test('the Home loader queries only RLS-visible profile-party Contracts', async () => {
   const calls = [];
   const loadHome = createHomeLoader(
     { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
@@ -291,14 +229,6 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
       rpc: async name => { calls.push({ operation: 'rpc', name }); return { error: null }; },
       from: table => {
         calls.push({ operation: 'from', table });
-        if (table === 'workspace_memberships') return {
-          select: fields => ({
-            eq: async (column, value) => {
-              calls.push({ operation: 'workspace-query', fields, column, value });
-              return { data: [{ membership_role: 'owner', workspaces: { id: 'workspace-id', name: 'Member', kind: 'personal' } }], error: null };
-            }
-          })
-        };
         return {
           select: fields => ({
             order: async (column, options) => {
@@ -313,8 +243,7 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
                     { section_type: 'milestones', terms: { items: [{ title: 'Research', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z' }, { title: 'Delivery', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z' }] } }
                   ]
                 }],
-                contract_parties: [{ workspace_id: 'workspace-id', profile_id: 'profile-id' }],
-                proposal_workspace_access: [{ workspace_id: 'workspace-id' }]
+                contract_parties: [{ profile_id: 'profile-id' }]
               }], error: null };
             }
           })
@@ -324,16 +253,15 @@ test('the Home loader queries the caller workspace membership and RLS-visible Co
   );
 
   assert.deepEqual(await loadHome({ userId: 'profile-id', accessToken: 'access-token' }), {
-    workspaces: [{ id: 'workspace-id', name: 'Member', kind: 'personal', membershipRole: 'owner' }],
     contracts: [{
-      id: 'contract-id', title: 'Checkout redesign', status: 'active', latestVersionNumber: 3, workspaceName: 'Member',
+      id: 'contract-id', title: 'Checkout redesign', status: 'active', latestVersionNumber: 3,
       counterparty: 'seller@example.com', responsibility: 'Buyer',
       nextMilestone: { title: 'Research', deadlineUtc: '2030-09-10T09:00:00.000Z' },
       lastActivityAt: '2030-09-01T00:00:00.000Z'
     }]
   });
   assert.deepEqual(calls[0], { operation: 'rpc', name: 'ensure_profile' });
-  assert.ok(calls.some(call => call.operation === 'workspace-query' && call.fields === 'membership_role, workspaces!inner(id, name, kind)' && call.column === 'profile_id' && call.value === 'profile-id'));
+  assert.ok(!calls.some(call => call.table === 'workspace_memberships'));
   assert.ok(calls.some(call => call.operation === 'contract-query' && call.fields.includes('updated_at') && call.fields.includes('contract_sections') && call.column === 'updated_at' && call.options.ascending === false));
 });
 
@@ -410,14 +338,14 @@ test('a verified user can complete first-time setup without choosing a local dem
   }
 });
 
-test('a verified Workspace member creates a role-led Proposal before explicitly sharing an exact-email invitation', async () => {
+test('a verified Profile creates a Contract without Workspace access before explicitly sharing an exact-email invitation', async () => {
   const calls = [];
   const workflow = createContractWorkflow(
     { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
     () => ({
       rpc: async (name, args) => {
         calls.push({ name, args });
-        if (name === 'create_role_led_proposal') return { data: 'contract-id', error: null };
+        if (name === 'create_profile_owned_contract') return { data: 'contract-id', error: null };
         if (name === 'create_contract_invitation') return { data: 'invitation-id', error: null };
         return { data: null, error: { message: 'unexpected call' } };
       }
@@ -430,7 +358,6 @@ test('a verified Workspace member creates a role-led Proposal before explicitly 
     name: 'Checkout redesign',
     scope: 'Redesign the checkout flow.',
     counterpartyEmail: 'seller@example.com',
-    workspaceId: '00000000-0000-4000-8000-000000000001',
     initiatorResponsibility: 'buyer'
   });
   assert.deepEqual(contract, { id: 'contract-id' });
@@ -442,7 +369,7 @@ test('a verified Workspace member creates a role-led Proposal before explicitly 
   });
   assert.deepEqual(invitation, { id: 'invitation-id' });
   assert.deepEqual(calls, [
-    { name: 'create_role_led_proposal', args: { owning_workspace_id: '00000000-0000-4000-8000-000000000001', contract_name: 'Checkout redesign', contract_scope: 'Redesign the checkout flow.', counterparty_email: 'seller@example.com', initiator_responsibility: 'buyer' } },
+    { name: 'create_profile_owned_contract', args: { contract_name: 'Checkout redesign', contract_scope: 'Redesign the checkout flow.', counterparty_email: 'seller@example.com', initiator_responsibility: 'buyer' } },
     { name: 'create_contract_invitation', args: { target_contract_id: 'contract-id', invitee_email: 'seller@example.com' } }
   ]);
 });
@@ -466,7 +393,7 @@ test('the authenticated API does not create a durable Contract without a Supabas
     assert.equal(created.status, 201);
     assert.deepEqual(await created.json(), { contract: { id: 'contract-id' } });
     assert.deepEqual(calls, [
-      { operation: 'create', input: { ...body, userId: 'profile-id', accessToken: 'durable-jwt' } }
+      { operation: 'create', input: { name: body.name, scope: body.scope, counterpartyEmail: body.counterpartyEmail, initiatorResponsibility: body.initiatorResponsibility, userId: 'profile-id', accessToken: 'durable-jwt' } }
     ]);
   } finally {
     await new Promise(resolve => server.close(resolve));

@@ -12,7 +12,7 @@ blocked_by:
 
 ## Question
 
-What screens, transaction prompts, pending/confirmed/error states, and external-wallet fallback make agreement approval, eUSD funding, evidence submission, release, refund, and resolver actions understandable to Web3-new demo users?
+What screens, transaction prompts, pending/confirmed/error states, and external-wallet fallback make Contract approval, eUSD funding, evidence submission, release, refund, and resolver actions understandable to Web3-new demo users?
 
 ## Resolution
 

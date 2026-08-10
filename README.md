@@ -1,6 +1,6 @@
 # PactFlow testnet MVP foundation
 
-PactFlow is a private workspace for structuring custom digital-service projects through durable Contracts, invitations, and versioned terms. Supabase Auth provides participant identities and Supabase RLS scopes private coordination data. Wallet linking and Base Sepolia settlement are deliberately deferred: PactFlow currently has no payment authority, escrow custody, fiat conversion, cash-out, or real-money service.
+PactFlow lets two people create and govern a custom digital-service **Contract** with versioned terms, invitations, and later Base Sepolia testnet settlement. Supabase Auth provides user identities and Supabase RLS protects Contract data. PactFlow does not custody funds, convert fiat, cash out, or provide a real-money service.
 
 ## Run locally
 
@@ -11,34 +11,13 @@ npm.cmd --prefix web run contracts:check
 npm.cmd --prefix web start
 ```
 
-Set the Supabase project URL and publishable key in the existing `web/.env`. The server refuses to start without those public authentication settings; it does not require or expose a Supabase secret/service key. The runnable web application, its tests, dependencies, and local configuration live in `web/`. Open `http://localhost:3000` and use the Supabase email sign-in flow. `GET /health` reports the application boundary and confirms that payment authority is not configured.
-
-To enable the optional wallet capability, set `PRIVY_APP_ID` and configure Privy JWT-based authentication to validate the Supabase JWKS endpoint. Supabase must use asymmetric JWT signing. The browser passes its current Supabase access token to Privy; only the non-secret Privy app ID is sent to the browser. Do not expose `PRIVY_APP_SECRET`. Wallet-backed Contract Acceptance additionally requires `SUPABASE_SERVICE_ROLE_KEY` on the application server; it is never returned to the browser and is used only after the server verifies the participant's EIP-712 signature.
+Configure `SUPABASE_URL` and the publishable key in `web/.env`. The server does not expose a Supabase service-role key. Open `http://localhost:3000` and use the Supabase email sign-in flow; `GET /health` confirms the application boundary.
 
 ## Current workflow
 
-1. Open the app, enter an email address, and complete the Supabase magic-link flow.
-2. Finish onboarding to provision your durable Profile and personal Workspace.
-3. Create a Proposal in an owning Workspace, choose whether the initiating Contract Party is the Buyer or Service Provider, and name an exact-email counterparty. The Proposal is visible only to authorised members of its owning Workspace.
-4. Share the Proposal explicitly when ready; the server then creates its expiring exact-email invitation under the caller's Supabase identity. The Contract remains scoped until the invited, authenticated recipient accepts it. Payment, approval, evidence, disputes, and on-chain settlement are not yet available in the browser.
-5. When Privy is configured, select **Set up wallet** on Home to create an embedded wallet or link an external EVM wallet for Base Sepolia use. The panel can request a Base Sepolia typed-data check and a zero-value self-transaction; neither is a Contract Acceptance or has payment authority.
+1. Sign in and complete Profile setup.
+2. Create a Contract Draft, choose the Buyer or Service Provider responsibility for that Contract, and name an exact-email counterparty.
+3. Share the Contract Draft explicitly. It becomes available to the invited, authenticated counterparty only after acceptance.
+4. Use the separate Wallet surface only for a personal Base Sepolia test wallet and its available test-token balance; it is never combined with a Contract Escrow Vault balance.
 
-## Reference contracts
-
-`contracts/` contains a compiled Solidity 0.8.30 reference foundation. It is not connected to the browser workflow:
-
-- `MockEUSD.sol`: an explicitly valueless, six-decimal demo token with a capped public faucet.
-- `EscrowVault.sol`: an isolated, non-upgradeable, non-administered vault foundation. Only its fixed buyer can fund the exact allocation once before the funding and first-delivery deadlines; it contains no owner, pause, rescue, platform-withdrawal, or settlement function.
-- `EscrowVaultFactory.sol`: an EIP-712 Contract Acceptance verifier that lets only buyer or seller create one vault for jointly signed terms.
-
-Do not deploy or use the contracts with real value. Any future testnet integration needs separate EVM-level tests and review.
-
-## Implemented scope and remaining integrations
-
-The application includes durable Profile and Workspace provisioning, an authenticated action-first Dashboard, role-led Proposal creation, opt-in People discovery and private connection requests, and exact-email invitation acceptance through Supabase. The previous process-local rules engine, local roles, simulated agreement actions, and local browser pages have been removed.
-
-The linked schema also provides the Contract Party, delegation, version, authority, Case Officer, and private-evidence foundations with RLS proof. A Contract-specific browser detail page now presents the latest immutable Version, its canonical terms hash, missing template sections, and each Party's Acceptance state. A Supabase-linked Privy capability can create or link a Base Sepolia wallet and request a wallet signature or a valueless test transaction, but those actions are not yet persisted as Version-specific Contract Acceptances and have no payment authority. Completing durable EIP-712 Contract Acceptance, Base Sepolia deployment, chain reconciliation, evidence/dispute workflows, and a real AI service remain incomplete.
-
-## Implementation tracking
-
-The implementation tickets use a [testnet-MVP completion reference](docs/wayfinder/implementation-completion-reference.md): Supabase owns permanent user accounts, sessions, and row-level access first; Privy supplies only the linked user-controlled wallet capability. A Base Sepolia payment path is required before any settlement functionality can be claimed.
+The active delivery source is the [one-to-one Contract UX migration specification](docs/wayfinder/one-to-one-contract-ux-migration-spec.md). See the [implementation tracker](docs/wayfinder/IMPLEMENTATION-TRACKER.md) for verified evidence and remaining work.

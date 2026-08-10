@@ -12,7 +12,7 @@ blocked_by:
 
 ## Question
 
-How should the application derive and reconcile its UI-friendly agreement and milestone status from Base Sepolia reads and events while retaining the vault as the sole source of truth for payment state?
+How should the application derive and reconcile its UI-friendly Contract and milestone status from Base Sepolia reads and events while retaining the vault as the sole source of truth for payment state?
 
 ## Resolution
 

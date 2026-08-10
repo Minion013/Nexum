@@ -1,5 +1,5 @@
 ---
-parent: ../post-login-workspace-redesign-map.md
+parent: ../post-login-contract-ux-migration-map.md
 status: closed
 type: prototype
 assignee: Codex
@@ -11,8 +11,8 @@ blocked_by:
 
 ## Question
 
-How should the Dashboard prioritise urgent decisions and upcoming milestones, present the active-project timeline, and introduce lightweight workspace analytics without becoming an analytics-first home page?
+How should the Dashboard prioritise urgent decisions and upcoming milestones, present the active-project timeline, and introduce lightweight retired model analytics without becoming an analytics-first home page?
 
 ## Resolution
 
-Make urgent, actionable items the leading Dashboard section. Follow them with a compact active-project milestone timeline, then lightweight Workspace metrics. Provide explicit loading, empty, and error states throughout; only describe payment and delivery status as authoritative when it is backed by chain data.
+Make urgent, actionable items the leading Dashboard section. Follow them with a compact active-project milestone timeline, then lightweight retired model metrics. Provide explicit loading, empty, and error states throughout; only describe payment and delivery status as authoritative when it is backed by chain data.

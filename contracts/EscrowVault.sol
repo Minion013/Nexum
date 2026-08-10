@@ -22,9 +22,9 @@ struct VaultInit {
     uint32[] reviewWindows;
 }
 
-/// @notice An unfunded, non-administered vault bound to one approved agreement version.
+/// @notice An unfunded, non-administered vault bound to one approved Contract Version.
 contract EscrowVault {
-    enum AgreementState { Unfunded, Funded }
+    enum ContractState { Unfunded, Funded }
     struct Milestone {
         uint256 amount;
         uint64 deliveryDeadline;
@@ -37,12 +37,12 @@ contract EscrowVault {
     address public immutable resolver;
     address public immutable feeRecipient;
     uint16 public immutable feeBps;
-    bytes32 public immutable agreementVersionHash;
+    bytes32 public immutable contractVersionHash;
     uint64 public immutable acceptanceDeadline;
     uint64 public immutable fundingDeadline;
     uint256 public immutable allocationTotal;
     uint256 public fundedAmount;
-    AgreementState public agreementState;
+    ContractState public contractState;
     Milestone[] private milestones;
 
     constructor(VaultInit memory init) {
@@ -59,7 +59,7 @@ contract EscrowVault {
         resolver = init.resolver;
         feeRecipient = init.feeRecipient;
         feeBps = init.feeBps;
-        agreementVersionHash = init.versionHash;
+        contractVersionHash = init.versionHash;
         acceptanceDeadline = init.acceptanceDeadline;
         fundingDeadline = init.fundingDeadline;
 
@@ -77,11 +77,11 @@ contract EscrowVault {
     /// @notice Moves the exact approved allocation into this vault once. Settlement remains unavailable.
     function fund() external {
         require(msg.sender == buyer, "buyer only");
-        require(agreementState == AgreementState.Unfunded, "already funded");
+        require(contractState == ContractState.Unfunded, "already funded");
         require(block.timestamp <= fundingDeadline, "funding expired");
         require(block.timestamp < milestones[0].deliveryDeadline, "first delivery elapsed");
 
-        agreementState = AgreementState.Funded;
+        contractState = ContractState.Funded;
         uint256 beforeBalance = token.balanceOf(address(this));
         require(token.transferFrom(buyer, address(this), allocationTotal), "transfer failed");
         require(token.balanceOf(address(this)) == beforeBalance + allocationTotal, "incorrect transfer");

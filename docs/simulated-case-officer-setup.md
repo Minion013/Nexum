@@ -1,6 +1,6 @@
 # Simulated Case Officer setup
 
-1. Start the PactFlow app and complete the normal Supabase email sign-in for the test address you want to use. This creates the durable User Profile and its personal Workspace; it does not grant authority access.
+1. Start the PactFlow app and complete the normal Supabase email sign-in for the test address you want to use. This creates the durable User Profile; it does not grant authority access.
 2. As a platform operator, run the following query against the linked project, replacing the placeholder with that verified address:
 
 ```sql

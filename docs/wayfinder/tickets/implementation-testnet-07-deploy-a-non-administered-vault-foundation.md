@@ -2,7 +2,7 @@
 
 **What to build:** A jointly approved Project Contract can create one isolated MockEUSD Escrow Vault with fixed parties and no platform fund-moving authority. Every Project’s Vault is a separate, visible money pot; it is never a balance pooled across a user’s Projects.
 
-**Blocked by:** 05 — Review, version, and approve agreement terms.
+**Blocked by:** 05 — Review, version, and approve Contract terms.
 
 **Status:** ready-for-agent
 

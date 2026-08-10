@@ -4,7 +4,7 @@ import { loadingProfileIdentity, resolveProfileIdentity } from './profile-identi
 
 const route = location.pathname === '/contacts' ? '/people' : location.pathname;
 const navigation = [
-  ['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/workspace', 'Workspaces'], ['/settings', 'Settings']
+  ['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/settings', 'Settings']
 ];
 const active = href => route === href || (href !== '/home' && route.startsWith(`${href}/`));
 async function signOut() { await (await supabase()).auth.signOut(); location.assign('/'); }
@@ -18,7 +18,7 @@ function quickNavigation() {
   const quickNav = document.createElement('nav');
   quickNav.className = 'bottom-nav';
   quickNav.setAttribute('aria-label', 'Quick navigation');
-  [['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/contracts#new-proposal', 'Create']]
+  [['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/contracts#new-contract', 'Create']]
     .forEach(([href, title]) => quickNav.append(navLink(href, title)));
   return quickNav;
 }
@@ -26,7 +26,6 @@ function signOutButton() { const button = document.createElement('button'); butt
 function configureProfileMenu(menu) {
   const summary = menu?.querySelector('summary');
   if (!summary) return;
-  menu.querySelector('a[href="/workspace"]')?.remove();
   summary.setAttribute('aria-expanded', String(menu.open));
   menu.addEventListener('toggle', () => summary.setAttribute('aria-expanded', String(menu.open)));
 }
@@ -64,7 +63,7 @@ function fillDrawer(drawer) {
   drawer.append(nav('Mobile navigation'), profileMenu());
 }
 function mountShell() {
-  for (const href of ['/workspace.css', '/profile-presentation.css', '/profile-identity.css']) {
+  for (const href of ['/signed-in.css', '/profile-presentation.css', '/profile-identity.css']) {
     if (document.querySelector(`link[href="${href}"]`)) continue;
     const stylesheet = document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = href; document.head.append(stylesheet);
   }

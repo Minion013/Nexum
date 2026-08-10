@@ -1,50 +1,38 @@
 # PactFlow
 
-PactFlow is the workspace where people structure and govern custom-service projects through shared contracts, milestones, evidence, and decisions.
+PactFlow is where two people structure and govern custom-service projects through contracts, milestones, evidence, and decisions.
 
 ## Identity and access
 
 **User Profile**:
-The durable PactFlow identity belonging to one authenticated person. It can belong to multiple workspaces and hold different project responsibilities.
+The durable PactFlow identity belonging to one authenticated person. It may be a party to multiple Contracts and hold a different Contract-scoped responsibility in each.
 _Avoid_: buyer account, creator account, resolver account
 
 **Profile Settings**:
-The private settings area for a User Profile, including profile details, personal preferences, notifications, security, and connected wallet. It is separate from Workspace Settings.
-_Avoid_: workspace profile
+The private settings area for a User Profile, including profile details, personal preferences, notifications, security, and connected wallet. It is reached from the signed-in avatar menu rather than primary navigation.
+_Avoid_: workspace profile, workspace settings
 
-**Workspace**:
-A durable container for a person's or team's projects, members, and shared operating context. A user may create or join multiple workspaces.
-_Avoid_: account, project
-
-**Collaboration**:
-The optional multi-member operating mode of a workspace. It is introduced only when a workspace needs shared membership management; it is not required for a one-to-one project.
-_Avoid_: team requirement
-
-**One-to-One Project**:
-A project governed by a contract between two individual parties, created from a personal workspace without first creating a collaboration.
-_Avoid_: single-user project
+**Wallet**:
+A User Profile's externally controlled Base Sepolia test wallet or explicitly disposable browser test wallet. Its available test-token balance is personal and is never combined with funds locked in a Contract Escrow Vault.
+_Avoid_: payment account, escrow balance
 
 ## Contracting
 
 **Contract**:
-The durable, versioned agreement that governs one project and grants the participating parties access to its records. Every Contract has an owning Workspace: a Personal Workspace for solo engagements or a shared Workspace for team engagements. It can link independent workspaces without making either party a member of the other workspace; an unshared Contract Draft remains private to its initiating Workspace.
-_Avoid_: demo agreement, project record
+The durable, versioned, one-to-one record that governs one project and grants its two participating User Profiles access to its records. A Contract begins as an editable draft, then becomes binding only after both parties accept the same version.
+_Avoid_: agreement, proposal, demo agreement, project record
 
 **Contract Party**:
-The person or workspace that accepts a named responsibility in a contract. A profile or workspace may be a party to multiple contracts simultaneously.
-_Avoid_: local role, account type
+One of the two User Profiles that accepts a named responsibility in a Contract. A profile may be a party to multiple Contracts simultaneously.
+_Avoid_: workspace, local role, account type
 
 **Buyer**:
-The Contract Party that engages and funds the Service Provider for a Service Engagement. It is selected for each Contract during creation and is never a permanent Profile or Workspace role.
+The Contract Party that engages and funds the Service Provider for a Service Engagement. It is selected for each Contract during creation and is never a permanent Profile role.
 _Avoid_: buyer account
 
 **Service Provider**:
-The Contract Party that provides the contracted service. It is selected for each Contract during creation and is never a permanent Profile or Workspace role.
+The Contract Party that provides the contracted service. It is selected for each Contract during creation and is never a permanent Profile role.
 _Avoid_: seller, provider account
-
-**Delegated Project Access**:
-The authority a workspace gives one of its members to act for that workspace on a particular project. It never comes from an onboarding choice.
-_Avoid_: global role
 
 **Resolution Authority**:
 A recognised regulatory or dispute-resolution body that may be named in a contract's dispute-resolution terms. It is an organisation, not a user profile or a contract party.
@@ -83,25 +71,21 @@ The Contract Section that states how either Contract Party may propose a change 
 _Avoid_: edit history
 
 **Contract Draft**:
-A private, editable contract version initiated by an authorised workspace representative. It gains a counterparty only when shared by invitation.
+A private, editable contract version initiated by one User Profile. It gains a counterparty only when shared by invitation.
 _Avoid_: pending contract
 
-**Proposal**:
-The user-facing label for a Contract Draft. A Proposal belongs to its initiating Workspace and remains visible only to authorised members there until the initiator explicitly shares it with a named counterparty.
-_Avoid_: private contract, private draft
-
 **Contract Acceptance**:
-A representative's recorded acceptance of one exact contract version on behalf of a Contract Party. A contract becomes binding only when every required party has accepted that same version.
+A Contract Party's recorded acceptance of one exact Contract Version. A Contract becomes binding only when both parties have accepted that same version.
 _Avoid_: approval
 
 ## Relationships
 
 **Contact**:
-A reusable record for an individual or organisation that a user may invite to a contract. A Contact is not an authenticated profile, workspace member, or Contract Party until an invitation is accepted.
-_Avoid_: counterparty account
+A reusable record for an individual or organisation that a user may invite to a Contract. A Contact is not an authenticated profile or Contract Party until an invitation is accepted.
+_Avoid_: workspace member, counterparty account
 
 **People Directory**:
-The signed-in social discovery experience for Profiles. It has Discover, My Network, and Requests views; it helps users find and establish professional connections without granting workspace or Contract access.
+The signed-in social discovery experience for Profiles. It has Discover, My Network, and Requests views; it helps users find and establish professional connections without granting Contract access.
 _Avoid_: contacts page, member directory
 
 **Onboarding Guidance**:

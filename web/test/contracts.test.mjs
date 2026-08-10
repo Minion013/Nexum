@@ -30,7 +30,7 @@ async function deploy(signer, file, name, ...args) {
   return contract;
 }
 
-function agreementInit(token, buyer, seller, resolver, versionHash = keccak256(toUtf8Bytes('agreement version 1'))) {
+function contractInit(token, buyer, seller, resolver, versionHash = keccak256(toUtf8Bytes('contract version 1'))) {
   const now = Math.floor(Date.now() / 1000);
   return {
     token,
@@ -59,19 +59,19 @@ async function createScenario(versionHash, customizeInit = (init) => init) {
   const platform = new NonceManager(platformWallet);
   const factory = await deploy(buyer, 'contracts/EscrowVaultFactory.sol', 'EscrowVaultFactory');
   const token = await deploy(tokenWallet, 'contracts/MockEUSD.sol', 'MockEUSD');
-  const init = customizeInit(agreementInit(await token.getAddress(), await buyer.getAddress(), await seller.getAddress(), await resolver.getAddress(), versionHash));
-  const hash = await factory.agreementHash(init);
+  const init = customizeInit(contractInit(await token.getAddress(), await buyer.getAddress(), await seller.getAddress(), await resolver.getAddress(), versionHash));
+  const hash = await factory.contractHash(init);
   const network = await provider.getNetwork();
   const domain = { name: 'PactFlow', version: '1', chainId: network.chainId, verifyingContract: await factory.getAddress() };
-  const types = { AgreementApproval: [{ name: 'agreementHash', type: 'bytes32' }] };
-  const buyerSignature = await buyer.signTypedData(domain, types, { agreementHash: hash });
-  const sellerSignature = await seller.signTypedData(domain, types, { agreementHash: hash });
+  const types = { ContractAcceptance: [{ name: 'contractHash', type: 'bytes32' }] };
+  const buyerSignature = await buyer.signTypedData(domain, types, { contractHash: hash });
+  const sellerSignature = await seller.signTypedData(domain, types, { contractHash: hash });
   return { buyer, seller, resolver, platform, factory, token, init, hash, buyerSignature, sellerSignature, chain, provider };
 }
 
 const rejectsCall = (promise) => assert.rejects(promise, (error) => error.code === 'CALL_EXCEPTION');
 
-test('factory rejects an agreement that does not bind an exact version', async () => {
+test('factory rejects a Contract that does not bind an exact Version', async () => {
   const scenario = await createScenario(ZeroHash);
   await rejectsCall(scenario.factory.connect(scenario.buyer).createVault(scenario.init, scenario.buyerSignature, scenario.sellerSignature));
 });
@@ -79,13 +79,13 @@ test('factory rejects an agreement that does not bind an exact version', async (
 test('factory rejects an unrelated caller even with both participant approvals', async () => {
   const scenario = await createScenario();
   await rejectsCall(scenario.factory.connect(scenario.platform).createVault(scenario.init, scenario.buyerSignature, scenario.sellerSignature));
-  assert.equal(await scenario.factory.vaultForAgreement(scenario.hash), ZeroAddress);
+  assert.equal(await scenario.factory.vaultForContract(scenario.hash), ZeroAddress);
 });
 
-test('factory rejects approvals when a signed agreement term is changed', async () => {
+test('factory rejects acceptances when a signed Contract term is changed', async () => {
   const scenario = await createScenario();
   await rejectsCall(scenario.factory.connect(scenario.buyer).createVault({ ...scenario.init, feeBps: 300 }, scenario.buyerSignature, scenario.sellerSignature));
-  assert.equal(await scenario.factory.vaultForAgreement(scenario.hash), ZeroAddress);
+  assert.equal(await scenario.factory.vaultForContract(scenario.hash), ZeroAddress);
 });
 
 test('factory rejects an expired pair of participant acceptances', async () => {
@@ -98,7 +98,7 @@ test('factory rejects an expired pair of participant acceptances', async () => {
 test('a signed participant creates an unfunded vault with fixed terms and no administrator interface', async () => {
   const scenario = await createScenario();
   await (await scenario.factory.connect(scenario.seller).createVault(scenario.init, scenario.buyerSignature, scenario.sellerSignature)).wait();
-  const vault = new Contract(await scenario.factory.vaultForAgreement(scenario.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, scenario.provider);
+  const vault = new Contract(await scenario.factory.vaultForContract(scenario.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, scenario.provider);
 
   assert.equal(await vault.token(), scenario.init.token);
   assert.equal(await vault.buyer(), scenario.init.buyer);
@@ -106,10 +106,10 @@ test('a signed participant creates an unfunded vault with fixed terms and no adm
   assert.equal(await vault.resolver(), scenario.init.resolver);
   assert.equal(await vault.feeRecipient(), scenario.init.feeRecipient);
   assert.equal(await vault.feeBps(), 250n);
-  assert.equal(await vault.agreementVersionHash(), scenario.init.versionHash);
+  assert.equal(await vault.contractVersionHash(), scenario.init.versionHash);
   assert.equal(await vault.acceptanceDeadline(), BigInt(scenario.init.acceptanceDeadline));
   assert.equal(await vault.allocationTotal(), 2_000_000n);
-  assert.equal(await vault.agreementState(), 0n);
+  assert.equal(await vault.contractState(), 0n);
   assert.equal(await vault.milestoneCount(), 2n);
 
   const publicFunctions = artifact('contracts/EscrowVault.sol', 'EscrowVault').abi.filter((item) => item.type === 'function').map((item) => item.name);
@@ -121,7 +121,7 @@ test('a signed participant creates an unfunded vault with fixed terms and no adm
 test('only the buyer can fund the exact allocation once before funding and delivery deadlines', async () => {
   const scenario = await createScenario();
   await (await scenario.factory.connect(scenario.buyer).createVault(scenario.init, scenario.buyerSignature, scenario.sellerSignature)).wait();
-  const vaultAddress = await scenario.factory.vaultForAgreement(scenario.hash);
+  const vaultAddress = await scenario.factory.vaultForContract(scenario.hash);
   const vault = new Contract(vaultAddress, artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, scenario.provider);
 
   await (await scenario.token.connect(scenario.buyer).faucet(scenario.init.amounts[0] + scenario.init.amounts[1])).wait();
@@ -138,13 +138,13 @@ test('only the buyer can fund the exact allocation once before funding and deliv
 test('funding rejects insufficient buyer funds or allowance and an expired funding window', async () => {
   const insufficient = await createScenario();
   await (await insufficient.factory.connect(insufficient.buyer).createVault(insufficient.init, insufficient.buyerSignature, insufficient.sellerSignature)).wait();
-  const insufficientVault = new Contract(await insufficient.factory.vaultForAgreement(insufficient.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, insufficient.provider);
+  const insufficientVault = new Contract(await insufficient.factory.vaultForContract(insufficient.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, insufficient.provider);
   await (await insufficient.token.connect(insufficient.buyer).approve(await insufficientVault.getAddress(), insufficient.init.amounts[0] + insufficient.init.amounts[1])).wait();
   await rejectsCall(insufficientVault.connect(insufficient.buyer).fund.staticCall());
 
   const insufficientAllowance = await createScenario();
   await (await insufficientAllowance.factory.connect(insufficientAllowance.buyer).createVault(insufficientAllowance.init, insufficientAllowance.buyerSignature, insufficientAllowance.sellerSignature)).wait();
-  const insufficientAllowanceVault = new Contract(await insufficientAllowance.factory.vaultForAgreement(insufficientAllowance.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, insufficientAllowance.provider);
+  const insufficientAllowanceVault = new Contract(await insufficientAllowance.factory.vaultForContract(insufficientAllowance.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, insufficientAllowance.provider);
   const allocation = insufficientAllowance.init.amounts[0] + insufficientAllowance.init.amounts[1];
   await (await insufficientAllowance.token.connect(insufficientAllowance.buyer).faucet(allocation)).wait();
   await (await insufficientAllowance.token.connect(insufficientAllowance.buyer).approve(await insufficientAllowanceVault.getAddress(), allocation - 1n)).wait();
@@ -152,14 +152,14 @@ test('funding rejects insufficient buyer funds or allowance and an expired fundi
 
   const expired = await createScenario();
   await (await expired.factory.connect(expired.buyer).createVault(expired.init, expired.buyerSignature, expired.sellerSignature)).wait();
-  const expiredVault = new Contract(await expired.factory.vaultForAgreement(expired.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, expired.provider);
+  const expiredVault = new Contract(await expired.factory.vaultForContract(expired.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, expired.provider);
   await expired.chain.request({ method: 'evm_setTime', params: [new Date((expired.init.fundingDeadline + 1) * 1000)] });
   await expired.chain.request({ method: 'evm_mine', params: [] });
   await rejectsCall(expiredVault.connect(expired.buyer).fund.staticCall());
 
   const deliveryElapsed = await createScenario(undefined, (init) => ({ ...init, fundingDeadline: init.deadlines[0] + 24 * 60 * 60 }));
   await (await deliveryElapsed.factory.connect(deliveryElapsed.buyer).createVault(deliveryElapsed.init, deliveryElapsed.buyerSignature, deliveryElapsed.sellerSignature)).wait();
-  const deliveryElapsedVault = new Contract(await deliveryElapsed.factory.vaultForAgreement(deliveryElapsed.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, deliveryElapsed.provider);
+  const deliveryElapsedVault = new Contract(await deliveryElapsed.factory.vaultForContract(deliveryElapsed.hash), artifact('contracts/EscrowVault.sol', 'EscrowVault').abi, deliveryElapsed.provider);
   const deliveryAllocation = deliveryElapsed.init.amounts[0] + deliveryElapsed.init.amounts[1];
   await (await deliveryElapsed.token.connect(deliveryElapsed.buyer).faucet(deliveryAllocation)).wait();
   await (await deliveryElapsed.token.connect(deliveryElapsed.buyer).approve(await deliveryElapsedVault.getAddress(), deliveryAllocation)).wait();

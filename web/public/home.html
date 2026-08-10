@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Dashboard — PactFlow</title>
   <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/workspace.css">
+  <link rel="stylesheet" href="/signed-in.css">
   <link rel="stylesheet" href="/profile-identity.css">
 </head>
 <body class="workspace-app" data-page="dashboard">
@@ -17,7 +17,6 @@
         <a data-route href="/home">Dashboard</a>
         <a data-route href="/contracts">Contracts</a>
         <a data-route href="/people">People</a>
-        <a data-route href="/workspace">Workspaces</a>
         <a data-route href="/settings">Settings</a>
       </nav>
       <div class="app-sidebar-footer">
@@ -39,7 +38,7 @@
       <section>
         <p class="eyebrow">Dashboard</p>
         <h1>Your work, with the next step clear.</h1>
-        <p id="dashboard-subtitle" class="page-intro">Loading your Workspace context…</p>
+        <p id="dashboard-subtitle" class="page-intro">Loading your Contract actions…</p>
       </section>
       <section class="dashboard-grid">
         <article class="app-panel">
@@ -67,7 +66,6 @@
       <a data-route href="/home">Dashboard</a>
       <a data-route href="/contracts">Contracts</a>
       <a data-route href="/people">People</a>
-      <a data-route href="/workspace">Workspaces</a>
       <a data-route href="/settings">Settings</a>
     </nav>
   </dialog>
@@ -75,9 +73,9 @@
     <a data-route href="/home">Dashboard</a>
     <a data-route href="/contracts">Contracts</a>
     <a data-route href="/people">People</a>
-    <a data-route href="/contracts#new-proposal">Create</a>
+    <a data-route href="/contracts#new-contract">Create</a>
   </nav>
-  <script type="module" src="/workspace.bundle.js"></script>
+  <script type="module" src="/app-shell.bundle.js"></script>
   <script type="module" src="/wallet.bundle.js"></script>
 </body>
 </html>

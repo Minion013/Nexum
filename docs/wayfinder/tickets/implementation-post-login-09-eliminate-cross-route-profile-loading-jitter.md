@@ -1,6 +1,6 @@
 # 09 — Eliminate cross-route profile loading jitter
 
-**Parent:** [PactFlow post-login workspace redesign specification](../post-login-workspace-redesign-spec.md)
+**Parent:** [PactFlow post-login retired model redesign specification](../post-login-retired model-redesign-spec.md)
 
 **What to build:** Make the signed-in shell’s identity area feel deliberate on every route change. A user should move from a stable loading state straight to their resolved avatar and display name, rather than watching the shell progressively replace `PF Profile`, initials, and then the private profile image.
 

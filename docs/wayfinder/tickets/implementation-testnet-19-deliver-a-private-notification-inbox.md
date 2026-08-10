@@ -1,14 +1,14 @@
 # 19 — Deliver a private notification inbox for Project actions
 
-**What to build:** Every signed-in user has a private, durable inbox for actions and state changes relevant to their own Profiles, Workspaces, Projects, and invitations. The inbox is the in-product source of truth; delivery email is optional and must never expose sensitive Contract details.
+**What to build:** Every signed-in user has a private, durable inbox for actions and state changes relevant to their own Profiles, retired models, Projects, and invitations. The inbox is the in-product source of truth; delivery email is optional and must never expose sensitive Contract details.
 
-**Blocked by:** 02 — Establish secure profiles, sessions, and workspaces; 03 — Invite project participants without widening Workspace access.
+**Blocked by:** 02 — Establish secure profiles, sessions, and retired models; 03 — Invite project participants without widening retired access.
 
 **Status:** partial — durable inbox foundation
 
-- [ ] The signed-in shell provides a clearly labelled notification control with unread count and a dedicated inbox. It supports unread/read state, time, source Project/Workspace, and a safe deep link.
-- [ ] Invitations, Proposal shares, approval requests, funding outcomes, evidence submissions, review-window events, dispute updates, amendments, and settlement outcomes create an idempotent notification for every authorised recipient.
-- [ ] RLS ensures a user can read and update only their own inbox entries. Notification text and deep links never disclose a Proposal, Project, Workspace, or counterparty they are not authorised to access.
+- [ ] The signed-in shell provides a clearly labelled notification control with unread count and a dedicated inbox. It supports unread/read state, time, source Project/retired model, and a safe deep link.
+- [ ] Invitations, Contract Draft shares, approval requests, funding outcomes, evidence submissions, review-window events, dispute updates, amendments, and settlement outcomes create an idempotent notification for every authorised recipient.
+- [ ] RLS ensures a user can read and update only their own inbox entries. Notification text and deep links never disclose a Contract Draft, Project, retired model, or counterparty they are not authorised to access.
 - [ ] The initial MVP uses in-app notifications. Any email delivery is a separate opt-in enhancement and includes only a minimal alert and safe sign-in link.
 
 ## 8 August 2026 update — durable inbox foundation

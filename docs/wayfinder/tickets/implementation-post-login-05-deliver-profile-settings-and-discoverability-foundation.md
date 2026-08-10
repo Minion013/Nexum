@@ -1,8 +1,8 @@
 # 05 — Deliver Profile Settings and discoverability foundation
 
-**Parent:** [PactFlow post-login workspace redesign specification](../post-login-workspace-redesign-spec.md)
+**Parent:** [PactFlow post-login retired model redesign specification](../post-login-retired model-redesign-spec.md)
 
-**What to build:** A User Profile has an accessible Profile Settings destination from the avatar menu and can control the protected discoverability required to appear in signed-in People discovery. Refine the profile experience so identity, image selection, and notifications are clear and accessible; Workspace Settings remains workspace-owned and is not exposed from personal-profile surfaces.
+**What to build:** A User Profile has an accessible Profile Settings destination from the avatar menu and can control the protected discoverability required to appear in signed-in People discovery. Refine the profile experience so identity, image selection, and notifications are clear and accessible; Profile Settings remains Profile-owned and is not exposed from personal-profile surfaces.
 
 **Blocked by:** 01 — Establish the responsive signed-in app shell; existing “Profile persistence and access model” decision.
 
@@ -12,9 +12,9 @@
 - [x] The signed-in shell reliably resolves the current Profile: after login, the bottom-left identity control must not remain on the `PF Profile` fallback once profile data is available. Evidence: the shared shell reads `/api/session` and replaces the placeholder with the authenticated Profile.
 - [x] The bottom-left signed-in identity control truncates an overlong display name with an ellipsis without breaking its layout or obscuring the accessible full name. Evidence: constrained ellipsis styling retains the full name in the title and profile-menu accessible name.
 - [x] Move the notification control beside the username in the bottom-left signed-in identity area, with an accessible name and comfortable target size. Retain the dashboard notification control; remove the separate notification control from Profile Settings. Evidence: the shell adds a labelled 42px sidebar bell and retains the Dashboard bell.
-- [x] Profile Settings is reachable from the avatar menu and presents personal identity settings only. Remove Workspace Settings links and sub-links from Profile Settings and the bottom-left profile area; Workspace Settings is configured only inside its owning Workspace. Evidence: served-page coverage verifies the personal menu and Settings copy omit Workspace Settings.
+- [x] Profile Settings is reachable from the avatar menu and presents personal identity settings only. Remove Profile Settings links and sub-links from Profile Settings and the bottom-left profile area; Profile Settings is configured only inside its owning retired model. Evidence: served-page coverage verifies the personal menu and Settings copy omit Profile Settings.
 - [x] The private profile-image selector replaces the native-looking `Browse` affordance with a clear image-selection control. Before saving, it previews the selected image (or clearly represents the current image/fallback avatar), identifies the selected file where useful, and lets the user change it. Evidence: the clear Choose/Change control reports the filename and previews a selected image before save.
-- [x] Saving a profile image uses the configured authenticated Supabase client and succeeds without a `supabase is not defined` error. If either profile data or image upload fails, communicate the precise outcome and retain the user’s unsaved image selection where possible. Evidence: `workspace.js` imports the configured `supabase` client; save coverage covers protected-save success and upload failure while the UI retains the selection on errors.
+- [x] Saving a profile image uses the configured authenticated Supabase client and succeeds without a `supabase is not defined` error. If either profile data or image upload fails, communicate the precise outcome and retain the user’s unsaved image selection where possible. Evidence: `retired model.js` imports the configured `supabase` client; save coverage covers protected-save success and upload failure while the UI retains the selection on errors.
 
 ## Verification recorded 2026-08-09
 

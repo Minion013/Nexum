@@ -2,7 +2,7 @@
 
 **What to build:** A signed-in PactFlow participant can connect an externally controlled Base Sepolia test wallet, or create a clearly labelled disposable browser test wallet. The profile presents that wallet’s address and test-token balance separately from the balances locked in each Project’s Escrow Vault.
 
-**Blocked by:** 02 — Establish secure profiles, sessions, and workspaces.
+**Blocked by:** 02 — Establish secure profiles, sessions, and retired models.
 
 **Status:** partial — wallet capability follows durable account identity; live browser verification and the wallet/profile presentation remain open.
 
