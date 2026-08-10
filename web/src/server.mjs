@@ -62,14 +62,35 @@ function configuredHttpUrl(environment, key) {
 export function runtimeConfigurationFromEnvironment(environment = process.env) {
   const port = Number(environment.PORT ?? 3000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+  const localTestProfile = localTestProfileFromEnvironment(environment);
   return {
     port,
+    ...(localTestProfile ? { localTestProfile } : {}),
     publicSupabaseConfig: {
       url: configuredHttpUrl(environment, 'SUPABASE_URL'),
       publishableKey: configuredValue(environment, 'SUPABASE_PUBLISHABLE_KEY'),
       ...(environment.PRIVY_APP_ID?.trim() ? { privyAppId: environment.PRIVY_APP_ID.trim() } : {})
     }
   };
+}
+
+export function localTestProfileFromEnvironment(environment = process.env) {
+  const email = environment.PACTFLOW_LOCAL_TEST_EMAIL?.trim().toLowerCase();
+  if (!email || environment.NODE_ENV === 'production' || !/^[^\s@]+@[^\s@]+\.invalid$/.test(email)) return null;
+  const id = '00000000-0000-4000-8000-000000000099';
+  const wallet = email === 'pactflow-wallet-connected-test@local.invalid'
+    ? { address: '0x1111111111111111111111111111111111111111', mockEusdBalance: '1,250 MockEUSD' }
+    : undefined;
+  return {
+    id,
+    email,
+    profile: { id, email, displayName: 'Local Wallet Tester', avatarSeed: 'indigo', onboardingCompletedAt: '2026-08-10T00:00:00.000Z' },
+    ...(wallet ? { wallet } : {})
+  };
+}
+
+export function isLoopbackAddress(address) {
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
 function respond(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }); response.end(JSON.stringify(body)); }
@@ -80,6 +101,7 @@ function standalonePage(urlPath) {
   const authenticatedPages = {
     '/home': 'home.html',
     '/contracts': 'contracts.html',
+    '/wallet': 'wallet.html',
     '/people': 'people.html',
     '/notifications': 'notifications.html',
     '/contacts': 'people.html',
@@ -640,13 +662,14 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
     return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
   };
 }
-function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: 'supabase-auth' }; }
+function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: session.localTest ? 'local-test-auth' : 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment() } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const authenticate = async () => {
+      if (localTestProfile && isLoopbackAddress(request.socket.remoteAddress) && request.headers['x-pactflow-local-test-email'] === localTestProfile.email) return { userId: localTestProfile.id, email: localTestProfile.email, accessToken: null, localTest: true };
       const accessToken = bearerToken(request);
       let user;
       try { user = await verifySupabaseSession(accessToken); } catch { throw new AuthenticationError('Supabase authentication is invalid or expired.'); }
@@ -654,10 +677,10 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
     };
     try {
       if (url.pathname === '/health') return respond(response, 200, { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
-      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { ...browserSupabaseConfig, mode: 'supabase-auth' });
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') return respond(response, 200, { ...browserSupabaseConfig, ...(localTestProfile ? { localTestEmail: localTestProfile.email, ...(localTestProfile.wallet ? { localTestWallet: localTestProfile.wallet } : {}) } : {}), mode: 'supabase-auth' });
       if (url.pathname === '/api/session' && request.method === 'GET') {
         const session = await authenticate();
-        const profile = await loadProfile({ userId: session.userId, accessToken: session.accessToken });
+        const profile = session.localTest ? localTestProfile.profile : await loadProfile({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, sessionPayload(session, profile));
       }
       if (url.pathname === '/api/home' && request.method === 'GET') {
@@ -766,7 +789,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const runtimeConfiguration = runtimeConfigurationFromEnvironment();
-  createApp({ publicSupabaseConfig: runtimeConfiguration.publicSupabaseConfig }).listen(runtimeConfiguration.port, () => {
+  createApp({ publicSupabaseConfig: runtimeConfiguration.publicSupabaseConfig, localTestProfile: runtimeConfiguration.localTestProfile }).listen(runtimeConfiguration.port, () => {
     console.log(`PactFlow ready at http://localhost:${runtimeConfiguration.port}`);
   });
 }

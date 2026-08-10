@@ -9,7 +9,8 @@ The [implementation completion reference](implementation-completion-reference.md
 ## Current evidence
 
 - Durable Supabase Profile, Profile-owned Contract party/access, invitation, Contract-Version, Authority, case-access, and notification foundations have linked-project RLS coverage.
-- The responsive signed-in shell, People discovery/connection foundation, Profile Settings hydration, and Contract Draft handoff have committed browser and endpoint coverage.
+- The responsive signed-in shell, People discovery/connection foundation, Profile Settings hydration, Contract Draft handoff, and standalone Wallet have committed browser and endpoint coverage.
+- Temporary local browser-auth fixtures are documented in ticket 03. They are disabled by default, production-refused, and must be removed after the normal `/api/session` failure is resolved.
 - Base Sepolia MockEUSD and the EscrowVaultFactory are deployed, but Contract-specific Vault creation, wallet funding, authoritative chain reads, settlement, and end-to-end judge verification remain incomplete.
 
 ## Active priority â€” one-to-one Contract UX migration
@@ -19,7 +20,7 @@ The [one-to-one Contract UX migration specification](one-to-one-contract-ux-migr
 1. [Establish Profile-owned Contract access](tickets/01-establish-profile-owned-contract-access.md) - **complete 2026-08-10**: migration `20260810100000` is applied; linked post-deployment checks found zero invalid Contract Parties, zero active delegations, and zero Contracts missing their creator Profile party. The rollback-only RLS regression proves a retained Contract Draft access Workspace cannot authorize a non-party; linked lint, 61-test suite, typecheck, and build pass.
 2. [Retire legacy Contract authoring and routes](tickets/02-retire-legacy-contract-authoring-and-routes.md) - **complete 2026-08-10**: retired Workspace paths/API now return not-found; Contract-only creation and Profile-owned review have focused route/API coverage, typecheck, build, and 59 tests passing. The product owner independently verified the browser behavior; the local fresh-token `/api/session` harness failure was reproduced in both browser surfaces and is recorded as environment evidence rather than a ticket gap.
 3. [Clean the retired product model from the repository](tickets/06-clean-legacy-repository-and-retire-reference.md) - **complete 2026-08-10**: removed retired routes, code, assets, documentation, and generated output; migrated the Vault's Contract-facing terminology. Repository scans, production build, typecheck, Solidity compilation, `git diff --check`, and the 59-test suite pass.
-4. [Deliver focused signed-in navigation and Wallet](tickets/03-deliver-focused-signed-in-navigation-and-wallet.md) - blocked by 3.
+4. [Deliver focused signed-in navigation and Wallet](tickets/03-deliver-focused-signed-in-navigation-and-wallet.md) - **complete 2026-08-10**: standalone `/wallet` keeps available MockEUSD separate from Contract Escrow Vault funds and history; desktop and 390 px signed-in browser checks verify the four-destination navigation plus empty/connected Wallet states. Route coverage, 61 tests, typecheck, production build, and `git diff --check` pass. The local-only test-auth fixture emails and mandatory cleanup are recorded in ticket 03.
 5. [Deliver MilestonePay-informed Dashboard](tickets/04-deliver-milestonepay-informed-dashboard.md) - blocked by 4.
 6. [Deliver MilestonePay-informed Contracts experience](tickets/05-deliver-milestonepay-informed-contracts-experience.md) - blocked by 2 and 4.
 7. [Retire MilestonePay reference after approval](tickets/07-retire-milestonepay-reference-after-approval.md) - blocked by 4 through 6 and explicit product-owner authorization to remove `milestonepay`.

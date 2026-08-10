@@ -1,6 +1,9 @@
-import { supabase } from './supabase-auth.js';
+import { activeLocalTestFixture, supabase } from './supabase-auth.js';
 
 const baseSepoliaChainId = 84532;
+const baseSepoliaChainHex = '0x14a34';
+const mockEusdAddress = '0xEcF583DcC9CA0c6E59b14df86412E4C0ED96FF3c';
+const mockEusdDecimals = 6;
 let React;
 let createRoot;
 let PrivyProvider;
@@ -12,6 +15,18 @@ let useState;
 let useSubscribeToJwtAuthWithFlag;
 let useWallets;
 let createElement;
+
+function mockEusdBalanceCall(address) {
+  return `0x70a08231${address.slice(2).toLowerCase().padStart(64, '0')}`;
+}
+
+export function formatMockEusdBalance(value) {
+  const amount = BigInt(value);
+  const units = 10n ** BigInt(mockEusdDecimals);
+  const whole = amount / units;
+  const fraction = (amount % units).toString().padStart(mockEusdDecimals, '0').replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : String(whole);
+}
 
 function WalletAuthSync({ session, onStatus }) {
   const getExternalJwt = useCallback(async () => session?.access_token, [session?.access_token]);
@@ -26,7 +41,8 @@ function WalletAuthSync({ session, onStatus }) {
 function WalletControls() {
   const [session, setSession] = useState();
   const [authStatus, setAuthStatus] = useState('initial');
-  const [message, setMessage] = useState('Preparing your Supabase-linked wallet capability…');
+  const [message, setMessage] = useState('Preparing your Supabase-linked wallet…');
+  const [balance, setBalance] = useState('Not connected');
   const reportAuthStatus = useCallback(status => {
     setAuthStatus(status);
     if (status === 'error') setMessage('Your wallet connection needs a current Supabase session. Refresh your sign-in and try again.');
@@ -35,6 +51,7 @@ function WalletControls() {
   const { createWallet } = useCreateWallet();
   const { linkWallet } = useLinkAccount();
   const ethereumWallet = wallets.find(wallet => wallet.type === 'ethereum');
+  const isReady = authStatus === 'done' && ready;
 
   useEffect(() => {
     let subscription;
@@ -45,54 +62,73 @@ function WalletControls() {
     }).catch(() => setSession(null));
     return () => subscription?.unsubscribe();
   }, []);
-  useEffect(() => {
-    if (authStatus === 'done' && ready) setMessage(ethereumWallet ? `Wallet connected: ${ethereumWallet.address}` : 'Your Supabase identity is linked. Create or connect an EVM wallet when you are ready.');
-  }, [authStatus, ethereumWallet, ready]);
 
-  const createEmbeddedWallet = async () => {
-    setMessage('Creating your user-controlled embedded wallet…');
-    try { const wallet = await createWallet(); setMessage(`Embedded wallet created: ${wallet.address}`); } catch (error) { setMessage(error.message || 'We could not create the embedded wallet.'); }
-  };
-  const connectExternalWallet = () => { setMessage('Choose the external EVM wallet to link to this Supabase identity.'); linkWallet(); };
-  const signTestnetAcknowledgement = async () => {
+  const refreshMockEusdBalance = async () => {
     if (!ethereumWallet) return;
-    setMessage('Requesting a Base Sepolia typed-data signature…');
+    setBalance('Loading Base Sepolia balance…');
     try {
       await ethereumWallet.switchChain(baseSepoliaChainId);
       const provider = await ethereumWallet.getEthereumProvider();
-      const signature = await provider.request({ method: 'eth_signTypedData_v4', params: [ethereumWallet.address, JSON.stringify({
-        domain: { name: 'PactFlow testnet wallet check', version: '1', chainId: baseSepoliaChainId }, primaryType: 'WalletCheck',
-        types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }], WalletCheck: [{ name: 'statement', type: 'string' }] },
-        message: { statement: 'This testnet wallet check grants no PactFlow payment authority.' }
-      })] });
-      setMessage(`Signature received: ${String(signature).slice(0, 14)}… It is not a Contract Acceptance.`);
-    } catch (error) { setMessage(error.message || 'The typed-data signature was not completed.'); }
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      if (chainId !== baseSepoliaChainHex) throw new Error('Switch to Base Sepolia to view this test-token balance.');
+      const result = await provider.request({ method: 'eth_call', params: [{ to: mockEusdAddress, data: mockEusdBalanceCall(ethereumWallet.address) }, 'latest'] });
+      setBalance(`${formatMockEusdBalance(result)} MockEUSD`);
+    } catch (error) {
+      setBalance('Unavailable until Base Sepolia is connected');
+      setMessage(error.message || 'We could not load the Base Sepolia test-token balance.');
+    }
   };
-  const sendZeroValueTestTransaction = async () => {
-    if (!ethereumWallet) return;
-    setMessage('Requesting a zero-value Base Sepolia transaction to your own wallet…');
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!ethereumWallet) {
+      setBalance('No personal wallet connected');
+      setMessage('Create a disposable test wallet or connect an external Base Sepolia wallet when you are ready.');
+      return;
+    }
+    setMessage(`Wallet connected: ${ethereumWallet.address}`);
+    void refreshMockEusdBalance();
+  }, [ethereumWallet, isReady]);
+
+  const createDisposableWallet = async () => {
+    setMessage('Creating your disposable browser test wallet…');
     try {
-      await ethereumWallet.switchChain(baseSepoliaChainId);
-      const provider = await ethereumWallet.getEthereumProvider();
-      const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: ethereumWallet.address, to: ethereumWallet.address, value: '0x0' }] });
-      setMessage(`Testnet transaction submitted: ${String(hash)}. It does not fund a Contract.`);
-    } catch (error) { setMessage(error.message || 'The zero-value testnet transaction was not submitted.'); }
+      const wallet = await createWallet();
+      setMessage(`Disposable test wallet created: ${wallet.address}`);
+    } catch (error) {
+      setMessage(error.message || 'We could not create the disposable test wallet.');
+    }
   };
-  const isReady = authStatus === 'done' && ready;
+  const connectExternalWallet = async () => {
+    setMessage('Choose the external Base Sepolia wallet to link to this Supabase Profile.');
+    try {
+      await linkWallet();
+    } catch (error) {
+      setMessage(error.message || 'The external wallet was not connected.');
+    }
+  };
+
   return createElement(React.Fragment, null,
     createElement(WalletAuthSync, { key: session?.access_token ?? 'no-supabase-session', session, onStatus: reportAuthStatus }),
-    createElement('section', { className: 'home-panel wallet-capability', 'aria-labelledby': 'wallet-capability-title' },
-    createElement('div', { className: 'home-panel-heading' }, createElement('div', null,
-      createElement('p', { className: 'eyebrow' }, 'Wallet capability'), createElement('h2', { id: 'wallet-capability-title' }, 'Connect a Base Sepolia wallet'),
-      createElement('p', null, 'Your Supabase Profile remains your PactFlow account. Privy only links a user-controlled wallet; PactFlow never receives a private key.')),
-    createElement('span', { className: 'home-status-note' }, ethereumWallet ? 'Wallet linked' : 'No wallet linked')),
-    createElement('div', { className: 'home-form-actions' },
-      createElement('button', { className: 'home-secondary-action', type: 'button', disabled: !isReady || Boolean(ethereumWallet), onClick: createEmbeddedWallet }, 'Create embedded wallet'),
-      createElement('button', { className: 'home-secondary-action', type: 'button', disabled: !isReady, onClick: connectExternalWallet }, 'Connect external wallet'),
-      createElement('button', { className: 'home-secondary-action', type: 'button', disabled: !ethereumWallet, onClick: signTestnetAcknowledgement }, 'Sign testnet check'),
-      createElement('button', { className: 'home-secondary-action', type: 'button', disabled: !ethereumWallet, onClick: sendZeroValueTestTransaction }, 'Send zero-value test')),
-    createElement('p', { className: 'home-form-status', 'aria-live': 'polite' }, message),
-    createElement('p', { className: 'contract-form-help' }, 'The transaction test may consume Base Sepolia test ETH. It is a self-transfer of zero value and never funds, settles, or approves a Contract.')));
+    createElement('section', { className: 'app-panel wallet-summary', 'aria-labelledby': 'wallet-summary-title' },
+      createElement('p', { className: 'eyebrow' }, 'Personal wallet'),
+      createElement('h2', { id: 'wallet-summary-title' }, 'Base Sepolia test wallet'),
+      createElement('p', null, 'This is your personal test wallet. Its available MockEUSD is never combined with Contract Escrow Vault funds.'),
+      createElement('p', { className: 'status' }, ethereumWallet ? 'Connected' : 'Not connected'),
+      createElement('dl', null,
+        createElement('div', null, createElement('dt', null, 'Address'), createElement('dd', null, ethereumWallet?.address ?? 'Connect or create a wallet to see its address.')),
+        createElement('div', null, createElement('dt', null, 'Network'), createElement('dd', null, 'Base Sepolia testnet')),
+        createElement('div', null, createElement('dt', null, 'Available MockEUSD'), createElement('dd', null, balance))),
+      createElement('div', { className: 'action-row' },
+        createElement('button', { type: 'button', disabled: !isReady || Boolean(ethereumWallet), onClick: createDisposableWallet }, 'Create disposable test wallet'),
+        createElement('button', { type: 'button', disabled: !isReady, onClick: connectExternalWallet }, 'Connect external wallet'),
+        createElement('button', { type: 'button', disabled: !ethereumWallet, onClick: refreshMockEusdBalance }, 'Refresh MockEUSD balance')),
+      createElement('p', { className: 'notice', 'aria-live': 'polite' }, message)),
+    createElement('section', { className: 'app-panel wallet-boundary', 'aria-labelledby': 'wallet-boundary-title' },
+      createElement('p', { className: 'eyebrow' }, 'Safety boundary'),
+      createElement('h2', { id: 'wallet-boundary-title' }, 'Contract funds stay with their Contract'),
+      createElement('p', null, 'Contract Escrow Vault pots and their activity live on each Contract. They are locked funds, not part of your available wallet balance.'),
+      createElement('p', null, 'This Wallet page has no wallet-wide transaction history. Base Sepolia and MockEUSD are valueless testnet services, not real-money products.')));
 }
 
 function WalletCapability({ appId }) {
@@ -100,10 +136,16 @@ function WalletCapability({ appId }) {
 }
 
 async function mountWalletCapability(target, appId) {
-  ([React, { useCallback, useEffect, useState }, { createRoot }, { PrivyProvider, useCreateWallet, useLinkAccount, useSubscribeToJwtAuthWithFlag, useWallets }] = await Promise.all([
+  const [reactModule, hooksModule, reactDomModule, privyModule] = await Promise.all([
     import('react'), import('react'), import('react-dom/client'), import('@privy-io/react-auth')
-  ]));
+  ]);
+  React = reactModule.default ?? reactModule;
+  const reactHooks = hooksModule.default ?? hooksModule;
+  ({ useCallback, useEffect, useState } = reactHooks);
+  createRoot = reactDomModule.createRoot ?? reactDomModule.default?.createRoot;
+  ({ PrivyProvider, useCreateWallet, useLinkAccount, useSubscribeToJwtAuthWithFlag, useWallets } = privyModule);
   createElement = React.createElement;
+  if (!createRoot) throw new Error('Wallet rendering is unavailable in this browser.');
   createRoot(target).render(createElement(WalletCapability, { appId }));
 }
 
@@ -111,12 +153,27 @@ async function mount() {
   const target = document.querySelector('#wallet-capability');
   if (!target) return;
   const config = await fetch('/api/auth/config').then(response => response.json());
-  if (!config.privyAppId) { target.textContent = 'Wallet capability is not configured for this environment.'; return; }
-  target.innerHTML = '<section class="home-panel wallet-capability"><p class="eyebrow">Wallet capability</p><h2>Connect a Base Sepolia wallet</h2><p>Valueless Base Sepolia test flow only: it does not provide a real-money service or Contract payment authority.</p><button id="start-wallet-capability" class="home-secondary-action" type="button">Set up wallet</button></section>';
-  target.querySelector('#start-wallet-capability').onclick = () => {
-    target.textContent = 'Loading wallet capability…';
-    mountWalletCapability(target, config.privyAppId).catch(error => { target.textContent = error.message || 'Wallet capability is unavailable.'; });
-  };
+  const localTestFixture = await activeLocalTestFixture();
+  if (localTestFixture) {
+    const status = target.querySelector('[data-wallet-status]');
+    const address = target.querySelector('[data-wallet-address]');
+    const balance = target.querySelector('[data-wallet-balance]');
+    if (localTestFixture.wallet) {
+      if (address) address.textContent = localTestFixture.wallet.address;
+      if (balance) balance.textContent = localTestFixture.wallet.mockEusdBalance;
+      if (status) status.textContent = 'Local test identity is active. Test wallet connected.';
+    } else if (status) status.textContent = 'Local test identity is active. No personal wallet is connected.';
+    return;
+  }
+  if (!config.privyAppId) {
+    const status = target.querySelector('[data-wallet-status]');
+    if (status) status.textContent = 'Wallet connection is not configured for this environment.';
+    return;
+  }
+  await mountWalletCapability(target, config.privyAppId);
 }
 
-mount().catch(error => { const target = document.querySelector('#wallet-capability'); if (target) target.textContent = error.message || 'Wallet capability is unavailable.'; });
+mount().catch(error => {
+  const status = document.querySelector('[data-wallet-status]');
+  if (status) status.textContent = error.message || 'Wallet capability is unavailable.';
+});

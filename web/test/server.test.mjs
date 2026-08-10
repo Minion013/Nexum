@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { createServer as createTcpServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createApp, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
+import { signedInNavigation } from '../public/signed-in-navigation.js';
 
 async function request(server, path) {
   return fetch(`http://127.0.0.1:${server.address().port}${path}`);
@@ -97,6 +98,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
     for (const path of [
       '/home',
       '/contracts',
+      '/wallet',
       '/people',
       '/notifications',
       '/settings',
@@ -108,15 +110,22 @@ test('authenticated area pages are served from their canonical URLs', async () =
     }
     const home = await request(server, '/home');
     const homeMarkup = await home.text();
-    for (const href of ['/home', '/contracts', '/people', '/settings']) {
+    for (const href of ['/home', '/contracts', '/wallet', '/people']) {
       assert.match(homeMarkup, new RegExp(`href="${href}"`), href);
     }
+    assert.doesNotMatch(homeMarkup, /href="\/settings">Settings/);
     assert.match(homeMarkup, /What needs you now/);
     assert.match(homeMarkup, /Milestone timeline/);
     assert.match(homeMarkup, /Loading Contract actions/);
     assert.ok(homeMarkup.indexOf('id="action-list"') < homeMarkup.indexOf('class="metric-grid"'));
-    assert.match(homeMarkup, /id="wallet-capability"/);
-    assert.match(homeMarkup, /wallet\.bundle\.js/);
+    assert.doesNotMatch(homeMarkup, /id="wallet-capability"/);
+    const wallet = await request(server, '/wallet');
+    const walletMarkup = await wallet.text();
+    assert.match(walletMarkup, /Base Sepolia test wallet/);
+    assert.match(walletMarkup, /Available MockEUSD/);
+    assert.match(walletMarkup, /Contract Escrow Vaults/);
+    assert.match(walletMarkup, /No wallet-wide transaction history/);
+    assert.match(walletMarkup, /wallet\.bundle\.js/);
     assert.doesNotMatch(homeMarkup, />Workspace Settings</);
     assert.match(homeMarkup, /class="profile-name profile-name-loading"/);
     assert.match(homeMarkup, /aria-label="Loading profile" aria-busy="true"/);
@@ -144,6 +153,26 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.equal((await request(server, '/contracts/not-a-contract/extra')).status, 404);
     for (const retiredPath of ['/workspace', '/workspace-list.html', '/workspace.js', '/workspace.css', '/workspace.bundle.js', '/contacts.html', '/api/workspaces']) {
       assert.equal((await request(server, retiredPath)).status, 404, retiredPath);
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('every signed-in route keeps the four focused primary and mobile destinations', async () => {
+  assert.deepEqual(signedInNavigation, [
+    ['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/wallet', 'Wallet'], ['/people', 'People']
+  ]);
+  const server = createApp();
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    for (const path of ['/home', '/contracts', '/wallet', '/people', '/settings']) {
+      const markup = await (await request(server, path)).text();
+      const expectedLinks = ['/home', '/contracts', '/wallet', '/people'];
+      for (const href of expectedLinks) assert.match(markup, new RegExp(`href="${href}"`), `${path} includes ${href}`);
+      assert.doesNotMatch(markup, /href="\/settings">Settings/, `${path} keeps Settings out of primary navigation`);
+      assert.doesNotMatch(markup, /bottom-nav[\s\S]*Notifications/, `${path} keeps Notifications out of mobile navigation`);
+      assert.match(markup, /href="\/settings">Profile Settings/, `${path} keeps Profile Settings in the avatar menu`);
     }
   } finally {
     await new Promise(resolve => server.close(resolve));

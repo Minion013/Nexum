@@ -1,24 +1,22 @@
-import { authenticatedRequest, supabase } from './supabase-auth.js';
+import { authenticatedRequest, clearLocalTestFixture, supabase } from './supabase-auth.js';
 import { privateAvatarUrl } from './private-avatar.js';
 import { loadingProfileIdentity, resolveProfileIdentity } from './profile-identity.js';
+import { signedInNavigation } from './signed-in-navigation.js';
 
 const route = location.pathname === '/contacts' ? '/people' : location.pathname;
-const navigation = [
-  ['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/settings', 'Settings']
-];
 const active = href => route === href || (href !== '/home' && route.startsWith(`${href}/`));
-async function signOut() { await (await supabase()).auth.signOut(); location.assign('/'); }
+async function signOut() { clearLocalTestFixture(); await (await supabase()).auth.signOut(); location.assign('/'); }
 function navLink(href, title) { const link = document.createElement('a'); link.href = href; link.textContent = title; if (active(href)) link.setAttribute('aria-current', 'page'); return link; }
 function nav(label) {
   const element = document.createElement('nav'); element.className = 'app-nav'; element.setAttribute('aria-label', label);
-  navigation.forEach(([href, title]) => element.append(navLink(href, title)));
+  signedInNavigation.forEach(([href, title]) => element.append(navLink(href, title)));
   return element;
 }
 function quickNavigation() {
   const quickNav = document.createElement('nav');
   quickNav.className = 'bottom-nav';
   quickNav.setAttribute('aria-label', 'Quick navigation');
-  [['/home', 'Dashboard'], ['/contracts', 'Contracts'], ['/people', 'People'], ['/contracts#new-contract', 'Create']]
+  signedInNavigation
     .forEach(([href, title]) => quickNav.append(navLink(href, title)));
   return quickNav;
 }

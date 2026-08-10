@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>People — PactFlow</title>
+  <title>Wallet — PactFlow</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/signed-in.css">
   <link rel="stylesheet" href="/profile-identity.css">
 </head>
-<body class="workspace-app" data-page="people">
-  <a class="skip-link" href="#main-content">Skip to People</a>
+<body class="workspace-app" data-page="wallet">
+  <a class="skip-link" href="#main-content">Skip to Wallet</a>
   <div class="app-shell">
     <aside class="app-sidebar">
       <a class="brand app-brand" href="/home">Pact<span>Flow</span></a>
@@ -18,18 +18,26 @@
     </aside>
     <main id="main-content" class="app-content" tabindex="-1">
       <header class="app-topbar"><button id="open-nav" class="mobile-toggle" type="button" aria-label="Open navigation">Menu</button></header>
-      <p id="request-error" role="alert" hidden></p>
-      <p class="eyebrow">People</p>
-      <h1>Professional connections, kept separate from access.</h1>
-      <p id="people-access-note" class="page-intro">Discovering or connecting with a person does not grant either of you Contract access.</p>
-      <div id="people-content">
-        <section class="app-panel" style="margin-top:20px"><label>Discover People<input id="people-search" type="search" placeholder="Search name, username, or professional headline" aria-describedby="people-access-note people-status"></label><p id="people-status" class="notice" role="status" aria-live="polite">Loading eligible People…</p><div id="discover-results" class="list" aria-live="polite" aria-busy="true"></div></section>
-        <section class="dashboard-grid"><article class="app-panel"><p class="eyebrow">My network</p><h2>Accepted connections</h2><div id="network-results" class="list"></div></article><article class="app-panel"><p class="eyebrow">Requests</p><h2>Pending activity</h2><div id="request-results" class="list"></div></article></section>
+      <p class="eyebrow">Wallet</p>
+      <h1>Personal test funds, kept separate.</h1>
+      <p class="page-intro">Inspect or connect your Base Sepolia test wallet. Contract Escrow Vault funds remain in their individual Contracts.</p>
+      <div id="wallet-capability">
+        <section class="app-panel wallet-summary" aria-labelledby="wallet-summary-title">
+          <p class="eyebrow">Personal wallet</p><h2 id="wallet-summary-title">Base Sepolia test wallet</h2>
+          <dl><div><dt>Address</dt><dd data-wallet-address>Connect or create a wallet to see its address.</dd></div><div><dt>Network</dt><dd>Base Sepolia testnet</dd></div><div><dt>Available MockEUSD</dt><dd data-wallet-balance>Not connected</dd></div></dl>
+          <p data-wallet-status class="notice" aria-live="polite">Loading wallet connection…</p>
+        </section>
+        <section class="app-panel wallet-boundary" aria-labelledby="wallet-boundary-title">
+          <p class="eyebrow">Safety boundary</p><h2 id="wallet-boundary-title">Contract funds stay with their Contract</h2>
+          <p>Contract Escrow Vaults are separate locked pots, never spendable wallet balance.</p>
+          <p>No wallet-wide transaction history appears here. Base Sepolia and MockEUSD are valueless testnet services, not real-money products.</p>
+        </section>
       </div>
     </main>
   </div>
   <dialog id="nav-drawer" class="drawer"><button id="close-nav" type="button">Close navigation</button></dialog>
   <nav class="bottom-nav" aria-label="Quick navigation"><a data-route href="/home">Dashboard</a><a data-route href="/contracts">Contracts</a><a data-route href="/wallet">Wallet</a><a data-route href="/people">People</a></nav>
   <script type="module" src="/app-shell.bundle.js"></script>
+  <script type="module" src="/wallet.bundle.js"></script>
 </body>
 </html>

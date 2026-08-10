@@ -1,4 +1,4 @@
-import { authenticatedRequest, supabase } from './supabase-auth.js';
+import { authenticatedRequest, localTestSignIn, supabase } from './supabase-auth.js';
 import { createEmailCodeSender } from './email-code.js';
 
 const $ = selector => document.querySelector(selector);
@@ -45,6 +45,7 @@ function startResendCooldown(seconds) {
 async function sendEmailCode() {
   const email = $('#email').value.trim();
   if (!email) throw new Error('Enter your email address.');
+  if (await localTestSignIn(email)) { window.location.assign('/wallet'); return; }
   const result = await (await sender()).request(email);
   if (!result.ok) {
     if (result.reason === 'cooldown') { startResendCooldown(result.retryAfterSeconds); showSentEmail(email); showMessage(`Please wait ${result.retryAfterSeconds} seconds before requesting another code.`); return; }

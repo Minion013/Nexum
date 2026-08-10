@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, isLoopbackAddress, localTestProfileFromEnvironment, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -9,13 +9,43 @@ async function start(options) {
   return { server, origin: `http://127.0.0.1:${server.address().port}` };
 }
 
-async function request(origin, path, { token, method = 'GET', body } = {}) {
+async function request(origin, path, { token, method = 'GET', body, headers = {} } = {}) {
   return fetch(`${origin}${path}`, {
     method,
-    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined
   });
 }
+
+test('local test sign-in requires an explicit non-production email flag and permits only the configured test identity', async () => {
+  assert.equal(isLoopbackAddress('127.0.0.1'), true);
+  assert.equal(isLoopbackAddress('::1'), true);
+  assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true);
+  assert.equal(isLoopbackAddress('192.0.2.1'), false);
+  assert.equal(localTestProfileFromEnvironment({ NODE_ENV: 'production', PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' }), null);
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  assert.deepEqual(localTestProfile, {
+    id: '00000000-0000-4000-8000-000000000099',
+    email: 'pactflow-wallet-test@local.invalid',
+    profile: { id: '00000000-0000-4000-8000-000000000099', email: 'pactflow-wallet-test@local.invalid', displayName: 'Local Wallet Tester', avatarSeed: 'indigo', onboardingCompletedAt: '2026-08-10T00:00:00.000Z' }
+  });
+  assert.deepEqual(localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-connected-test@local.invalid' }).wallet, {
+    address: '0x1111111111111111111111111111111111111111',
+    mockEusdBalance: '1,250 MockEUSD'
+  });
+  const { server, origin } = await start({ localTestProfile });
+  try {
+    assert.equal((await request(origin, '/api/session')).status, 401);
+    const response = await request(origin, '/api/session', { headers: { 'x-pactflow-local-test-email': localTestProfile.email } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      user: { id: localTestProfile.id, email: localTestProfile.email, profile: localTestProfile.profile },
+      mode: 'local-test-auth'
+    });
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 function validServiceEngagementDraft(overrides = {}) {
   const draft = {
