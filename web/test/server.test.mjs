@@ -115,9 +115,12 @@ test('authenticated area pages are served from their canonical URLs', async () =
     }
     assert.doesNotMatch(homeMarkup, /href="\/settings">Settings/);
     assert.match(homeMarkup, /What needs you now/);
-    assert.match(homeMarkup, /Milestone timeline/);
+    assert.match(homeMarkup, /Next milestones/);
     assert.match(homeMarkup, /Loading Contract actions/);
-    assert.ok(homeMarkup.indexOf('id="action-list"') < homeMarkup.indexOf('class="metric-grid"'));
+    assert.match(homeMarkup, /Needs your attention/);
+    assert.match(homeMarkup, /dashboard\.bundle\.js/);
+    assert.doesNotMatch(homeMarkup, /Recent Activity/);
+    assert.ok(homeMarkup.indexOf('class="metric-grid') < homeMarkup.indexOf('id="action-list"'));
     assert.doesNotMatch(homeMarkup, /id="wallet-capability"/);
     const wallet = await request(server, '/wallet');
     const walletMarkup = await wallet.text();

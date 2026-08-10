@@ -42,6 +42,9 @@ test('local test sign-in requires an explicit non-production email flag and perm
       user: { id: localTestProfile.id, email: localTestProfile.email, profile: localTestProfile.profile },
       mode: 'local-test-auth'
     });
+    const home = await request(origin, '/api/home', { headers: { 'x-pactflow-local-test-email': localTestProfile.email } });
+    assert.equal(home.status, 200);
+    assert.deepEqual(await home.json(), { home: { contracts: [] } });
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

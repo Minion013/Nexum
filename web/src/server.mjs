@@ -685,7 +685,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/home' && request.method === 'GET') {
         const session = await authenticate();
-        const home = await loadHome({ userId: session.userId, accessToken: session.accessToken });
+        const home = session.localTest ? { contracts: [] } : await loadHome({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { home });
       }
       if (url.pathname === '/api/people' && request.method === 'GET') {
