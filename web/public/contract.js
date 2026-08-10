@@ -21,13 +21,15 @@ function localDateTime(utc) {
 function canonicalUtc(local) { return local ? new Date(local).toISOString() : ''; }
 function lines(value) { return String(value ?? '').split('\n').map(item => item.trim()).filter(Boolean); }
 function lineText(value) { return Array.isArray(value) ? value.join('\n') : ''; }
+function criteriaFromLines(value) { return lines(value).map(line => ({ description: line.replace(/^optional:\s*/i, '').replace(/^required:\s*/i, '').trim(), required: !/^optional:\s*/i.test(line) })); }
+function criteriaText(value) { return (value ?? []).map(criterion => `${criterion.required === false ? 'Optional' : 'Required'}: ${criterion.description}`).join('\n'); }
 function escapeHtml(value = '') { return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
 function escapeAttribute(value = '') { return escapeHtml(value).replaceAll('"', '&quot;'); }
-function newMilestone() { return { title: '', deliveryOutcome: '', allocation: '', evidenceRequirement: '', deliveryDeadlineUtc: '', reviewWindowHours: 72 }; }
+function newMilestone() { return { title: '', deliveryOutcome: '', allocation: '', evidenceRequirement: '', acceptanceCriteria: [{ description: '', required: true }], deliveryDeadlineUtc: '', reviewWindowHours: 72 }; }
 function milestoneFields(milestone, index, canRemove) {
   const item = document.createElement('fieldset');
   item.className = 'milestone-card';
-  item.innerHTML = `<legend>Milestone ${index + 1}</legend><label>Deliverable<input name="milestone-title" maxlength="160" required value="${escapeAttribute(milestone.title)}" /></label><label>Measurable delivery outcome<textarea name="milestone-outcome" maxlength="1000" rows="2" required>${escapeHtml(milestone.deliveryOutcome)}</textarea></label><label>Gross allocation<input name="milestone-allocation" type="number" min="1" step="1" required value="${escapeAttribute(milestone.allocation)}" /></label><label>Evidence requirement<textarea name="milestone-evidence" maxlength="4000" rows="2" required>${escapeHtml(milestone.evidenceRequirement)}</textarea></label><label>Delivery deadline (your local time)<input name="milestone-deadline" type="datetime-local" required value="${localDateTime(milestone.deliveryDeadlineUtc)}" /></label><label>Review window<select name="milestone-review-window" required><option value="24" ${Number(milestone.reviewWindowHours) === 24 ? 'selected' : ''}>24 hours</option><option value="72" ${Number(milestone.reviewWindowHours) === 72 ? 'selected' : ''}>72 hours</option><option value="168" ${Number(milestone.reviewWindowHours) === 168 ? 'selected' : ''}>168 hours</option></select></label>${canRemove ? '<button class="home-secondary-action contract-inline-action remove-milestone" type="button">Remove milestone</button>' : ''}`;
+  item.innerHTML = `<legend>Milestone ${index + 1}</legend><label>Deliverable<input name="milestone-title" maxlength="160" required value="${escapeAttribute(milestone.title)}" /></label><label>Measurable delivery outcome<textarea name="milestone-outcome" maxlength="1000" rows="2" required>${escapeHtml(milestone.deliveryOutcome)}</textarea></label><label>Gross allocation<input name="milestone-allocation" type="number" min="1" step="1" required value="${escapeAttribute(milestone.allocation)}" /></label><label>Evidence requirement<textarea name="milestone-evidence" maxlength="4000" rows="2" required>${escapeHtml(milestone.evidenceRequirement)}</textarea></label><label>Acceptance Criteria (one per line; prefix optional criteria with Optional:)<textarea name="milestone-criteria" maxlength="4000" rows="2" required>${escapeHtml(criteriaText(milestone.acceptanceCriteria))}</textarea></label><label>Delivery deadline (your local time)<input name="milestone-deadline" type="datetime-local" required value="${localDateTime(milestone.deliveryDeadlineUtc)}" /></label><label>Review window<select name="milestone-review-window" required><option value="24" ${Number(milestone.reviewWindowHours) === 24 ? 'selected' : ''}>24 hours</option><option value="72" ${Number(milestone.reviewWindowHours) === 72 ? 'selected' : ''}>72 hours</option><option value="168" ${Number(milestone.reviewWindowHours) === 168 ? 'selected' : ''}>168 hours</option></select></label>${canRemove ? '<button class="home-secondary-action contract-inline-action remove-milestone" type="button">Remove milestone</button>' : ''}`;
   return item;
 }
 function milestonesFromForm({ preserveLocalDeadline = false } = {}) {
@@ -36,6 +38,7 @@ function milestonesFromForm({ preserveLocalDeadline = false } = {}) {
     deliveryOutcome: card.querySelector('[name="milestone-outcome"]').value,
     allocation: Number(card.querySelector('[name="milestone-allocation"]').value),
     evidenceRequirement: card.querySelector('[name="milestone-evidence"]').value,
+    acceptanceCriteria: criteriaFromLines(card.querySelector('[name="milestone-criteria"]').value),
     deliveryDeadlineUtc: preserveLocalDeadline ? card.querySelector('[name="milestone-deadline"]').value : canonicalUtc(card.querySelector('[name="milestone-deadline"]').value),
     reviewWindowHours: Number(card.querySelector('[name="milestone-review-window"]').value)
   }));
@@ -184,7 +187,7 @@ function controlForIssue(issue) {
   };
   if (issue.sectionType === 'milestones') {
     const [index, key] = String(issue.fieldPath).split('.');
-    const names = { title: 'milestone-title', deliveryOutcome: 'milestone-outcome', allocation: 'milestone-allocation', evidenceRequirement: 'milestone-evidence', deliveryDeadlineUtc: 'milestone-deadline', reviewWindowHours: 'milestone-review-window' };
+    const names = { title: 'milestone-title', deliveryOutcome: 'milestone-outcome', allocation: 'milestone-allocation', evidenceRequirement: 'milestone-evidence', acceptanceCriteria: 'milestone-criteria', deliveryDeadlineUtc: 'milestone-deadline', reviewWindowHours: 'milestone-review-window' };
     return milestoneList.querySelectorAll('.milestone-card')[Number(index)]?.querySelector(`[name="${names[key]}"]`) ?? milestoneList;
   }
   return form.elements[directNames[`${issue.sectionType}.${issue.fieldPath}`]] ?? form.querySelector('button[type="submit"]');

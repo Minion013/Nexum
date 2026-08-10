@@ -83,8 +83,8 @@ function validServiceEngagementDraft(overrides = {}) {
       clientDependencies: ['Existing checkout analytics access']
     },
     milestones: [
-      { title: 'Research', deliveryOutcome: 'Annotated research findings', allocation: 400, evidenceRequirement: 'Annotated findings', deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 },
-      { title: 'Delivery', deliveryOutcome: 'Production-ready handoff', allocation: 600, evidenceRequirement: 'Repository handoff notes', deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
+      { title: 'Research', deliveryOutcome: 'Annotated research findings', allocation: 400, evidenceRequirement: 'Annotated findings', acceptanceCriteria: [{ description: 'Research findings are documented.', required: true }], deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 },
+      { title: 'Delivery', deliveryOutcome: 'Production-ready handoff', allocation: 600, evidenceRequirement: 'Repository handoff notes', acceptanceCriteria: [{ description: 'The handoff is complete.', required: true }], deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
     ],
     payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: 1000, fundingDeadlineUtc: '2030-09-05T09:00:00.000Z', successFeeBps: 250, feeRecipient: 'PactFlow demonstration fee recipient' },
     evidence: { reviewDecision: 'Buyer records acceptance or a specific change request within the review window.', dependencyAcknowledgementRequired: true },
@@ -871,6 +871,21 @@ test('the durable draft workflow rejects a non-conserving milestone allocation b
       ...validServiceEngagementDraft({ payment: { ...validServiceEngagementDraft().payment, totalAllocation: 999 } })
     }),
     /Milestone allocations must equal the Contract total allocation/
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('the durable draft workflow rejects a milestone without a required Acceptance Criterion before it reaches Supabase', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({ rpc: async (name, args) => { calls.push({ name, args }); return { data: 'version-id', error: null }; } })
+  );
+  const draft = validServiceEngagementDraft();
+  draft.milestones[0].acceptanceCriteria = [{ description: 'Optional observation', required: false }];
+  await assert.rejects(
+    workflow.saveDraft({ accessToken: 'party-jwt', contractId: 'contract-id', ...draft }),
+    /at least one required Acceptance Criterion/
   );
   assert.deepEqual(calls, []);
 });

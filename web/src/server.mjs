@@ -399,8 +399,8 @@ export function suggestContractDraft({ brief, draft = {}, now = new Date() }) {
       clientDependencies: ['Timely access to the materials needed for the stated scope']
     },
     milestones: [
-      { title: 'Discovery', deliveryOutcome: `Document the findings that shape ${title.toLowerCase()}.`, allocation: firstAllocation, evidenceRequirement: 'A private summary of the completed discovery work.', deliveryDeadlineUtc: discoveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours },
-      { title: 'Delivery', deliveryOutcome: `Deliver the agreed outcome for ${title.toLowerCase()} with a documented handoff.`, allocation: totalAllocation - firstAllocation, evidenceRequirement: 'A private delivery summary and handoff record without credentials or secrets.', deliveryDeadlineUtc: deliveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours }
+      { title: 'Discovery', deliveryOutcome: `Document the findings that shape ${title.toLowerCase()}.`, allocation: firstAllocation, evidenceRequirement: 'A private summary of the completed discovery work.', acceptanceCriteria: [{ description: 'The documented findings address the agreed scope.', required: true }], deliveryDeadlineUtc: discoveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours },
+      { title: 'Delivery', deliveryOutcome: `Deliver the agreed outcome for ${title.toLowerCase()} with a documented handoff.`, allocation: totalAllocation - firstAllocation, evidenceRequirement: 'A private delivery summary and handoff record without credentials or secrets.', acceptanceCriteria: [{ description: 'The agreed delivery and handoff are complete.', required: true }], deliveryDeadlineUtc: deliveryDeadline, reviewWindowHours: coPilotMilestoneReviewWindowHours }
     ],
     evidence: { reviewDecision: 'Buyer records acceptance or a specific change request within the review window.', dependencyAcknowledgementRequired: false },
     notice: coPilotAuthorityNotice
@@ -443,6 +443,15 @@ function validatedDraft(draft) {
       deliveryOutcome: text(milestone.deliveryOutcome, 'milestones', `${index}.deliveryOutcome`, `Milestone ${index + 1} delivery outcome`, 1_000),
       allocation,
       evidenceRequirement: text(milestone.evidenceRequirement, 'milestones', `${index}.evidenceRequirement`, `Milestone ${index + 1} evidence requirement`),
+      acceptanceCriteria: (() => {
+        if (!Array.isArray(milestone.acceptanceCriteria) || !milestone.acceptanceCriteria.length) invalid('milestones', `${index}.acceptanceCriteria`, 'missing_acceptance_criteria', `Milestone ${index + 1} needs at least one required Acceptance Criterion.`);
+        const criteria = milestone.acceptanceCriteria.map((criterion, criterionIndex) => ({
+          description: text(criterion?.description, 'milestones', `${index}.acceptanceCriteria.${criterionIndex}.description`, `Milestone ${index + 1} Acceptance Criterion`, 500),
+          required: criterion?.required !== false
+        }));
+        if (!criteria.some(criterion => criterion.required)) invalid('milestones', `${index}.acceptanceCriteria`, 'missing_required_acceptance_criterion', `Milestone ${index + 1} needs at least one required Acceptance Criterion.`);
+        return criteria;
+      })(),
       deliveryDeadlineUtc: canonicalTimestamp(milestone.deliveryDeadlineUtc, 'milestones', `${index}.deliveryDeadlineUtc`, `Milestone ${index + 1} delivery deadline`),
       reviewWindowHours: enumValue(Number(milestone.reviewWindowHours), [24, 72, 168], 'milestones', `${index}.reviewWindowHours`, `Milestone ${index + 1} review window`)
     };

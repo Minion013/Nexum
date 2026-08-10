@@ -7,113 +7,51 @@ const tableBody = document.querySelector('#contract-table-body');
 const records = document.querySelector('#contract-records');
 const stageFilter = document.querySelector('#stage-filter');
 const responsibilityFilter = document.querySelector('#responsibility-filter');
-const createForm = document.querySelector('#contract-create-form');
-const createStatus = document.querySelector('#contract-create-status');
+const form = document.querySelector('#contract-create-form');
+const status = document.querySelector('#contract-create-status');
+const personSelect = document.querySelector('#authoring-network-counterparty');
+const emailInput = document.querySelector('#authoring-counterparty-email');
+const milestoneList = document.querySelector('#authoring-milestones');
 let contractAccess = { contracts: [] };
+let step = 1;
 
-function element(tag, text, className) {
-  const item = document.createElement(tag);
-  if (text) item.textContent = text;
-  if (className) item.className = className;
-  return item;
-}
-
-function contractLink(action) {
-  const link = element('a', action.label, 'button');
-  link.href = action.href;
-  return link;
-}
-
+function element(tag, text, className) { const item = document.createElement(tag); if (text) item.textContent = text; if (className) item.className = className; return item; }
 function cell(text) { return element('td', text); }
-
+function contractLink(action) { const link = element('a', action.label, 'button'); link.href = action.href; return link; }
 function renderTable(presentation) {
-  if (!presentation.contracts.length) {
-    const row = document.createElement('tr');
-    const empty = element('td', presentation.emptyMessage, 'empty');
-    empty.colSpan = 7;
-    row.append(empty);
-    tableBody.replaceChildren(row);
-    return;
-  }
-  tableBody.replaceChildren(...presentation.contracts.map(contract => {
-    const row = document.createElement('tr');
-    const title = document.createElement('td');
-    title.append(element('strong', contract.title), element('small', contract.version));
-    const stage = document.createElement('td');
-    stage.append(element('span', contract.stage, `status ${contract.statusTone}`));
-    const action = document.createElement('td');
-    action.append(contractLink(contract.action));
-    row.append(title, cell(contract.counterparty), cell(contract.responsibility), stage, cell(contract.nextMilestone), cell(contract.lastActivity), action);
-    return row;
-  }));
+  if (!presentation.contracts.length) { const row = document.createElement('tr'); const empty = element('td', presentation.emptyMessage, 'empty'); empty.colSpan = 7; row.append(empty); tableBody.replaceChildren(row); return; }
+  tableBody.replaceChildren(...presentation.contracts.map(contract => { const row = document.createElement('tr'); const title = document.createElement('td'); title.append(element('strong', contract.title), element('small', contract.version)); const stage = document.createElement('td'); stage.append(element('span', contract.stage, `status ${contract.statusTone}`)); const action = document.createElement('td'); action.append(contractLink(contract.action)); row.append(title, cell(contract.counterparty), cell(contract.responsibility), stage, cell(contract.nextMilestone), cell(contract.lastActivity), action); return row; }));
 }
-
-function recordField(label, value) {
-  const field = document.createElement('div');
-  field.append(element('span', label, 'label'), element('strong', value));
-  return field;
-}
-
+function recordField(label, value) { const field = document.createElement('div'); field.append(element('span', label, 'label'), element('strong', value)); return field; }
 function renderRecords(presentation) {
-  if (!presentation.contracts.length) {
-    records.replaceChildren(element('p', presentation.emptyMessage, 'empty'));
-    return;
-  }
-  records.replaceChildren(...presentation.contracts.map(contract => {
-    const record = document.createElement('article');
-    record.className = 'record contract-record';
-    const heading = document.createElement('div');
-    heading.className = 'contract-record-heading';
-    heading.append(element('strong', contract.title), element('small', contract.version));
-    const stage = element('span', contract.stage, `status ${contract.statusTone}`);
-    const action = document.createElement('div');
-    action.className = 'contract-record-action';
-    action.append(contractLink(contract.action));
-    record.append(heading, stage, recordField('Counterparty', contract.counterparty), recordField('Your responsibility', contract.responsibility), recordField('Next milestone', contract.nextMilestone), recordField('Last activity', contract.lastActivity), action);
-    return record;
-  }));
+  if (!presentation.contracts.length) { records.replaceChildren(element('p', presentation.emptyMessage, 'empty')); return; }
+  records.replaceChildren(...presentation.contracts.map(contract => { const record = document.createElement('article'); record.className = 'record contract-record'; const heading = document.createElement('div'); heading.className = 'contract-record-heading'; heading.append(element('strong', contract.title), element('small', contract.version)); const stage = element('span', contract.stage, `status ${contract.statusTone}`); const action = document.createElement('div'); action.className = 'contract-record-action'; action.append(contractLink(contract.action)); record.append(heading, stage, recordField('Counterparty', contract.counterparty), recordField('Your responsibility', contract.responsibility), recordField('Next milestone', contract.nextMilestone), recordField('Last activity', contract.lastActivity), action); return record; }));
 }
-
-function render() {
-  const presentation = contractsPresentation(contractAccess, { stage: stageFilter.value, responsibility: responsibilityFilter.value });
-  renderTable(presentation);
-  renderRecords(presentation);
-}
-
-async function loadContracts() {
+function render() { const presentation = contractsPresentation(contractAccess, { stage: stageFilter.value, responsibility: responsibilityFilter.value }); renderTable(presentation); renderRecords(presentation); }
+async function loadContracts() { try { ({ home: contractAccess } = await authenticatedRequest('/api/home')); render(); } catch (requestError) { error.hidden = false; error.textContent = requestError.message; const presentation = contractsPresentation({ contracts: [] }); presentation.emptyMessage = 'Reconnect to load your Contracts.'; renderTable(presentation); renderRecords(presentation); } }
+async function loadPeople() {
   try {
-    ({ home: contractAccess } = await authenticatedRequest('/api/home'));
-    render();
-  } catch (requestError) {
-    error.hidden = false;
-    error.textContent = requestError.message;
-    const presentation = contractsPresentation({ contracts: [] });
-    presentation.emptyMessage = 'Reconnect to load your Contracts.';
-    renderTable(presentation);
-    renderRecords(presentation);
-  }
+    const { people } = await authenticatedRequest('/api/people');
+    const accepted = (people.connections ?? []).filter(connection => connection.status === 'accepted' && connection.email);
+    personSelect.replaceChildren(element('option', 'Choose an accepted Person'), ...accepted.map(person => { const option = element('option', `${person.display_name} — ${person.professional_headline || person.email}`); option.value = person.email; return option; }));
+  } catch { personSelect.replaceChildren(element('option', 'Use an exact email instead')); }
 }
-
-stageFilter.addEventListener('change', render);
-responsibilityFilter.addEventListener('change', render);
-createForm.addEventListener('submit', async event => {
-  event.preventDefault();
-  createStatus.textContent = 'Creating your Contract Draft…';
-  try {
-    const formData = new FormData(createForm);
-    const { contract } = await authenticatedRequest('/api/contracts', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: formData.get('name'),
-        scope: formData.get('scope'),
-        counterpartyEmail: formData.get('counterpartyEmail'),
-        initiatorResponsibility: formData.get('initiatorResponsibility')
-      })
-    });
-    location.assign(`/contracts/${encodeURIComponent(contract.id)}`);
-  } catch (requestError) {
-    createStatus.textContent = requestError.message;
-  }
-});
-
-loadContracts();
+function showStep(nextStep) { step = nextStep; form.querySelectorAll('[data-step-panel]').forEach(panel => { panel.hidden = Number(panel.dataset.stepPanel) !== step; }); form.querySelectorAll('[data-step-indicator]').forEach(item => { if (Number(item.dataset.stepIndicator) === step) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current'); }); form.querySelector(`[data-step-panel="${step}"]`)?.querySelector('input, select, textarea, button')?.focus(); }
+function localDateTime(date) { const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
+function requiredPanelIsValid() { const panel = form.querySelector(`[data-step-panel="${step}"]`); return [...panel.querySelectorAll('input, select, textarea')].every(control => control.disabled || control.reportValidity()); }
+function criteriaText(index) { return `Required: Milestone ${index + 1} is accepted when its stated delivery outcome and evidence are complete.`; }
+function criteriaFromLines(value) { return value.split('\n').map(line => line.trim()).filter(Boolean).map(line => ({ description: line.replace(/^optional:\s*/i, '').replace(/^required:\s*/i, '').trim(), required: !/^optional:\s*/i.test(line) })); }
+function escapeHtml(value) { return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
+function milestoneCard(milestone, index) { const card = document.createElement('fieldset'); card.className = 'milestone-card'; card.innerHTML = `<legend>Milestone ${index + 1}</legend><label>Title<input name="milestone-title" maxlength="160" required value="${escapeHtml(milestone.title)}" /></label><label>Delivery outcome<textarea name="milestone-outcome" rows="2" required>${escapeHtml(milestone.outcome)}</textarea></label><label>Proposed allocation<input name="milestone-allocation" type="number" min="1" step="1" required value="${escapeHtml(milestone.allocation)}" /></label><label>Evidence requirement<textarea name="milestone-evidence" rows="2" required>${escapeHtml(milestone.evidence)}</textarea></label><label>Acceptance Criteria (one per line; prefix optional criteria with Optional:)<textarea name="milestone-criteria" rows="2" required>${escapeHtml(criteriaText(index))}</textarea></label><label>Delivery deadline<input name="milestone-deadline" type="datetime-local" required value="${escapeHtml(milestone.deadline)}" /></label><label>Review window<select name="milestone-window" required><option value="24">24 hours</option><option value="72" selected>72 hours</option><option value="168">168 hours</option></select></label>`; return card; }
+function generateMilestones() { if (milestoneList.children.length) return; const total = Number(form.elements.totalAllocation.value); const start = new Date(form.elements.projectStartDateUtc.value); const first = new Date(start); first.setDate(first.getDate() + 14); const second = new Date(start); second.setDate(second.getDate() + 28); milestoneList.replaceChildren(milestoneCard({ title: 'Discovery', outcome: `Document the findings for ${form.elements.name.value}.`, allocation: Math.floor(total / 2), evidence: 'A private summary of the completed discovery work.', deadline: localDateTime(first) }, 0), milestoneCard({ title: 'Delivery', outcome: form.elements.outcome.value, allocation: total - Math.floor(total / 2), evidence: 'A private delivery summary and handoff record without credentials or secrets.', deadline: localDateTime(second) }, 1)); const email = emailInput.value; if (form.elements.initiatorResponsibility.value === 'buyer') { form.elements.buyerContact.value = ''; form.elements.serviceProviderContact.value = email; } else { form.elements.buyerContact.value = email; form.elements.serviceProviderContact.value = ''; } }
+function lines(value) { return value.split('\n').map(item => item.trim()).filter(Boolean); }
+function draftFromForm(authorityId) {
+  const initiatorIsBuyer = form.elements.initiatorResponsibility.value === 'buyer';
+  const milestones = [...milestoneList.querySelectorAll('.milestone-card')].map(card => ({ title: card.querySelector('[name="milestone-title"]').value, deliveryOutcome: card.querySelector('[name="milestone-outcome"]').value, allocation: Number(card.querySelector('[name="milestone-allocation"]').value), evidenceRequirement: card.querySelector('[name="milestone-evidence"]').value, acceptanceCriteria: criteriaFromLines(card.querySelector('[name="milestone-criteria"]').value), deliveryDeadlineUtc: new Date(card.querySelector('[name="milestone-deadline"]').value).toISOString(), reviewWindowHours: Number(card.querySelector('[name="milestone-window"]').value) }));
+  return { authorityId, parties: { buyer: { partyRef: initiatorIsBuyer ? 'initiating_party' : 'counterparty', responsibility: initiatorIsBuyer ? 'Funds the agreed proposed allocation.' : 'Reviews the agreed delivery.' }, serviceProvider: { partyRef: initiatorIsBuyer ? 'counterparty' : 'initiating_party', responsibility: initiatorIsBuyer ? 'Delivers the agreed service outcomes.' : 'Delivers the agreed service outcomes.' } }, scope: { title: form.elements.name.value, description: form.elements.scope.value, outcome: form.elements.outcome.value, includedDeliverables: lines(form.elements.includedDeliverables.value), excludedWork: ['Work outside the stated milestones'], projectStartDateUtc: new Date(form.elements.projectStartDateUtc.value).toISOString(), clientDependencies: [] }, milestones, payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: Number(form.elements.totalAllocation.value), fundingDeadlineUtc: new Date(form.elements.fundingDeadlineUtc.value).toISOString(), successFeeBps: 0, feeRecipient: '' }, evidence: { reviewDecision: form.elements.reviewDecision.value, dependencyAcknowledgementRequired: false }, intellectualProperty: { outcome: 'client_owns_project_deliverables_on_final_settlement', licenseScope: '', confidentiality: 'not_requested', confidentialityDuration: '' }, changeControl: { proposalProcess: form.elements.proposalProcess.value, bilateralAmendmentOnly: true }, notices: { buyerContact: form.elements.buyerContact.value, serviceProviderContact: form.elements.serviceProviderContact.value, exactVersionAcknowledgement: form.elements.exactVersionAcknowledgement.checked } };
+}
+personSelect.addEventListener('change', () => { if (personSelect.value) emailInput.value = personSelect.value; });
+form.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => { if (!requiredPanelIsValid()) return; if (step === 2) generateMilestones(); if (step === 3) document.querySelector('#send-summary').textContent = `You will send a private invitation to ${emailInput.value}. Proposed allocations remain draft terms until the protected Contract workflow validates them.`; showStep(step + 1); }));
+form.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => showStep(step - 1)));
+form.addEventListener('submit', async event => { event.preventDefault(); if (!requiredPanelIsValid()) return; const submit = form.querySelector('[type="submit"]'); submit.disabled = true; status.textContent = 'Creating, validating, and sending your Contract Draft…'; try { const createPayload = { name: form.elements.name.value, scope: form.elements.scope.value, counterpartyEmail: emailInput.value, initiatorResponsibility: form.elements.initiatorResponsibility.value }; const { contract } = await authenticatedRequest('/api/contracts', { method: 'POST', body: JSON.stringify(createPayload) }); const { contract: readableDraft } = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}`); await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}`, { method: 'PUT', body: JSON.stringify(draftFromForm(readableDraft.authority.id)) }); await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}/invitations`, { method: 'POST', body: JSON.stringify({ email: emailInput.value }) }); location.assign(`/contracts/${encodeURIComponent(contract.id)}`); } catch (requestError) { status.textContent = requestError.message; } finally { submit.disabled = false; } });
+stageFilter.addEventListener('change', render); responsibilityFilter.addEventListener('change', render); loadContracts(); loadPeople();

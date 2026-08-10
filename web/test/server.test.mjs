@@ -140,6 +140,7 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(contractsMarkup, /id="contract-records" class="mobile-records" aria-live="polite"/);
     assert.match(contractsMarkup, /contracts\.bundle\.js/);
     assert.match(contractsMarkup, /Create Contract Draft/);
+    for (const step of ['Choose person', 'Project details', 'Review terms', 'Send']) assert.match(contractsMarkup, new RegExp(`>${step}<`), step);
     assert.doesNotMatch(contractsMarkup, /Workspace|Proposal|Agreement/);
     assert.doesNotMatch(contractsMarkup, /Private Draft|Private Contract/);
     const notifications = await request(server, '/notifications');
