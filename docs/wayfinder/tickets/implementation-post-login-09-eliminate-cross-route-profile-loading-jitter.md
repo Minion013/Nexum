@@ -6,13 +6,13 @@
 
 **Blocked by:** 01 — Establish the responsive signed-in app shell; 05 — Deliver Profile Settings and discoverability foundation.
 
-**Status:** in-progress — claimed 2026-08-09.
+**Status:** in-progress — authenticated fallback browser acceptance verified 2026-08-10; private-image browser acceptance remains.
 
-- [ ] Treat the sidebar/mobile identity area as one resolved unit. While the authenticated Profile and its usable private-avatar URL are loading, render a stable, dimensionally reserved loading treatment; do not expose the generic `PF Profile` identity before real Profile data is ready.
-- [ ] Once the Profile is resolved, reveal the display name and private profile image together in a single visual transition. Do not progressively replace initials with an image after the name is already visible.
-- [ ] When the Profile has no image, or its private image cannot be resolved, reveal the deterministic initials/avatar fallback and display name together. This is the only intended non-image identity presentation.
-- [ ] Apply the same behavior on initial signed-in load and while navigating between all signed-in destinations, including Profile Settings. Loading must not cause layout shifts, avatar shape changes, or a flash of another account’s identity.
-- [ ] Preserve existing authenticated/private-avatar guarantees: only the current user’s signed avatar URL may be rendered, and an unavailable image must fail safely to the deterministic fallback without blocking navigation.
+- [x] Treat the sidebar/mobile identity area as one resolved unit. While the authenticated Profile and its usable private-avatar URL are loading, render a stable, dimensionally reserved loading treatment; do not expose the generic `PF Profile` identity before real Profile data is ready.
+- [x] Once the Profile is resolved, reveal the display name and private profile image together in a single visual transition. Do not progressively replace initials with an image after the name is already visible.
+- [x] When the Profile has no image, or its private image cannot be resolved, reveal the deterministic initials/avatar fallback and display name together. This is the only intended non-image identity presentation.
+- [x] Apply the same behavior on initial signed-in load and while navigating between all signed-in destinations, including Profile Settings. Loading must not cause layout shifts, avatar shape changes, or a flash of another account’s identity.
+- [x] Preserve existing authenticated/private-avatar guarantees: only the current user’s signed avatar URL may be rendered, and an unavailable image must fail safely to the deterministic fallback without blocking navigation.
 - [ ] Add focused automated coverage for delayed session/profile/avatar resolution and browser acceptance across signed-in navigation. Verify that the intermediate `PF Profile` then initials then image sequence cannot recur; retain the full test suite, typecheck, and production-build regression gates.
 
 **Out of scope:** Replacing the existing private-avatar storage model, adding cross-account profile-image caching, or redesigning Profile Settings beyond the shared signed-in identity loading behavior.
@@ -24,6 +24,12 @@
 - Added the same loading-to-resolved profile identity to the mobile navigation drawer, removed the Dashboard's independent name update, and decoupled Profile loading from the notification request so notification latency cannot hold the identity state open.
 - Verification: focused delayed-avatar/fallback/static-markup tests (4), `npm.cmd run typecheck`, production build, `npm.cmd test` (57 passing), and `git diff --check` pass.
 
-## Remaining verification gap
+## Evidence recorded 2026-08-10
 
-- Perform signed-in browser acceptance on Dashboard, Contracts, People, and Profile Settings with a private image and without one. Confirm that every route starts with the reserved loading treatment and resolves directly to the current Profile's image-and-name or initials-and-name fallback, with no layout shift or stale-account flash. This session could not start the local server because PowerShell's inherited environment contains conflicting `Path` and `PATH` entries; no authenticated browser session was available.
+- Local test authentication with `pactflow-wallet-test@local.invalid` exercised Dashboard, Contracts, People, and Profile Settings on `127.0.0.1:3456`. Every desktop route began with the reserved 147.2 × 48 px loading identity, contained no `PF Profile` or stale profile name, and resolved directly to `Local Wallet Tester` plus the deterministic `LW` fallback at the same dimensions.
+- At 390 px wide, each route retained no `PF Profile`; the opened mobile drawer resolved to the same current Profile fallback. The delayed-avatar tests separately prove the private image and name resolve atomically, while failed or unavailable private images resolve safely to the deterministic fallback.
+- Verification: `npm.cmd test -- test/profile-identity.test.mjs` (4 passing), `npm.cmd run typecheck`, `npm.cmd test` (65 passing), production `npm.cmd run build`, and `git diff --check` pass.
+
+## Remaining gaps
+
+- Verify a signed-in browser run with a current Profile that has a usable private image across Dashboard, Contracts, People, and Profile Settings. The documented local fixture has no private image, so its completed browser run proves only the deterministic-fallback path; the focused resolver tests are not a replacement for live image-path navigation acceptance.
