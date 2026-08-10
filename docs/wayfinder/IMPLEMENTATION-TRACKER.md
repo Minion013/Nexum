@@ -13,9 +13,19 @@ The [implementation completion reference](implementation-completion-reference.md
 - Temporary local browser-auth fixtures are documented in ticket 03. They are disabled by default, production-refused, and must be removed after the normal `/api/session` failure is resolved.
 - Base Sepolia MockEUSD and the EscrowVaultFactory are deployed, but Contract-specific Vault creation, wallet funding, authoritative chain reads, settlement, and end-to-end judge verification remain incomplete.
 
+## Current active priority — MilestonePay-informed Contract workflow
+
+The [MilestonePay-informed Contract workflow specification](milestonepay-contract-workflow-spec.md) is the active delivery source. It extends the completed one-to-one Contract UX migration with the approved four-step Contract Draft flow and systematic Milestone Review. Complete this queue in order; Ticket 01 is the current frontier.
+
+1. [Deliver four-step Contract Draft authoring](tickets/milestonepay-contract-workflow-01-authoring-integration.md) — **ready-for-agent / current frontier**: replaces the dense draft editor with Choose person → Project details → Review terms → Send, while preserving Contract Party access, version validation, and the explicit invitation boundary.
+2. [Deliver private milestone evidence and activity](tickets/milestonepay-contract-workflow-02-review-integration.md) — blocked by 1.
+3. [Deliver criteria-gated milestone review decisions](tickets/milestonepay-contract-workflow-03-implementation.md) — blocked by 2.
+4. [Deliver truthful review-window and payment states](tickets/milestonepay-contract-workflow-04-review-window-and-payment-states.md) — blocked by 3.
+5. [Verify responsive MilestonePay-informed Contract experiences](tickets/milestonepay-contract-workflow-05-responsive-verification.md) — blocked by 4.
+
 ## Active priority â€” one-to-one Contract UX migration
 
-The [one-to-one Contract UX migration specification](one-to-one-contract-ux-migration-spec.md) is the active delivery source. Its Contract-only, two-User-Profile model takes precedence over every retired model, Contract Draft, and Contract-oriented queue below.
+The [one-to-one Contract UX migration specification](one-to-one-contract-ux-migration-spec.md) is the completed foundation for the active workflow. Its Contract-only, two-User-Profile model continues to govern every retired model, Contract Draft, and Contract-oriented queue below.
 
 1. [Establish Profile-owned Contract access](tickets/01-establish-profile-owned-contract-access.md) - **complete 2026-08-10**: migration `20260810100000` is applied; linked post-deployment checks found zero invalid Contract Parties, zero active delegations, and zero Contracts missing their creator Profile party. The rollback-only RLS regression proves a retained Contract Draft access Workspace cannot authorize a non-party; linked lint, 61-test suite, typecheck, and build pass.
 2. [Retire legacy Contract authoring and routes](tickets/02-retire-legacy-contract-authoring-and-routes.md) - **complete 2026-08-10**: retired Workspace paths/API now return not-found; Contract-only creation and Profile-owned review have focused route/API coverage, typecheck, build, and 59 tests passing. The product owner independently verified the browser behavior; the local fresh-token `/api/session` harness failure was reproduced in both browser surfaces and is recorded as environment evidence rather than a ticket gap.

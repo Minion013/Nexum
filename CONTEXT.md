@@ -66,6 +66,14 @@ _Avoid_: arbitrary form field
 The ordered Contract Section that defines each measurable delivery outcome, allocation, canonical UTC deadline, evidence requirement, and review window for a Service Engagement.
 _Avoid_: payment instalments
 
+**Acceptance Criterion**:
+A measurable, milestone-specific condition the Buyer must explicitly check after reviewing submitted evidence. Every required Acceptance Criterion must be checked before the Buyer can accept a milestone and release its allocation; it does not prevent a revision request or dispute.
+_Avoid_: informal review note, generic checklist
+
+**Milestone Review**:
+The Contract-scoped evaluation of a submitted milestone's evidence against its Acceptance Criteria and review-window rules. It exposes an append-only activity trail and permits acceptance, a revision request, or a dispute according to the Contract terms.
+_Avoid_: approval screen, payment review
+
 **Change Control**:
 The Contract Section that states how either Contract Party may propose a change and that only a bilateral amendment may alter future uncompleted work.
 _Avoid_: edit history
