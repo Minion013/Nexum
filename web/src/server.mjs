@@ -84,7 +84,7 @@ export function localTestProfileFromEnvironment(environment = process.env) {
   return {
     id,
     email,
-    profile: { id, email, displayName: 'Local Wallet Tester', avatarSeed: 'indigo', onboardingCompletedAt: '2026-08-10T00:00:00.000Z' },
+    profile: { id, email, displayName: 'Local Wallet Tester', professionalHeadline: 'Testnet service designer', bio: 'A local-only Profile Settings fixture.', avatarSeed: 'indigo', discoverable: true, onboardingCompletedAt: '2026-08-10T00:00:00.000Z' },
     ...(wallet ? { wallet } : {})
   };
 }
@@ -264,6 +264,7 @@ function requiredText(value, label, limit = 4_000) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > limit) throw new ValidationError(`${label} is required.`);
   return value.trim();
 }
+function optionalText(value, label, limit = 4_000) { return value ? requiredText(value, label, limit) : null; }
 function profileResponse(data, includeOnboarding = false) {
   return {
     id: data.id,
@@ -277,6 +278,16 @@ function profileResponse(data, includeOnboarding = false) {
     discoverable: data.discoverable,
     ...(includeOnboarding ? { onboardingCompletedAt: data.onboarding_completed_at } : {})
   };
+}
+function saveLocalTestProfile(profile, input) {
+  return Object.assign(profile, {
+    displayName: requiredText(input.displayName, 'Display name', 120),
+    professionalHeadline: optionalText(input.professionalHeadline, 'Professional headline', 160),
+    bio: optionalText(input.bio, 'Bio', 1_000),
+    avatarSeed: enumValue(input.avatarSeed, ['indigo', 'teal', 'amber', 'rose', 'slate', 'violet'], 'profile', 'avatarSeed', 'Avatar colour'),
+    ...(input.avatarPath !== undefined ? { avatarPath: input.avatarPath ? requiredAvatarPath(input.avatarPath, profile.id) : null } : {}),
+    discoverable: Boolean(input.discoverable)
+  });
 }
 function requiredEmail(value) {
   const email = requiredText(value, 'Counterparty email', 320).toLowerCase();
@@ -713,7 +724,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/profile/settings' && request.method === 'PUT') {
         const session = await authenticate();
-        const profile = await profileSettingsWorkflow({ ...await json(request), userId: session.userId, accessToken: session.accessToken });
+        const profile = session.localTest
+          ? saveLocalTestProfile(localTestProfile.profile, await json(request))
+          : await profileSettingsWorkflow({ ...await json(request), userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { profile });
       }
       if (url.pathname === '/api/contracts' && request.method === 'POST') {

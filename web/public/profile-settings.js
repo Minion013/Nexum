@@ -1,3 +1,13 @@
+export function profileSettingsValues(profile = {}) {
+  return {
+    displayName: profile.displayName ?? '',
+    professionalHeadline: profile.professionalHeadline ?? '',
+    bio: profile.bio ?? '',
+    avatarSeed: profile.avatarSeed ?? 'indigo',
+    discoverable: Boolean(profile.discoverable)
+  };
+}
+
 export async function saveProfileSettings({ profile, values, file, uploadAvatar, saveProfile }) {
   let avatarPath = profile.avatarPath;
   let uploadError = null;

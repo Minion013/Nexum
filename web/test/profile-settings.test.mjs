@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { saveProfileSettings } from '../public/profile-settings.js';
+import { profileSettingsValues, saveProfileSettings } from '../public/profile-settings.js';
+
+test('Profile Settings derives its editable fields from the current authenticated Profile', () => {
+  assert.deepEqual(profileSettingsValues({
+    displayName: 'Avery Stone',
+    professionalHeadline: 'Service designer',
+    bio: 'Making complex work clear.',
+    avatarSeed: 'teal',
+    discoverable: true
+  }), {
+    displayName: 'Avery Stone',
+    professionalHeadline: 'Service designer',
+    bio: 'Making complex work clear.',
+    avatarSeed: 'teal',
+    discoverable: true
+  });
+});
 
 test('Profile Settings saves text and discoverability when an optional image upload fails', async () => {
   const saved = [];

@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 const webRoot = resolve(fileURLToPath(new URL('../', import.meta.url)));
 
 await build({
-  entryPoints: [join(webRoot, 'public', 'app-shell.js'), join(webRoot, 'public', 'dashboard.js'), join(webRoot, 'public', 'contracts.js'), join(webRoot, 'public', 'notifications.js'), join(webRoot, 'public', 'login.js'), join(webRoot, 'public', 'contract.js'), join(webRoot, 'public', 'invitation.js'), join(webRoot, 'public', 'wallet.js')],
+  entryPoints: [join(webRoot, 'public', 'app-shell.js'), join(webRoot, 'public', 'dashboard.js'), join(webRoot, 'public', 'contracts.js'), join(webRoot, 'public', 'notifications.js'), join(webRoot, 'public', 'login.js'), join(webRoot, 'public', 'contract.js'), join(webRoot, 'public', 'invitation.js'), join(webRoot, 'public', 'wallet.js'), join(webRoot, 'public', 'settings.js')],
   bundle: true,
   splitting: true,
   format: 'esm',

@@ -27,7 +27,7 @@ test('local test sign-in requires an explicit non-production email flag and perm
   assert.deepEqual(localTestProfile, {
     id: '00000000-0000-4000-8000-000000000099',
     email: 'pactflow-wallet-test@local.invalid',
-    profile: { id: '00000000-0000-4000-8000-000000000099', email: 'pactflow-wallet-test@local.invalid', displayName: 'Local Wallet Tester', avatarSeed: 'indigo', onboardingCompletedAt: '2026-08-10T00:00:00.000Z' }
+    profile: { id: '00000000-0000-4000-8000-000000000099', email: 'pactflow-wallet-test@local.invalid', displayName: 'Local Wallet Tester', professionalHeadline: 'Testnet service designer', bio: 'A local-only Profile Settings fixture.', avatarSeed: 'indigo', discoverable: true, onboardingCompletedAt: '2026-08-10T00:00:00.000Z' }
   });
   assert.deepEqual(localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-connected-test@local.invalid' }).wallet, {
     address: '0x1111111111111111111111111111111111111111',
@@ -41,6 +41,22 @@ test('local test sign-in requires an explicit non-production email flag and perm
     assert.deepEqual(await response.json(), {
       user: { id: localTestProfile.id, email: localTestProfile.email, profile: localTestProfile.profile },
       mode: 'local-test-auth'
+    });
+    const saved = await request(origin, '/api/profile/settings', {
+      method: 'PUT',
+      headers: { 'x-pactflow-local-test-email': localTestProfile.email },
+      body: { displayName: 'Updated local tester', professionalHeadline: 'Product designer', bio: 'Updated local fixture.', avatarSeed: 'teal', discoverable: false }
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).profile, {
+      id: localTestProfile.id,
+      email: localTestProfile.email,
+      displayName: 'Updated local tester',
+      professionalHeadline: 'Product designer',
+      bio: 'Updated local fixture.',
+      avatarSeed: 'teal',
+      discoverable: false,
+      onboardingCompletedAt: '2026-08-10T00:00:00.000Z'
     });
     const home = await request(origin, '/api/home', { headers: { 'x-pactflow-local-test-email': localTestProfile.email } });
     assert.equal(home.status, 200);
