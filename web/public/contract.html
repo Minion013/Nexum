@@ -4,42 +4,127 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="A PactFlow Contract Draft." />
-    <title>Contract draft — PactFlow</title>
+    <title>Contract Draft — PactFlow</title>
     <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/home.css" />
+    <link rel="stylesheet" href="/contract-authoring.css" />
+    <link rel="stylesheet" href="/contract-draft.css" />
   </head>
-  <body class="home-page">
-    <a class="skip-link" href="#main-content">Skip to Contract</a>
-    <header class="home-header"><a class="brand" href="/home">Pact<span>Flow</span></a><nav aria-label="Primary navigation"><a href="/home">Dashboard</a><a aria-current="page" href="/contracts">Contracts</a><a href="/people">People</a><a href="/settings">Profile Settings</a></nav><button id="sign-out" class="home-sign-out" type="button">Sign out</button></header>
-    <main id="main-content" class="home-main" tabindex="-1">
-      <p id="request-error" class="home-error" aria-live="polite" hidden></p>
-      <section class="home-intro"><p class="eyebrow">Contract Draft</p><h1 id="contract-title">Loading Contract…</h1><p id="contract-summary">Only Contract Parties can view or edit this Contract Draft. It cannot move funds.</p></section>
-      <section id="contract-copilot" class="home-panel" hidden aria-labelledby="contract-copilot-title">
-        <div class="home-panel-heading"><div><p class="eyebrow">Drafting co-pilot</p><h2 id="contract-copilot-title">Turn a commercial brief into editable starting terms</h2><p>Suggestions are not saved or shared until you review, edit, and validate the Contract draft.</p></div></div>
-        <form id="contract-copilot-form" class="home-contract-form"><label>Plain-language commercial brief<textarea name="brief" maxlength="3200" rows="4" required placeholder="Describe the outcomes, scope, and any delivery dates you have in mind."></textarea></label><p class="contract-form-help"><strong>No Contract or payment authority.</strong> The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes. Do not include passwords, private keys, or other secrets.</p><button class="home-secondary-action" type="submit">Suggest editable terms</button><p id="contract-copilot-status" class="home-form-status" aria-live="polite"></p></form>
+  <body class="authoring-page contract-draft-page">
+    <a class="skip-link" href="#main-content">Skip to Contract Draft</a>
+    <main id="main-content" class="authoring-main contract-draft-main" tabindex="-1">
+      <header class="authoring-top">
+        <a class="brand" href="/contracts">Pact<span>Flow</span></a>
+        <a href="/contracts">Back to Contracts</a>
+      </header>
+
+      <p id="request-error" class="contract-alert" aria-live="polite" hidden></p>
+      <section class="contract-draft-hero" aria-labelledby="contract-title">
+        <p class="authoring-kicker">Contract Draft</p>
+        <h1 id="contract-title" class="authoring-title">Loading Contract…</h1>
+        <p id="contract-summary" class="authoring-intro">Only Contract Parties can view or edit this Contract Draft. It cannot move funds.</p>
       </section>
-      <form id="contract-draft-form" class="home-contract-form contract-draft-form" hidden>
-        <fieldset><legend>Contract Parties</legend><p class="contract-form-help">Name the two responsibilities without changing who has Contract access.</p><label>Buyer is<select name="buyerPartyRef" required><option value="initiating_party">Initiating Contract Party</option><option value="counterparty">Counterparty</option></select></label><label>Buyer responsibility<textarea name="buyerResponsibility" maxlength="500" rows="2" required></textarea></label><label>Service provider is<select name="serviceProviderPartyRef" required><option value="counterparty">Counterparty</option><option value="initiating_party">Initiating Contract Party</option></select></label><label>Service provider responsibility<textarea name="serviceProviderResponsibility" maxlength="500" rows="2" required></textarea></label></fieldset>
-        <fieldset><legend>Engagement scope</legend><label>Contract title<input name="title" maxlength="160" required /></label><label>Scope<textarea name="description" maxlength="4000" rows="3" required></textarea></label><label>Plain-language outcome<textarea name="outcome" maxlength="1000" rows="2" required></textarea></label><label>Included deliverables (one per line)<textarea name="includedDeliverables" rows="3" required></textarea></label><label>Excluded work (one per line)<textarea name="excludedWork" rows="2" required></textarea></label><label>Project start date (your local time)<input name="projectStartDateUtc" type="datetime-local" required /></label><label>Client materials and dependencies (one per line; optional)<textarea name="clientDependencies" rows="2"></textarea></label></fieldset>
-        <fieldset><legend>Milestone schedule</legend><p class="contract-form-help">Deadlines are shown in your local time and stored as canonical UTC timestamps.</p><div id="milestone-list" class="milestone-list"></div><button id="add-milestone" class="home-secondary-action contract-inline-action" type="button">Add third milestone</button></fieldset>
-        <fieldset><legend>Payment and funding</legend><label>Settlement token<input name="settlementToken" maxlength="160" required /></label><label>Network<input name="network" value="Base Sepolia" readonly /></label><label>Contract total allocation (testnet eUSD units)<input name="totalAllocation" type="number" min="1" step="1" required /></label><label>Buyer funding deadline (your local time)<input name="fundingDeadlineUtc" type="datetime-local" required /></label><label>Fee (basis points)<input name="successFeeBps" type="number" min="0" max="1000" step="1" required /></label><label>Fee recipient (required if fee is non-zero)<input name="feeRecipient" maxlength="320" /></label></fieldset>
-        <fieldset><legend>Evidence and review</legend><label>Review decision rule<textarea name="reviewDecision" maxlength="1000" rows="2" required></textarea></label><label><input name="dependencyAcknowledgementRequired" type="checkbox" /> Require acknowledgement of client dependencies before a milestone starts</label></fieldset>
-        <fieldset><legend>Intellectual property and confidentiality</legend><label>IP outcome<select name="ipOutcome" required><option value="client_owns_project_deliverables_on_final_settlement">Client owns project deliverables on final settlement</option><option value="provider_retains_ownership_with_client_license">Provider retains ownership with a client licence</option></select></label><label>Licence scope (required for provider-retained outcome)<input name="licenseScope" maxlength="1000" /></label><label>Confidentiality<select name="confidentiality" required><option value="not_requested">Not requested</option><option value="mutual_confidentiality">Mutual confidentiality</option></select></label><label>Confidentiality duration (required when selected)<input name="confidentialityDuration" maxlength="160" /></label></fieldset>
-        <fieldset><legend>Change control</legend><label>Change-request process<textarea name="proposalProcess" maxlength="1000" rows="2" required></textarea></label><label><input name="bilateralAmendmentOnly" type="checkbox" required /> Only a bilateral amendment may change future uncompleted milestones.</label></fieldset>
-        <fieldset><legend>Resolution Authority and notices</legend><label>Resolution Authority<select name="authorityId" required></select></label><p id="authority-summary" class="contract-form-help"></p><label>Buyer notice email<input name="buyerContact" type="email" maxlength="320" required /></label><label>Service provider notice email<input name="serviceProviderContact" type="email" maxlength="320" required /></label><label><input name="exactVersionAcknowledgement" type="checkbox" required /> I understand Contract Acceptance applies only to this exact Version.</label></fieldset>
-        <div class="contract-draft-footer"><p><strong>No payment authority.</strong> Sharing creates an immutable Version for the Contract Parties; it has no wallet connection, vault, funding, or settlement capability.</p><button class="home-primary-action" type="submit">Validate and share Version</button></div>
-        <p id="contract-form-status" class="home-form-status" aria-live="polite"></p>
+
+      <section id="contract-copilot" class="contract-copilot" hidden aria-labelledby="contract-copilot-title">
+        <div class="contract-section-heading">
+          <div>
+            <p class="authoring-kicker">Drafting co-pilot</p>
+            <h2 id="contract-copilot-title">Turn a commercial brief into editable starting terms</h2>
+            <p>Suggestions are not saved or shared until you review, edit, and validate the Contract Draft.</p>
+          </div>
+        </div>
+        <form id="contract-copilot-form" class="authoring-form">
+          <label>Plain-language commercial brief<textarea name="brief" maxlength="3200" rows="4" required placeholder="Describe the outcomes, scope, and any delivery dates you have in mind."></textarea></label>
+          <p class="contract-form-help"><strong>No Contract or payment authority.</strong> The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes. Do not include passwords, private keys, or other secrets.</p>
+          <div><button class="contract-action" type="submit">Suggest editable terms</button></div>
+          <p id="contract-copilot-status" class="contract-form-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <form id="contract-draft-form" class="authoring-form contract-draft-form" hidden>
+        <fieldset>
+          <legend>Contract Parties</legend>
+          <p class="contract-form-help">Name the two responsibilities without changing who has Contract access.</p>
+          <label>Buyer is<select name="buyerPartyRef" required><option value="initiating_party">Initiating Contract Party</option><option value="counterparty">Counterparty</option></select></label>
+          <label>Buyer responsibility<textarea name="buyerResponsibility" maxlength="500" rows="2" required></textarea></label>
+          <label>Service provider is<select name="serviceProviderPartyRef" required><option value="counterparty">Counterparty</option><option value="initiating_party">Initiating Contract Party</option></select></label>
+          <label>Service provider responsibility<textarea name="serviceProviderResponsibility" maxlength="500" rows="2" required></textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>Engagement scope</legend>
+          <label>Contract title<input name="title" maxlength="160" required /></label>
+          <label>Scope<textarea name="description" maxlength="4000" rows="3" required></textarea></label>
+          <label>Plain-language outcome<textarea name="outcome" maxlength="1000" rows="2" required></textarea></label>
+          <label>Included deliverables (one per line)<textarea name="includedDeliverables" rows="3" required></textarea></label>
+          <label>Excluded work (one per line)<textarea name="excludedWork" rows="2" required></textarea></label>
+          <label>Project start date (your local time)<input name="projectStartDateUtc" type="datetime-local" required /></label>
+          <label>Client materials and dependencies (one per line; optional)<textarea name="clientDependencies" rows="2"></textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>Milestone schedule</legend>
+          <p class="contract-form-help">Deadlines are shown in your local time and stored as canonical UTC timestamps.</p>
+          <div id="milestone-list" class="milestone-list"></div>
+          <button id="add-milestone" class="contract-action contract-inline-action" type="button">Add third milestone</button>
+        </fieldset>
+        <fieldset>
+          <legend>Payment and funding</legend>
+          <label>Settlement token<input name="settlementToken" maxlength="160" required /></label>
+          <label>Network<input name="network" value="Base Sepolia" readonly /></label>
+          <label>Contract total allocation (testnet eUSD units)<input name="totalAllocation" type="number" min="1" step="1" required /></label>
+          <label>Buyer funding deadline (your local time)<input name="fundingDeadlineUtc" type="datetime-local" required /></label>
+          <label>Fee (basis points)<input name="successFeeBps" type="number" min="0" max="1000" step="1" required /></label>
+          <label>Fee recipient (required if fee is non-zero)<input name="feeRecipient" maxlength="320" /></label>
+        </fieldset>
+        <fieldset>
+          <legend>Evidence and review</legend>
+          <label>Review decision rule<textarea name="reviewDecision" maxlength="1000" rows="2" required></textarea></label>
+          <label><input name="dependencyAcknowledgementRequired" type="checkbox" /> Require acknowledgement of client dependencies before a milestone starts</label>
+        </fieldset>
+        <fieldset>
+          <legend>Intellectual property and confidentiality</legend>
+          <label>IP outcome<select name="ipOutcome" required><option value="client_owns_project_deliverables_on_final_settlement">Client owns project deliverables on final settlement</option><option value="provider_retains_ownership_with_client_license">Provider retains ownership with a client licence</option></select></label>
+          <label>Licence scope (required for provider-retained outcome)<input name="licenseScope" maxlength="1000" /></label>
+          <label>Confidentiality<select name="confidentiality" required><option value="not_requested">Not requested</option><option value="mutual_confidentiality">Mutual confidentiality</option></select></label>
+          <label>Confidentiality duration (required when selected)<input name="confidentialityDuration" maxlength="160" /></label>
+        </fieldset>
+        <fieldset>
+          <legend>Change control</legend>
+          <label>Change-request process<textarea name="proposalProcess" maxlength="1000" rows="2" required></textarea></label>
+          <label><input name="bilateralAmendmentOnly" type="checkbox" required /> Only a bilateral amendment may change future uncompleted milestones.</label>
+        </fieldset>
+        <fieldset>
+          <legend>Resolution Authority and notices</legend>
+          <label>Resolution Authority<select name="authorityId" required></select></label>
+          <p id="authority-summary" class="contract-form-help"></p>
+          <label>Buyer notice email<input name="buyerContact" type="email" maxlength="320" required /></label>
+          <label>Service provider notice email<input name="serviceProviderContact" type="email" maxlength="320" required /></label>
+          <label><input name="exactVersionAcknowledgement" type="checkbox" required /> I understand Contract Acceptance applies only to this exact Version.</label>
+        </fieldset>
+        <div class="contract-draft-footer">
+          <p><strong>No payment authority.</strong> Sharing creates an immutable Version for the Contract Parties; it has no wallet connection, vault, funding, or settlement capability.</p>
+          <button class="contract-action primary" type="submit">Validate and share Version</button>
+        </div>
+        <p id="contract-form-status" class="contract-form-status" aria-live="polite"></p>
       </form>
-      <section class="home-panel" aria-labelledby="contract-escrow-title">
-        <p class="eyebrow">Contract Escrow Vault</p><h2 id="contract-escrow-title">Escrow status</h2>
+
+      <section class="contract-escrow-note" aria-labelledby="contract-escrow-title">
+        <p class="authoring-kicker">Contract Escrow Vault</p>
+        <h2 id="contract-escrow-title">Escrow status</h2>
         <p>No Escrow Vault has been deployed for this Contract. There is no on-chain balance or activity to display.</p>
       </section>
-      <section id="contract-review" class="home-panel contract-review" hidden aria-labelledby="contract-review-title">
-        <div class="home-panel-heading"><div><p class="eyebrow">Version review</p><h2 id="contract-review-title">Review the exact shared Version</h2><p id="contract-review-summary"></p></div><span id="contract-version-number" class="home-status-note"></span></div>
+
+      <section id="contract-review" class="contract-review" hidden aria-labelledby="contract-review-title">
+        <div class="contract-section-heading">
+          <div>
+            <p class="authoring-kicker">Version review</p>
+            <h2 id="contract-review-title">Review the exact shared Version</h2>
+            <p id="contract-review-summary"></p>
+          </div>
+          <span id="contract-version-number" class="contract-status"></span>
+        </div>
         <p id="contract-version-hash" class="contract-version-hash"></p>
         <div id="contract-review-sections" class="contract-review-sections"></div>
-        <div class="contract-review-footer"><p id="contract-acceptance-status"></p><button id="accept-contract-version" class="home-primary-action" type="button">Sign Contract Acceptance</button></div>
-        <p id="contract-review-status" class="home-form-status" aria-live="polite"></p>
+        <div class="contract-review-footer"><p id="contract-acceptance-status"></p><button id="accept-contract-version" class="contract-action primary" type="button">Sign Contract Acceptance</button></div>
+        <p id="contract-review-status" class="contract-form-status" aria-live="polite"></p>
       </section>
     </main>
     <script type="module" src="/contract.bundle.js"></script>
