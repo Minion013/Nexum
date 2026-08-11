@@ -42,11 +42,20 @@ function renderProfileIdentity(summary, identity) {
   avatar.style.backgroundColor = identity.appearance.background; avatar.style.color = identity.appearance.foreground;
   avatar.style.backgroundImage = identity.imageUrl ? `url("${identity.imageUrl}")` : ''; avatar.classList.toggle('has-image-preview', Boolean(identity.imageUrl));
   const name = document.createElement('span'); name.className = 'profile-name'; name.textContent = identity.label; name.title = identity.label;
-  summary.append(avatar, name);
+  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevron.classList.add('profile-menu-chevron'); chevron.setAttribute('viewBox', '0 0 16 16'); chevron.setAttribute('aria-hidden', 'true');
+  chevron.innerHTML = '<path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"/>';
+  summary.append(avatar, name, chevron);
 }
 function profileMenu() { const menu = document.createElement('details'); menu.className = 'avatar-menu'; const summary = document.createElement('summary'); renderProfileIdentity(summary, loadingProfileIdentity()); const links = document.createElement('nav'); links.className = 'profile-menu'; links.setAttribute('aria-label', 'Profile menu'); links.append(navLink('/settings', 'Profile Settings'), signOutButton()); menu.append(summary, links); configureProfileMenu(menu); return menu; }
+const drawerControlMarkup = Object.freeze({
+  open: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/></svg><span>Menu</span>',
+  close: '<span>Close</span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>'
+});
+function setDrawerControlContent(control, variant) { control.innerHTML = drawerControlMarkup[variant]; }
 function configureDrawer(drawer, open) {
   if (!drawer || !open) return;
+  setDrawerControlContent(open, 'open');
   drawer.setAttribute('aria-label', 'Mobile navigation');
   open.setAttribute('aria-controls', drawer.id || 'nav-drawer');
   open.setAttribute('aria-expanded', 'false');
@@ -56,6 +65,10 @@ function configureDrawer(drawer, open) {
 function fillDrawer(drawer) {
   if (!drawer) return;
   const close = drawer.querySelector('#close-nav');
+  if (close) {
+    setDrawerControlContent(close, 'close');
+    close.setAttribute('aria-label', 'Close navigation');
+  }
   drawer.replaceChildren();
   if (close) drawer.append(close);
   drawer.append(nav('Mobile navigation'), profileMenu());
@@ -89,8 +102,8 @@ function mountShell() {
   const brand = document.createElement('a'); brand.className = 'brand app-brand'; brand.href = '/home'; brand.innerHTML = 'Pact<span>Flow</span>';
   const footer = document.createElement('div'); footer.className = 'app-sidebar-footer'; footer.append(profileMenu());
   sidebar.append(brand, nav('Primary navigation'), footer); shell.append(sidebar, main); document.body.append(shell);
-  const topbar = document.createElement('header'); topbar.className = 'app-topbar'; const open = document.createElement('button'); open.className = 'mobile-toggle'; open.type = 'button'; open.textContent = 'Menu'; open.setAttribute('aria-label', 'Open navigation'); open.setAttribute('aria-expanded', 'false'); topbar.append(open); main.prepend(topbar);
-  const drawer = document.createElement('dialog'); drawer.id = 'nav-drawer'; drawer.className = 'drawer'; const close = document.createElement('button'); close.id = 'close-nav'; close.type = 'button'; close.textContent = 'Close navigation'; close.addEventListener('click', () => drawer.close()); drawer.append(close, nav('Mobile navigation'), profileMenu()); configureDrawer(drawer, open); document.body.append(drawer);
+  const topbar = document.createElement('header'); topbar.className = 'app-topbar'; const open = document.createElement('button'); open.className = 'mobile-toggle'; open.type = 'button'; open.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/></svg><span>Menu</span>'; open.setAttribute('aria-label', 'Open navigation'); open.setAttribute('aria-expanded', 'false'); topbar.append(open); main.prepend(topbar);
+  const drawer = document.createElement('dialog'); drawer.id = 'nav-drawer'; drawer.className = 'drawer'; const close = document.createElement('button'); close.id = 'close-nav'; close.type = 'button'; setDrawerControlContent(close, 'close'); close.setAttribute('aria-label', 'Close navigation'); close.addEventListener('click', () => drawer.close()); drawer.append(close, nav('Mobile navigation'), profileMenu()); configureDrawer(drawer, open); document.body.append(drawer);
   document.body.append(quickNavigation());
 }
 mountShell();
