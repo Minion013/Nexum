@@ -803,9 +803,11 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
+      const contractAuthoringMatch = url.pathname.match(/^\/contracts\/(?!new\/)[^/]+\/(choose-person|project-details|review-terms|send)$/);
       const contractPageMatch = url.pathname.match(/^\/contracts\/(?!new\/)[^/]+$/);
       const invitationPageMatch = url.pathname.match(/^\/invitations\/[^/]+$/);
-      const file = contractPageMatch ? join(publicRoot, 'contract.html') : invitationPageMatch ? join(publicRoot, 'invitation.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
+      const authoringPage = { 'choose-person': 'contract-author-choose-person.html', 'project-details': 'contract-author-project-details.html', 'review-terms': 'contract-author-review-terms.html', send: 'contract-author-send.html' };
+      const file = contractAuthoringMatch ? join(publicRoot, authoringPage[contractAuthoringMatch[1]]) : contractPageMatch ? join(publicRoot, 'contract.html') : invitationPageMatch ? join(publicRoot, 'invitation.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
       if (!file || !existsSync(file) || !statSync(file).isFile()) { response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found'); return; }
       response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'x-content-type-options': 'nosniff' });
       if (request.method === 'HEAD') return response.end();

@@ -144,6 +144,11 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(contractsMarkup, /href="\/contracts\/new\/choose-person"/);
     const authoringPages = authoringRoutes;
     for (const route of authoringPages) assert.equal((await request(server, route)).status, 200, route);
+    for (const step of ['choose-person', 'project-details', 'review-terms', 'send']) {
+      const response = await request(server, `/contracts/not-a-contract/${step}`);
+      assert.equal(response.status, 200, step);
+      assert.match(await response.text(), /Contract Draft steps/i);
+    }
     const choosePersonMarkup = await (await request(server, '/contracts/new/choose-person')).text();
     assert.match(choosePersonMarkup, /Existing Person \(optional\)/);
     assert.match(choosePersonMarkup, /Continue and publish a private Contract Draft/);

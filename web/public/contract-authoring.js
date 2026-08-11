@@ -5,6 +5,10 @@ const step = Number(document.body.dataset.authoringStep);
 const form = document.querySelector('[data-authoring-form]');
 const key = 'pactflow-contract-draft';
 const draft = JSON.parse(sessionStorage.getItem(key) || '{}');
+const existingRoute = location.pathname.match(/^\/contracts\/([^/]+)\/(choose-person|project-details|review-terms|send)$/);
+const existingContractId = existingRoute ? decodeURIComponent(existingRoute[1]) : null;
+const routes = existingContractId ? ['choose-person', 'project-details', 'review-terms', 'send'].map(name => `/contracts/${encodeURIComponent(existingContractId)}/${name}`) : authoringRoutes;
+let existingAuthorityId = null;
 const recipientEmail = () => draft.inviteEmail || draft.counterpartyEmail || '';
 const save = fields => {
   Object.assign(draft, Object.fromEntries([...fields].filter(field => field.name).map(field => [field.name, field.type === 'checkbox' ? field.checked : field.value])));
@@ -13,12 +17,79 @@ const save = fields => {
 
 for (const field of form.elements) if (field.name && draft[field.name] !== undefined) field.value = draft[field.name];
 
+function setFormValues() {
+  for (const field of form.elements) {
+    if (!field.name || draft[field.name] === undefined) continue;
+    if (field.type === 'checkbox') field.checked = draft[field.name] === true || draft[field.name] === 'true';
+    else field.value = draft[field.name];
+  }
+  form.elements.includeThirdMilestone?.dispatchEvent(new Event('change'));
+}
+
+function draftFromContract(contract, initiatorEmail) {
+  const { sections } = contract;
+  const parties = sections.parties || {};
+  const scope = sections.scope || {};
+  const payment = sections.payment || {};
+  const evidence = sections.evidence || {};
+  const intellectualProperty = sections.intellectualProperty || {};
+  const changeControl = sections.changeControl || {};
+  const notices = sections.notices || {};
+  const initiatorIsBuyer = parties.buyer?.partyRef === 'initiating_party' || parties.initiator_responsibility === 'buyer';
+  const milestones = sections.milestones || [];
+  const source = {
+    initiatorEmail,
+    initiatorResponsibility: initiatorIsBuyer ? 'buyer' : 'service_provider',
+    name: scope.title || '', scope: scope.description || '', outcome: scope.outcome || '',
+    includedDeliverables: Array.isArray(scope.includedDeliverables) ? scope.includedDeliverables.join('\n') : '',
+    totalAllocation: payment.totalAllocation || '', projectStartDateUtc: localInput(scope.projectStartDateUtc), fundingDeadlineUtc: localInput(payment.fundingDeadlineUtc),
+    proposalProcess: changeControl.proposalProcess || '', buyerResponsibility: parties.buyer?.responsibility || '', serviceProviderResponsibility: parties.serviceProvider?.responsibility || '',
+    excludedWork: Array.isArray(scope.excludedWork) ? scope.excludedWork.join('\n') : '', clientDependencies: Array.isArray(scope.clientDependencies) ? scope.clientDependencies.join('\n') : '',
+    settlementToken: payment.settlementToken || '', successFeeBps: payment.successFeeBps ?? '', feeRecipient: payment.feeRecipient || '',
+    ipOutcome: intellectualProperty.outcome || '', licenseScope: intellectualProperty.licenseScope || '', confidentiality: intellectualProperty.confidentiality || '', confidentialityDuration: intellectualProperty.confidentialityDuration || '',
+    reviewDecision: evidence.reviewDecision || '', dependencyAcknowledgementRequired: Boolean(evidence.dependencyAcknowledgementRequired), bilateralAmendmentOnly: Boolean(changeControl.bilateralAmendmentOnly),
+    buyerContact: notices.buyerContact || '', serviceProviderContact: notices.serviceProviderContact || '', exactVersionAcknowledgement: Boolean(notices.exactVersionAcknowledgement), includeThirdMilestone: milestones.length === 3
+  };
+  const counterparty = initiatorIsBuyer ? source.serviceProviderContact : source.buyerContact;
+  if (counterparty && counterparty !== initiatorEmail) source.inviteEmail = counterparty;
+  milestones.forEach((milestone, index) => {
+    const name = ['One', 'Two', 'Three'][index];
+    source[`milestone${name}Title`] = milestone.title || '';
+    source[`milestone${name}`] = milestone.deliveryOutcome || '';
+    source[`milestone${name}Allocation`] = milestone.allocation || '';
+    source[`milestone${name}Evidence`] = milestone.evidenceRequirement || '';
+    source[`milestone${name}Criterion`] = milestone.acceptanceCriteria?.find(criterion => criterion.required)?.description || '';
+    source[`milestone${name}Deadline`] = localInput(milestone.deliveryDeadlineUtc);
+    source[`milestone${name}Review`] = milestone.reviewWindowHours || 72;
+  });
+  return source;
+}
+
+function localInput(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+async function hydrateExistingDraft() {
+  if (!existingContractId) return;
+  const [{ contract }, { user }] = await Promise.all([
+    authenticatedRequest(`/api/contracts/${encodeURIComponent(existingContractId)}`),
+    authenticatedRequest('/api/session')
+  ]);
+  existingAuthorityId = contract.authority.id;
+  Object.assign(draft, draftFromContract(contract, user.email));
+  setFormValues();
+  if (step === 4) renderSendSummary();
+}
+
 document.querySelectorAll('.authoring-step').forEach((item, index) => {
   if (index === step - 1) return;
   item.tabIndex = 0;
   item.setAttribute('role', 'link');
   item.setAttribute('aria-label', `Go to ${item.textContent.trim()}`);
-  const navigate = () => location.assign(authoringRoutes[index]);
+  const navigate = () => location.assign(routes[index]);
   item.addEventListener('click', navigate);
   item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(); } });
 });
@@ -31,6 +102,7 @@ if (step === 1) {
   authenticatedRequest('/api/people').then(({ people }) => {
     const accepted = (people.connections || []).filter(person => person.status === 'accepted' && person.email);
     select.replaceChildren(new Option('Choose a Person later', ''), ...accepted.map(person => new Option(`${person.display_name} — ${person.email}`, person.email)));
+    select.value = recipientEmail();
   }).catch(() => select.replaceChildren(new Option('Add a person later', '')));
 }
 
@@ -71,7 +143,7 @@ if (step === 3) {
   }
 }
 
-if (step === 4) {
+function renderSendSummary() {
   const recipient = recipientEmail();
   document.querySelector('[data-send-name]').textContent = draft.name || 'Contract Draft';
   document.querySelector('[data-counterparty]').textContent = recipient || 'No person selected';
@@ -81,12 +153,13 @@ if (step === 4) {
     : 'Publish this as your private Contract Draft. You can select a person and share an exact Contract Version later.';
   document.querySelector('[data-send-action]').textContent = recipient ? 'Send finalised Contract Version' : 'Publish Contract Draft';
 }
+if (step === 4) renderSendSummary();
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (!form.reportValidity()) return;
   save(form.elements);
-  if (step < 4) return location.assign(authoringRoutes[step]);
+  if (step < 4) return location.assign(routes[step]);
 
   const status = document.querySelector('#authoring-status');
   const button = form.querySelector('button[type=submit]');
@@ -96,13 +169,15 @@ form.addEventListener('submit', async event => {
   try {
     const { user } = await authenticatedRequest('/api/session');
     draft.initiatorEmail = user.email;
-    const { contract } = await authenticatedRequest('/api/contracts', {
-      method: 'POST',
-      body: JSON.stringify({ name: draft.name, scope: draft.scope, counterpartyEmail: email || null, initiatorResponsibility: draft.initiatorResponsibility })
-    });
+    const contract = existingContractId
+      ? { id: existingContractId }
+      : (await authenticatedRequest('/api/contracts', {
+          method: 'POST',
+          body: JSON.stringify({ name: draft.name, scope: draft.scope, counterpartyEmail: email || null, initiatorResponsibility: draft.initiatorResponsibility })
+        })).contract;
     const { contract: readable } = await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}`);
     await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}`, {
-      method: 'PUT', body: JSON.stringify(contractDraftUpdate(draft, readable.authority.id))
+      method: 'PUT', body: JSON.stringify(contractDraftUpdate(draft, existingAuthorityId || readable.authority.id))
     });
     if (email) await authenticatedRequest(`/api/contracts/${encodeURIComponent(contract.id)}/invitations`, { method: 'POST', body: JSON.stringify({ email }) });
     sessionStorage.removeItem(key);
@@ -112,3 +187,13 @@ form.addEventListener('submit', async event => {
     button.disabled = false;
   }
 });
+
+if (existingContractId) {
+  const back = form.querySelector('.authoring-actions a');
+  if (back) back.href = step === 1 ? '/contracts' : routes[step - 2];
+  void hydrateExistingDraft().catch(error => {
+    const status = document.querySelector('#authoring-status') || document.createElement('p');
+    status.textContent = error.message;
+    if (!status.isConnected) form.prepend(status);
+  });
+}

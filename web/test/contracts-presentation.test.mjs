@@ -28,4 +28,5 @@ test('the Contracts list filters the same Contract access records for desktop an
   assert.deepEqual(contractsPresentation(home, { stage: 'active' }).contracts.map(contract => contract.id), ['active']);
   assert.deepEqual(contractsPresentation(home, { responsibility: 'Buyer' }).contracts.map(contract => contract.id), ['draft']);
   assert.equal(contractsPresentation(home, { stage: 'complete' }).emptyMessage, 'No Contracts match these filters.');
+  assert.equal(contractsPresentation(home).contracts.find(contract => contract.id === 'draft').action.href, '/contracts/draft/choose-person');
 });

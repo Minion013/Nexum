@@ -28,7 +28,7 @@ function presentContract(contract) {
     version: Number.isInteger(contract.latestVersionNumber) ? `Version ${contract.latestVersionNumber}` : 'Version to be confirmed',
     nextMilestone: contract.nextMilestone?.title ? `${milestoneLabel} · Next ${contract.nextMilestone.title} · ${formatDate(contract.nextMilestone.deadlineUtc)}` : `${milestoneLabel} · No upcoming deadline`,
     lastActivity: formatDate(contract.lastActivityAt),
-    action: { href: `/contracts/${encodeURIComponent(contract.id)}`, label: presentation.action }
+    action: { href: contract.status === 'private_draft' ? `/contracts/${encodeURIComponent(contract.id)}/choose-person` : `/contracts/${encodeURIComponent(contract.id)}`, label: presentation.action }
   };
 }
 
