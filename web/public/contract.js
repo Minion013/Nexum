@@ -1,3 +1,4 @@
+import './app-shell.js';
 import { authenticatedRequest } from './supabase-auth.js';
 
 const form = document.querySelector('#contract-draft-form');
@@ -28,7 +29,7 @@ function newMilestone() { return { title: '', deliveryOutcome: '', allocation: '
 function milestoneFields(milestone, index, canRemove) {
   const item = document.createElement('fieldset');
   item.className = 'milestone-card';
-  item.innerHTML = `<legend>Milestone ${index + 1}</legend><label>Deliverable<input name="milestone-title" maxlength="160" required value="${escapeAttribute(milestone.title)}" /></label><label>Measurable delivery outcome<textarea name="milestone-outcome" maxlength="1000" rows="2" required>${escapeHtml(milestone.deliveryOutcome)}</textarea></label><label>Gross allocation<input name="milestone-allocation" type="number" min="1" step="1" required value="${escapeAttribute(milestone.allocation)}" /></label><label>Evidence requirement<textarea name="milestone-evidence" maxlength="4000" rows="2" required>${escapeHtml(milestone.evidenceRequirement)}</textarea></label><label>Acceptance Criteria (one per line; prefix optional criteria with Optional:)<textarea name="milestone-criteria" maxlength="4000" rows="2" required>${escapeHtml(criteriaText(milestone.acceptanceCriteria))}</textarea></label><label>Delivery deadline (your local time)<input name="milestone-deadline" type="datetime-local" required value="${localDateTime(milestone.deliveryDeadlineUtc)}" /></label><label>Review window<select name="milestone-review-window" required><option value="24" ${Number(milestone.reviewWindowHours) === 24 ? 'selected' : ''}>24 hours</option><option value="72" ${Number(milestone.reviewWindowHours) === 72 ? 'selected' : ''}>72 hours</option><option value="168" ${Number(milestone.reviewWindowHours) === 168 ? 'selected' : ''}>168 hours</option></select></label>${canRemove ? '<button class="contract-action contract-inline-action remove-milestone" type="button">Remove milestone</button>' : ''}`;
+  item.innerHTML = `<legend>Milestone ${index + 1}</legend><label>Deliverable<input name="milestone-title" maxlength="160" required value="${escapeAttribute(milestone.title)}" /></label><label>Measurable delivery outcome<textarea name="milestone-outcome" maxlength="1000" rows="2" required>${escapeHtml(milestone.deliveryOutcome)}</textarea></label><label>Gross allocation<input name="milestone-allocation" type="number" min="1" step="1" required value="${escapeAttribute(milestone.allocation)}" /></label><label>Evidence requirement<textarea name="milestone-evidence" maxlength="4000" rows="2" required>${escapeHtml(milestone.evidenceRequirement)}</textarea></label><label>Acceptance Criteria (one per line; prefix optional criteria with Optional:)<textarea name="milestone-criteria" maxlength="4000" rows="2" required>${escapeHtml(criteriaText(milestone.acceptanceCriteria))}</textarea></label><label>Delivery deadline (your local time)<input name="milestone-deadline" type="datetime-local" required value="${localDateTime(milestone.deliveryDeadlineUtc)}" /></label><label>Review window<select name="milestone-review-window" required><option value="24" ${Number(milestone.reviewWindowHours) === 24 ? 'selected' : ''}>24 hours</option><option value="72" ${Number(milestone.reviewWindowHours) === 72 ? 'selected' : ''}>72 hours</option><option value="168" ${Number(milestone.reviewWindowHours) === 168 ? 'selected' : ''}>168 hours</option></select></label>${canRemove ? '<button class="home-secondary-action contract-inline-action remove-milestone" type="button">Remove milestone</button>' : ''}`;
   return item;
 }
 function milestonesFromForm({ preserveLocalDeadline = false } = {}) {
@@ -201,7 +202,7 @@ function showValidationIssues(issues = []) {
     control.setAttribute('aria-invalid', 'true');
     const message = document.createElement('p');
     message.id = id;
-    message.className = 'contract-alert contract-validation-error';
+    message.className = 'home-error contract-validation-error';
     message.textContent = issue.message;
     control.insertAdjacentElement('afterend', message);
     control.setAttribute('aria-describedby', id);

@@ -14,6 +14,4 @@
 
 **Evidence:** The authenticated Contracts client now renders RLS-scoped `/api/home` Contract records as a table or equivalent narrow-screen record, with lifecycle-filtered actions, counterparty, responsibility, milestone-count/next-deadline, and activity context. It does not render unverified monetary values. The detail retains the existing Contract Draft, Version, acceptance, milestone, evidence, amendment, and authority boundaries, plus an explicit no-deployed-Vault state until a Contract Escrow Vault has authoritative chain data; a private one-party Contract Draft remains editable when its review context is unavailable. Desktop and 390 px authenticated browser checks verified the list, Contract Draft detail, and no horizontal overflow. Focused route/presentation tests, typecheck, production build, `git diff --check`, and `npm.cmd test` (65 passing) pass.
 
-**Design follow-up 2026-08-11:** The standalone Contract Draft detail now uses the same centred authoring canvas, typography, controls, cards, and responsive action treatment as the New Contract flow. Its protected draft validation, immutable Version review, and acceptance actions are unchanged. Typecheck, production build, focused Contract tests, and `git diff --check` pass.
-
 **Remaining gaps:** None for this ticket.
