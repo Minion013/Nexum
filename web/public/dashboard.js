@@ -16,7 +16,7 @@ function actionItem(action) { const item = element('article', null, 'dashboard-i
 function timelineItem(milestone) { const item = element('article', null, 'dashboard-item'); const copy = element('div'); copy.append(element('strong', milestone.title), element('p', milestone.detail)); item.append(copy, link(milestone.href, milestone.state === 'attention' ? 'Review date' : 'Open Contract')); return item; }
 function contractItem(contract) {
   const item = element('article', null, 'dashboard-contract'); const copy = element('div'); copy.append(element('p', `Version ${contract.latestVersionNumber} · ${contract.responsibility}`, 'dashboard-card-eyebrow'), element('h3', contract.title), element('p', `With ${contract.counterparty}`));
-  const right = element('div', null, 'dashboard-contract-action'); right.append(element('span', contract.stage, `status ${contract.status === 'active' ? 'active' : contract.status === 'negotiation' ? 'attention' : ''}`), link(`/contracts/${encodeURIComponent(contract.id)}`, 'Open')); item.append(copy, right); return item;
+  const right = element('div', null, 'dashboard-contract-action'); right.append(element('span', contract.stage, `status ${contract.status === 'active' ? 'active' : contract.status === 'negotiation' ? 'attention' : ''}`), link(contract.href, contract.status === 'private_draft' ? 'Continue' : 'Open')); item.append(copy, right); return item;
 }
 function render(presentation) {
   document.body.dataset.dashboardState = presentation.state; subtitle.textContent = presentation.description; primaryAction.href = presentation.primaryAction.href; primaryAction.textContent = presentation.primaryAction.label;

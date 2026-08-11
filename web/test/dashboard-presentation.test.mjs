@@ -35,4 +35,7 @@ test('the Dashboard separates attention, active work, and completed Contracts wi
   }]);
   assert.equal(JSON.stringify(presentation).includes('MockEUSD'), false);
   assert.equal(JSON.stringify(presentation).includes('Activity'), false);
+  const draft = dashboardPresentation({ contracts: [{ id: 'draft', title: 'Website refresh', status: 'private_draft', counterparty: 'Person to be confirmed' }] });
+  assert.equal(draft.actions[0].href, '/contracts/draft/choose-person');
+  assert.equal(draft.contracts[0].href, '/contracts/draft/choose-person');
 });
