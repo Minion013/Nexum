@@ -23,4 +23,4 @@
 
 ## Remaining gaps
 
-- None.
+- **Follow-up 2026-08-11:** The four-step flow now permits an initiator to publish a durable, private Contract Draft without selecting a Person. Selecting a Person remains optional until Send; sending to one creates the shared finalised Contract Version through the protected invitation boundary.

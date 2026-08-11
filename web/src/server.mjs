@@ -298,6 +298,9 @@ function requiredEmail(value) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ValidationError('Enter a valid counterparty email address.');
   return email;
 }
+function optionalEmail(value) {
+  return typeof value === 'string' && value.trim() ? requiredEmail(value) : null;
+}
 function requiredUuid(value, label) {
   const text = requiredText(value, label, 36);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) throw new ValidationError(`${label} must be valid.`);
@@ -635,7 +638,7 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     create: async ({ accessToken, name, scope, counterpartyEmail, initiatorResponsibility }) => ({ id: await call({ accessToken }, 'create_profile_owned_contract', {
       contract_name: requiredText(name, 'Contract name', 160),
       contract_scope: requiredText(scope, 'Contract scope'),
-      counterparty_email: requiredEmail(counterpartyEmail),
+      counterparty_email: optionalEmail(counterpartyEmail),
       initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility')
     }, 'We could not create this Contract Draft.') }),
     invite: async ({ accessToken, contractId, email }) => ({ id: await call({ accessToken }, 'create_contract_invitation', {

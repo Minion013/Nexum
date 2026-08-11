@@ -144,8 +144,14 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(contractsMarkup, /href="\/contracts\/new\/choose-person"/);
     const authoringPages = authoringRoutes;
     for (const route of authoringPages) assert.equal((await request(server, route)).status, 200, route);
+    const choosePersonMarkup = await (await request(server, '/contracts/new/choose-person')).text();
+    assert.match(choosePersonMarkup, /Existing Person \(optional\)/);
+    assert.match(choosePersonMarkup, /Continue and publish a private Contract Draft/);
     const reviewMarkup = await (await request(server, '/contracts/new/review-terms')).text();
     for (const label of ['Review terms', 'Milestones and payment', 'Required Acceptance Criterion', 'Evidence and change control']) assert.match(reviewMarkup, new RegExp(label, 'i'), label);
+    const sendMarkup = await (await request(server, '/contracts/new/send')).text();
+    assert.match(sendMarkup, /Publish Contract Draft/);
+    assert.match(sendMarkup, /finalised Contract Version/);
     assert.doesNotMatch(contractsMarkup, /Workspace|Proposal|Agreement/);
     assert.doesNotMatch(contractsMarkup, /Private Draft|Private Contract/);
     const notifications = await request(server, '/notifications');
@@ -184,6 +190,10 @@ test('Contract Draft authoring composes a complete, ordered two-milestone Versio
   assert.deepEqual(update.scope.excludedWork, ['Work not listed in the included deliverables.']);
   assert.equal(update.notices.buyerContact, 'initiator@example.test');
   assert.equal(update.notices.serviceProviderContact, 'counterparty@example.test');
+
+  const unshared = contractDraftUpdate({ ...draft, inviteEmail: '' }, '11111111-1111-4111-8111-111111111111');
+  assert.equal(unshared.notices.buyerContact, 'initiator@example.test');
+  assert.equal(unshared.notices.serviceProviderContact, 'initiator@example.test');
 });
 
 test('every signed-in route keeps the four focused primary and mobile destinations', async () => {

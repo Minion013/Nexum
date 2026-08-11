@@ -423,6 +423,21 @@ test('a verified Profile creates a Contract without Workspace access before expl
   ]);
 });
 
+test('a verified Profile can publish a private Contract Draft before choosing a person', async () => {
+  const calls = [];
+  const workflow = createContractWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => ({ rpc: async (name, args) => { calls.push({ name, args }); return { data: 'draft-id', error: null }; } })
+  );
+
+  await assert.doesNotReject(() => workflow.create({
+    accessToken: 'access-token', name: 'Website refresh', scope: 'Refresh the marketing site.', initiatorResponsibility: 'buyer'
+  }));
+  assert.deepEqual(calls, [{ name: 'create_profile_owned_contract', args: {
+    contract_name: 'Website refresh', contract_scope: 'Refresh the marketing site.', counterparty_email: null, initiator_responsibility: 'buyer'
+  } }]);
+});
+
 test('the authenticated API does not create a durable Contract without a Supabase session', async () => {
   const calls = [];
   const { server, origin } = await start({
