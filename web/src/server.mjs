@@ -101,6 +101,10 @@ function standalonePage(urlPath) {
   const authenticatedPages = {
     '/home': 'home.html',
     '/contracts': 'contracts.html',
+    '/contracts/new/choose-person': 'contract-author-choose-person.html',
+    '/contracts/new/project-details': 'contract-author-project-details.html',
+    '/contracts/new/review-terms': 'contract-author-review-terms.html',
+    '/contracts/new/send': 'contract-author-send.html',
     '/wallet': 'wallet.html',
     '/people': 'people.html',
     '/notifications': 'notifications.html',
@@ -796,7 +800,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname.startsWith('/api/')) return respond(response, 404, { error: 'Unknown endpoint.' });
       if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
-      const contractPageMatch = url.pathname.match(/^\/contracts\/[^/]+$/);
+      const contractPageMatch = url.pathname.match(/^\/contracts\/(?!new\/)[^/]+$/);
       const invitationPageMatch = url.pathname.match(/^\/invitations\/[^/]+$/);
       const file = contractPageMatch ? join(publicRoot, 'contract.html') : invitationPageMatch ? join(publicRoot, 'invitation.html') : standalonePage(url.pathname) ?? safeFile(decodeURIComponent(url.pathname));
       if (!file || !existsSync(file) || !statSync(file).isFile()) { response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found'); return; }

@@ -6,6 +6,7 @@ import { createServer as createTcpServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createApp, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
 import { signedInNavigation } from '../public/signed-in-navigation.js';
+import { authoringRoutes, contractDraftUpdate, reviewDefaults } from '../public/contract-authoring-flow.js';
 
 async function request(server, path) {
   return fetch(`http://127.0.0.1:${server.address().port}${path}`);
@@ -139,8 +140,12 @@ test('authenticated area pages are served from their canonical URLs', async () =
     assert.match(contractsMarkup, /<table class="contract-table">/);
     assert.match(contractsMarkup, /id="contract-records" class="mobile-records" aria-live="polite"/);
     assert.match(contractsMarkup, /contracts\.bundle\.js/);
-    assert.match(contractsMarkup, /Create Contract Draft/);
-    for (const step of ['Choose person', 'Project details', 'Review terms', 'Send']) assert.match(contractsMarkup, new RegExp(`>${step}<`), step);
+    assert.match(contractsMarkup, /Create a Contract Draft/);
+    assert.match(contractsMarkup, /href="\/contracts\/new\/choose-person"/);
+    const authoringPages = authoringRoutes;
+    for (const route of authoringPages) assert.equal((await request(server, route)).status, 200, route);
+    const reviewMarkup = await (await request(server, '/contracts/new/review-terms')).text();
+    for (const label of ['Review terms', 'Milestones and payment', 'Required Acceptance Criterion', 'Evidence and change control']) assert.match(reviewMarkup, new RegExp(label, 'i'), label);
     assert.doesNotMatch(contractsMarkup, /Workspace|Proposal|Agreement/);
     assert.doesNotMatch(contractsMarkup, /Private Draft|Private Contract/);
     const notifications = await request(server, '/notifications');
@@ -164,6 +169,21 @@ test('authenticated area pages are served from their canonical URLs', async () =
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('Contract Draft authoring composes a complete, ordered two-milestone Version before invitation', () => {
+  const draft = { name: 'Website refresh', scope: 'Refresh the marketing site.', outcome: 'A working marketing site.', includedDeliverables: 'Design\nBuild', totalAllocation: '100', projectStartDateUtc: '2026-08-12T09:00', fundingDeadlineUtc: '2026-08-15T09:00', initiatorResponsibility: 'buyer', initiatorEmail: 'initiator@example.test', inviteEmail: 'counterparty@example.test' };
+  const defaults = reviewDefaults(draft);
+  assert.equal(defaults.milestoneOneReview, 72);
+  const update = contractDraftUpdate(draft, '11111111-1111-4111-8111-111111111111');
+  assert.deepEqual(update.parties.buyer.partyRef, 'initiating_party');
+  assert.equal(update.milestones.length, 2);
+  assert.ok(update.milestones.every(milestone => milestone.acceptanceCriteria.some(criterion => criterion.required)));
+  assert.ok(update.payment.fundingDeadlineUtc < update.milestones[0].deliveryDeadlineUtc);
+  assert.ok(update.milestones[0].deliveryDeadlineUtc < update.milestones[1].deliveryDeadlineUtc);
+  assert.deepEqual(update.scope.excludedWork, ['Work not listed in the included deliverables.']);
+  assert.equal(update.notices.buyerContact, 'initiator@example.test');
+  assert.equal(update.notices.serviceProviderContact, 'counterparty@example.test');
 });
 
 test('every signed-in route keeps the four focused primary and mobile destinations', async () => {
