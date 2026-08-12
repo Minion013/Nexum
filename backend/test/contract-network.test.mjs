@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadAcceptedConnections } from '../../frontend/public/contract-network.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { loadAcceptedConnections } = await loadFrontendModule('src/contracts/network.ts');
 
 test('Contracts remains usable when its optional connection lookup fails', async () => {
   const result = await loadAcceptedConnections(async path => {

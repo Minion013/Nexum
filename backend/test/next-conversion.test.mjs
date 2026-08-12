@@ -19,6 +19,7 @@ test('landing and login are typed App Router pages without public-page rewrites'
   const landing = await readFile(new URL('../../frontend/app/page.tsx', import.meta.url), 'utf8');
   const login = await readFile(new URL('../../frontend/app/login/page.tsx', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+  const middleware = await readFile(new URL('../../frontend/middleware.ts', import.meta.url), 'utf8');
 
   assert.match(landing, /export default function LandingPage/);
   assert.match(landing, /href="\/login"/);
@@ -30,6 +31,8 @@ test('landing and login are typed App Router pages without public-page rewrites'
   assert.match(login, /\/api\/onboarding\/complete/);
   assert.doesNotMatch(nextConfig, /source: '\/'/);
   assert.doesNotMatch(nextConfig, /source: '\/login'/);
+  assert.match(middleware, /BACKEND_URL/);
+  assert.match(middleware, /\/api\/:path\*/);
 });
 
 test('signed-in Dashboard uses typed shell and Home workflow without a static rewrite', async () => {
@@ -185,6 +188,7 @@ test('Profile Settings uses a typed route and the protected private-avatar workf
   const settingsRoute = await readFile(new URL('../../frontend/app/settings/page.tsx', import.meta.url), 'utf8');
   const settingsClient = await readFile(new URL('../../frontend/src/settings/settings.tsx', import.meta.url), 'utf8');
   const settingsPresentation = await readFile(new URL('../../frontend/src/settings/presentation.ts', import.meta.url), 'utf8');
+  const privateAvatar = await readFile(new URL('../../frontend/src/profile/private-avatar.ts', import.meta.url), 'utf8');
   const authBrowser = await readFile(new URL('../../frontend/src/auth/browser.ts', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
 
@@ -199,7 +203,8 @@ test('Profile Settings uses a typed route and the protected private-avatar workf
   assert.match(settingsClient, /onError/);
   assert.match(settingsPresentation, /avatarPresentation/);
   assert.match(settingsPresentation, /avatarFileError/);
-  assert.match(authBrowser, /createSignedUrl/);
+  assert.match(privateAvatar, /createSignedUrl/);
+  assert.match(authBrowser, /privateAvatarUrl/);
   assert.match(authBrowser, /profile-images/);
   assert.doesNotMatch(nextConfig, /source: '\/settings'/);
 });

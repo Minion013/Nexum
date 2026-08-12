@@ -1,5 +1,6 @@
 import { createBrowserSupabase, getAuthConfig, type AuthHeaders } from './client';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { privateAvatarUrl } from '../profile/private-avatar';
 
 const localFixtureStorageKey = 'pactflow-local-test-email';
 let browserClient: SupabaseClient | null = null;
@@ -32,12 +33,7 @@ export async function signOutBrowser(auth: AuthHeaders): Promise<void> {
 
 export async function resolvePrivateAvatar(profile: { avatarPath?: string | null }, auth: AuthHeaders): Promise<string | null> {
   if (!profile.avatarPath || auth.localTestEmail) return null;
-  try {
-    const { data, error } = await (await getBrowserSupabase()).storage.from('profile-images').createSignedUrl(profile.avatarPath, 60 * 60);
-    return error || !data?.signedUrl ? null : data.signedUrl;
-  } catch {
-    return null;
-  }
+  return privateAvatarUrl(profile, await getBrowserSupabase());
 }
 
 export async function uploadPrivateAvatar(file: File, profileId: string, auth: AuthHeaders): Promise<string> {

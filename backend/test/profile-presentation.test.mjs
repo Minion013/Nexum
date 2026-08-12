@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { avatarAppearance, profileInitials, profileLabel } from '../../frontend/public/profile-presentation.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { avatarAppearance, profileInitials, profileLabel } = await loadFrontendModule('src/profile/presentation.ts');
 
 test('every deterministic avatar colour provides accessible initials contrast', () => {
   for (const seed of ['indigo', 'teal', 'amber', 'rose', 'slate', 'violet', undefined]) {

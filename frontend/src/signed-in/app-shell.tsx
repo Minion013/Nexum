@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { apiRequest, type AuthHeaders, type Profile, type SessionPayload } from '../auth/client';
 import { getBrowserAuth, resolvePrivateAvatar, signOutBrowser } from '../auth/browser';
 import { avatarAppearance, profileInitials, profileLabel } from '../profile/presentation';
+import { signedInNavigation } from './navigation';
 
 type AuthStatus = 'loading' | 'ready' | 'error';
 type NotificationSummary = { unreadCount: number };
@@ -26,12 +27,7 @@ export function useSignedInAuth(): AuthContextValue {
   return useContext(AuthContext);
 }
 
-const navigation = [
-  { href: '/home', label: 'Dashboard' },
-  { href: '/contracts', label: 'Contracts' },
-  { href: '/wallet', label: 'Wallet' },
-  { href: '/people', label: 'People' }
-] as const;
+const navigation = signedInNavigation.map(([href, label]) => ({ href, label }));
 
 function isActive(pathname: string, href: string): boolean {
   const route = pathname === '/contacts' ? '/people' : pathname;

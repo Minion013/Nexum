@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dashboardPresentation } from '../../frontend/public/dashboard-presentation.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { dashboardPresentation } = await loadFrontendModule('src/dashboard/presentation.ts');
 
 test('the Dashboard gives a first-time Profile a clear Contract creation action', () => {
   assert.deepEqual(dashboardPresentation({ contracts: [] }), {

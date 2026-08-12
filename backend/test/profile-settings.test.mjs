@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { profileSettingsValues, saveProfileSettings } from '../../frontend/public/profile-settings.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { profileSettingsValues } = await loadFrontendModule('src/settings/presentation.ts');
+const { saveProfileSettings } = await loadFrontendModule('src/settings/workflow.ts');
 
 test('Profile Settings derives its editable fields from the current authenticated Profile', () => {
   assert.deepEqual(profileSettingsValues({

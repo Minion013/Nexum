@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { privateAvatarUrl } from '../../frontend/public/private-avatar.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { privateAvatarUrl } = await loadFrontendModule('src/profile/private-avatar.ts');
 
 test('a saved private avatar is resolved through a short-lived owner URL', async () => {
   const calls = [];

@@ -1,5 +1,14 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+import { ProjectDetailsHandoffPage } from '../../../../src/contracts/project-details-handoff';
+import { NewContractStepUnavailable } from '../../../../src/contracts/new-step';
+import { SignedInShell } from '../../../../src/signed-in/app-shell';
 
-export default function NewContractProjectDetailsRoute() {
-  redirect('/contracts/new/choose-person');
+export const metadata: Metadata = { title: 'Project details - PactFlow', description: 'Continue a saved PactFlow Contract Draft.' };
+
+type RouteProps = { searchParams: Promise<{ contractId?: string | string[] }> };
+
+export default async function NewContractProjectDetailsRoute({ searchParams }: RouteProps) {
+  const query = await searchParams;
+  const contractId = typeof query.contractId === 'string' ? query.contractId : undefined;
+  return <SignedInShell>{contractId ? <ProjectDetailsHandoffPage contractId={contractId} /> : <NewContractStepUnavailable step="Project details" />}</SignedInShell>;
 }

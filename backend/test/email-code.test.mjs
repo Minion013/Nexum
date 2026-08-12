@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEmailCodeSender, EMAIL_CODE_RESEND_COOLDOWN_SECONDS } from '../../frontend/public/email-code.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { createEmailCodeSender, EMAIL_CODE_RESEND_COOLDOWN_SECONDS } = await loadFrontendModule('src/auth/email-code.ts');
 
 test('an email sign-in code is requested without a redirect URL and can be verified', async () => {
   let time = 0;

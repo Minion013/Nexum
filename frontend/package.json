@@ -4,9 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "npm run build:legacy && next dev --port 3000",
-    "build": "npm run build:legacy && next build",
-    "build:legacy": "node scripts/build-legacy-client.mjs",
+    "start": "next dev --port 3000",
+    "build": "next build",
     "test:routes": "node --test test/next-routes.test.mjs",
     "typecheck": "tsc --noEmit"
   },

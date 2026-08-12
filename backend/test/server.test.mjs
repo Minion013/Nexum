@@ -5,8 +5,10 @@ import { once } from 'node:events';
 import { createServer as createTcpServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createApp, runtimeConfigurationFromEnvironment } from '../src/server.mjs';
-import { signedInNavigation } from '../../frontend/public/signed-in-navigation.bundle.js';
-import { authoringRoutes, contractDraftUpdate, reviewDefaults } from '../../frontend/public/contract-authoring-flow.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { signedInNavigation } = await loadFrontendModule('src/signed-in/navigation.ts');
+const { authoringRoutes, contractDraftUpdate, reviewDefaults } = await loadFrontendModule('src/contracts/authoring-model.ts');
 
 async function request(server, path) {
   return fetch(`http://127.0.0.1:${server.address().port}${path}`);

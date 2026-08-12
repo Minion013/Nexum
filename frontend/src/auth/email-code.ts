@@ -1,9 +1,21 @@
-// @ts-nocheck
 export const EMAIL_CODE_RESEND_COOLDOWN_SECONDS = 5;
 const cooldownMs = EMAIL_CODE_RESEND_COOLDOWN_SECONDS * 1_000;
 
-export function createEmailCodeSender({ auth, now = () => Date.now() }) {
-  const lastSentAt = new Map();
+type EmailAuth = {
+  signInWithOtp(input: { email: string; options: { shouldCreateUser: boolean } }): Promise<{ error?: unknown | null }>;
+  verifyOtp(input: { email: string; token: string; type: 'email' }): Promise<{ data?: { session?: unknown | null } | null; error?: unknown | null }>;
+};
+
+export type EmailCodeResult =
+  | { ok: true; retryAfterSeconds: number }
+  | { ok: false; reason: 'cooldown'; retryAfterSeconds: number }
+  | { ok: false; reason: 'invalid-code' | 'provider'; message: string };
+
+export function createEmailCodeSender({ auth, now = () => Date.now() }: { auth: EmailAuth; now?: () => number }): {
+  request(email: string): Promise<EmailCodeResult>;
+  verify(email: string, code: string): Promise<Exclude<EmailCodeResult, { ok: true; retryAfterSeconds: number }> | { ok: true }>;
+} {
+  const lastSentAt = new Map<string, number>();
   return {
     async request(email) {
       const previousRequest = lastSentAt.get(email);

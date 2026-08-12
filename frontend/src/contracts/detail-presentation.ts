@@ -22,6 +22,7 @@ export type ContractDetail = {
     changeControl?: { proposalProcess?: string; bilateralAmendmentOnly?: boolean };
   };
   paymentAuthority: string;
+  activity?: Array<{ title?: string; detail?: string; at?: string }>;
 };
 
 export type ContractReview = {
@@ -43,7 +44,7 @@ export type ContractReview = {
 
 export type DetailMilestonePresentation = ContractMilestone & {
   number: number;
-  state: 'complete' | 'active' | 'pending' | 'awaiting-acceptance';
+  state: 'complete' | 'active' | 'review' | 'pending' | 'awaiting-acceptance';
 };
 
 export type ContractDetailPresentation = {
@@ -51,6 +52,7 @@ export type ContractDetailPresentation = {
   stage: { label: string; tone: string };
   meta: string;
   milestones: DetailMilestonePresentation[];
+  activity: Array<{ title?: string; detail?: string; at?: string }>;
   completed: number;
   current: DetailMilestonePresentation | null;
   next: DetailMilestonePresentation | null;
@@ -80,9 +82,10 @@ function stage(status: string): { label: string; tone: string } {
   } as Record<string, { label: string; tone: string }>)[status] ?? { label: 'Contract update', tone: '' };
 }
 
-function milestoneState(status: string, index: number): DetailMilestonePresentation['state'] {
+function milestoneState(status: string, index: number, hasActivity: boolean): DetailMilestonePresentation['state'] {
   if (status === 'complete') return 'complete';
   if (status === 'negotiation' || status === 'private_draft') return 'awaiting-acceptance';
+  if (status === 'active' && hasActivity) return index === 0 ? 'complete' : index === 1 ? 'review' : 'pending';
   return index === 0 ? 'active' : 'pending';
 }
 
@@ -90,9 +93,9 @@ export function contractDetailPresentation(contract: ContractDetail): ContractDe
   const scope = contract.sections.scope ?? {};
   const payment = contract.sections.payment ?? {};
   const rawMilestones = Array.isArray(contract.sections.milestones) ? contract.sections.milestones : [];
-  const milestones = rawMilestones.map((item, index) => ({ ...item, number: index + 1, state: milestoneState(contract.status, index) }));
+  const milestones = rawMilestones.map((item, index) => ({ ...item, number: index + 1, state: milestoneState(contract.status, index, Boolean(contract.activity?.length)) }));
   const completed = milestones.filter(item => item.state === 'complete').length;
-  const current = milestones.find(item => item.state === 'active') ?? milestones.find(item => item.state === 'pending') ?? null;
+  const current = milestones.find(item => item.state === 'review') ?? milestones.find(item => item.state === 'active') ?? milestones.find(item => item.state === 'pending') ?? null;
   const next = milestones.find(item => item.state === 'pending' && item !== current) ?? null;
   const token = typeof payment.settlementToken === 'string' && payment.settlementToken.trim() ? payment.settlementToken : 'MockEUSD';
   const total = Number(payment.totalAllocation) || rawMilestones.reduce((sum, item) => sum + (Number(item.allocation) || 0), 0);
@@ -101,6 +104,7 @@ export function contractDetailPresentation(contract: ContractDetail): ContractDe
     stage: stage(contract.status),
     meta: `${contract.counterparty || 'Counterparty'} · ${milestones.length} milestone${milestones.length === 1 ? '' : 's'} · Started ${date(scope.projectStartDateUtc)}`,
     milestones,
+    activity: contract.activity ?? [],
     completed,
     current,
     next,

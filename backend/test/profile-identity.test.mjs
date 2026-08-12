@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { loadingProfileIdentity, resolveProfileIdentity } from '../../frontend/public/profile-identity.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { loadingProfileIdentity, resolveProfileIdentity } = await loadFrontendModule('src/profile/identity.ts');
 
 test('profile identity stays reserved while delayed profile image resolution completes, then reveals the image and name together', async () => {
   let releaseAvatar;
@@ -52,10 +54,9 @@ test('profile identity retains the deterministic fallback when a signed private 
   assert.equal(identity.label, 'Avery Stone');
 });
 
-test('signed-in destinations ship the reserved loading identity instead of a generic Profile placeholder', async () => {
-  for (const path of ['home.html', 'contracts.html', 'people.html', 'settings.html']) {
-    const markup = await readFile(new URL(`../../frontend/public/${path}`, import.meta.url), 'utf8');
-    assert.match(markup, /<summary class="profile-identity-loading" aria-label="Loading profile" aria-busy="true">/);
-    assert.doesNotMatch(markup, /<summary[^>]*><span class="avatar">PF<\/span>(?:<span[^>]*>)?Profile/);
-  }
+test('signed-in destinations keep the reserved loading identity in the typed shell', async () => {
+  const shell = await readFile(new URL('../../frontend/src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
+  assert.match(shell, /profile-avatar-loading/);
+  assert.match(shell, /profile-name-loading/);
+  assert.match(shell, /Loading profile/);
 });

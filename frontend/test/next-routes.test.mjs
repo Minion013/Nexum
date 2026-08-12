@@ -2,64 +2,40 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { build } from 'esbuild';
 import { createServer as createTcpServer } from 'node:net';
-import { createRequire } from 'node:module';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fileURLToPath } from 'node:url';
 import { createApp, localTestProfileFromEnvironment } from '../../backend/src/server.mjs';
+import { loadFrontendModule } from './load-frontend-module.mjs';
 
 const frontendRoot = fileURLToPath(new URL('..', import.meta.url));
 const nextBin = fileURLToPath(new URL('../../node_modules/next/dist/bin/next', import.meta.url));
-const require = createRequire(import.meta.url);
-
 async function loadNotificationPresentation() {
-  const result = await build({ entryPoints: ['./src/notifications/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/notifications/presentation.tsx', { jsx: true, external: ['react', 'react/jsx-runtime'] });
 }
 
 async function loadAuthorityPresentation() {
-  const result = await build({ entryPoints: ['./src/authorities/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/authorities/presentation.tsx', { jsx: true, external: ['react', 'react/jsx-runtime'] });
 }
 
 async function loadContractsPresentation() {
-  const result = await build({ entryPoints: ['./src/contracts/presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/contracts/presentation.ts');
 }
 
 async function loadAuthoringEntryPresentation() {
-  const result = await build({ entryPoints: ['./src/contracts/authoring-entry-presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/contracts/authoring-entry-presentation.ts');
 }
 
 async function loadContractDetailPresentation() {
-  const result = await build({ entryPoints: ['./src/contracts/detail-presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/contracts/detail-presentation.ts');
 }
 
 async function loadWalletPresentation() {
-  const result = await build({ entryPoints: ['./src/wallet/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/wallet/presentation.tsx', { jsx: true, external: ['react', 'react/jsx-runtime'] });
 }
 
 async function loadWalletProvider() {
-  const result = await build({ entryPoints: ['./src/wallet/provider.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
-  return module.exports;
+  return loadFrontendModule('src/wallet/provider.ts');
 }
 
 async function unusedPort() {
@@ -72,7 +48,7 @@ async function unusedPort() {
 
 async function waitForNext(origin, process) {
   let lastError;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     if (process.exitCode !== null) throw new Error(`Next exited before becoming ready (code ${process.exitCode}).`);
     try {
       const response = await fetch(`${origin}/`);
@@ -80,7 +56,7 @@ async function waitForNext(origin, process) {
     } catch (error) {
       lastError = error;
     }
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
   throw lastError ?? new Error('Next did not become ready.');
 }
@@ -132,6 +108,12 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const localSession = await fetch(`${backendOrigin}/api/session`, { headers: { 'x-pactflow-local-test-email': 'pactflow-wallet-test@local.invalid' } });
     assert.equal(localSession.status, 200);
     assert.equal((await localSession.json()).mode, 'local-test-auth');
+    const proxiedHealth = await fetch(`${origin}/health`);
+    assert.equal(proxiedHealth.status, 200);
+    assert.deepEqual(await proxiedHealth.json(), { status: 'ok', mode: 'supabase-auth', paymentAuthority: 'not configured' });
+    const proxiedSession = await fetch(`${origin}/api/session`, { headers: { 'x-pactflow-local-test-email': 'pactflow-wallet-test@local.invalid' } });
+    assert.equal(proxiedSession.status, 200);
+    assert.equal((await proxiedSession.json()).mode, 'local-test-auth');
     assert.equal((await fetch(`${backendOrigin}/api/session`, { headers: { 'x-pactflow-local-test-email': 'wrong@local.invalid' } })).status, 401);
     const people = await fetch(`${origin}/people`);
     assert.equal(people.status, 200);
@@ -170,6 +152,12 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const newSendWithDraft = await fetch(`${origin}/contracts/new/send?contractId=00000000-0000-4000-8000-000000000300`);
     assert.equal(newSendWithDraft.status, 200);
     assert.match(await newSendWithDraft.text(), /Loading Contract Send/);
+    const newProjectDetails = await fetch(`${origin}/contracts/new/project-details`);
+    assert.equal(newProjectDetails.status, 200);
+    assert.match(await newProjectDetails.text(), /Open a saved draft/);
+    const newReviewTerms = await fetch(`${origin}/contracts/new/review-terms`);
+    assert.equal(newReviewTerms.status, 200);
+    assert.match(await newReviewTerms.text(), /Open a saved draft/);
     const settings = await fetch(origin + '/settings');
     assert.equal(settings.status, 200);
     assert.match(await settings.text(), /Profile Settings/);

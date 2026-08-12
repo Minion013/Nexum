@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contractDetailPresentation } from '../../frontend/public/contract-detail-presentation.bundle.js';
+import { loadFrontendModule } from '../../frontend/test/load-frontend-module.mjs';
+
+const { contractDetailPresentation } = await loadFrontendModule('src/contracts/detail-presentation.ts');
 
 function activeContract() {
   return {

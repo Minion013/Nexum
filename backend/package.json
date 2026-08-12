@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "npm --prefix ../frontend run build:legacy",
     "start": "node src/server.mjs",
     "test": "node --test",
     "test:smoke": "node --test test/server.test.mjs",
