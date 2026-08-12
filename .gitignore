@@ -1,8 +1,8 @@
 node_modules/
 .next/
+.next-dev/
 *.tsbuildinfo
 .env
-.env.*
 !.env.example
 coverage/
 dist/
@@ -14,3 +14,17 @@ milestonepay/__MACOSX/
 frontend/public/*.bundle.js
 frontend/public/*-????????.js
 frontend/public/*-????????.wasm
+
+
+design-system/
+docs/
+CONTEXT.md
+milestonepay/
+
+# Keep the Wayfinder implementation ticket archive versioned.
+!docs/
+docs/*
+!docs/wayfinder/
+docs/wayfinder/*
+!docs/wayfinder/tickets/
+!docs/wayfinder/tickets/*.md

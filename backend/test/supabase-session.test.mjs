@@ -110,7 +110,7 @@ function validServiceEngagementDraft(overrides = {}) {
       { title: 'Research', deliveryOutcome: 'Annotated research findings', allocation: 400, evidenceRequirement: 'Annotated findings', acceptanceCriteria: [{ description: 'Research findings are documented.', required: true }], deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 },
       { title: 'Delivery', deliveryOutcome: 'Production-ready handoff', allocation: 600, evidenceRequirement: 'Repository handoff notes', acceptanceCriteria: [{ description: 'The handoff is complete.', required: true }], deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
     ],
-    payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: 1000, fundingDeadlineUtc: '2030-09-05T09:00:00.000Z', successFeeBps: 250, feeRecipient: 'PactFlow demonstration fee recipient' },
+    payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: 1000, fundingDeadlineUtc: '2030-09-05T09:00:00.000Z', successFeeBps: 250, feeRecipient: 'NEXUM demonstration fee recipient' },
     evidence: { reviewDecision: 'Buyer records acceptance or a specific change request within the review window.', dependencyAcknowledgementRequired: true },
     intellectualProperty: { outcome: 'provider_retains_ownership_with_client_license', licenseScope: 'Project delivery use', confidentiality: 'mutual_confidentiality', confidentialityDuration: 'Two years' },
     changeControl: { proposalProcess: 'Either Contract Party may propose a written change request.', bilateralAmendmentOnly: true },
@@ -532,7 +532,7 @@ test('a verified Profile creates a Contract without Workspace access before expl
       from: table => ({
         select: () => ({
           eq: () => table === 'resolution_authorities'
-            ? Promise.resolve({ data: [{ id: '00000000-0000-4000-8000-000000000201', display_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
+            ? Promise.resolve({ data: [{ id: '00000000-0000-4000-8000-000000000201', display_name: 'NEXUM Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
             : { single: async () => ({
               data: {
                 id: 'contract-id',
@@ -541,7 +541,7 @@ test('a verified Profile creates a Contract without Workspace access before expl
                   id: 'version-id',
                   version_number: 2,
                   selected_authority_id: publishable.authorityId,
-                  authority_snapshot: { authority_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' },
+                  authority_snapshot: { authority_name: 'NEXUM Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' },
                   acceptance_ready_at: '2030-09-01T00:00:00.000Z',
                   contract_sections: [
                     { section_type: 'parties', position: 0, terms: publishable.parties },
@@ -909,7 +909,7 @@ test('a verified Contract Party can read and save a validated durable Contract d
     ],
     totalAllocation: 1000,
     successFeeBps: 250,
-    authority: { name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1' },
+    authority: { name: 'NEXUM Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1' },
     paymentAuthority: 'not configured'
   };
   const { server, origin } = await start({
@@ -1205,7 +1205,7 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
                     { id: 'seller-party-id', profiles: { display_name: 'Seller' } }
                   ],
                   contract_versions: [{
-                    id: 'version-id', version_number: 2, version_hash: 'version-hash', authority_snapshot: { authority_name: 'PactFlow Simulation Authority' },
+                    id: 'version-id', version_number: 2, version_hash: 'version-hash', authority_snapshot: { authority_name: 'NEXUM Simulation Authority' },
                     contract_sections: [{ section_type: 'scope', position: 0, terms: { title: 'Checkout redesign' } }],
                     contract_acceptances: [{ contract_party_id: 'buyer-party-id', accepted_at: '2026-08-07T00:00:00.000Z' }]
                   }]
@@ -1238,7 +1238,7 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
   assert.deepEqual(review, {
     id: 'contract-id', status: 'negotiation',
     version: {
-      id: 'version-id', number: 2, hash: 'version-hash', acceptanceReadyAt: undefined, authority: { authority_name: 'PactFlow Simulation Authority' },
+      id: 'version-id', number: 2, hash: 'version-hash', acceptanceReadyAt: undefined, authority: { authority_name: 'NEXUM Simulation Authority' },
       sections: [{ type: 'scope', terms: { title: 'Checkout redesign' } }]
     },
     parties: [
@@ -1316,11 +1316,11 @@ test('the durable draft workflow submits every validated Service Engagement sect
       from: table => ({
         select: () => ({
           eq: () => table === 'resolution_authorities'
-            ? Promise.resolve({ data: [{ id: 'authority-id', display_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
+            ? Promise.resolve({ data: [{ id: 'authority-id', display_name: 'NEXUM Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
             : ({ single: async () => ({
               data: {
                 id: 'contract-id', status: 'negotiation',
-                contract_versions: [{ id: 'version-id', version_number: 2, selected_authority_id: 'authority-id', authority_snapshot: { authority_name: 'PactFlow Simulation Authority' }, acceptance_ready_at: '2030-09-01T00:00:00.000Z', contract_sections: [] }]
+                contract_versions: [{ id: 'version-id', version_number: 2, selected_authority_id: 'authority-id', authority_snapshot: { authority_name: 'NEXUM Simulation Authority' }, acceptance_ready_at: '2030-09-01T00:00:00.000Z', contract_sections: [] }]
               }, error: null
             }) })
         })

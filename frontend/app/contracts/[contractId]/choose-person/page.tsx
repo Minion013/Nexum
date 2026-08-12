@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { AuthoringEntryPage } from '../../../../src/contracts/authoring-entry';
 import { SignedInShell } from '../../../../src/signed-in/app-shell';
 
-export const metadata: Metadata = { title: 'Contract Draft - PactFlow', description: 'Continue an authorised PactFlow Contract Draft.' };
+export const metadata: Metadata = { title: 'Contract Draft - NEXUM', description: 'Continue an authorised NEXUM Contract Draft.' };
 
 type RouteProps = { params: Promise<{ contractId: string }> };
 

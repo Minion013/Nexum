@@ -11,7 +11,7 @@ class DraftValidationError extends ValidationError {
   }
 }
 const requiredContractSectionTypes = ['parties', 'scope', 'milestones', 'payment', 'evidence', 'intellectual_property', 'change_control', 'dispute_resolution', 'notices'];
-const contractAcceptanceStatement = 'I accept this exact PactFlow Contract Version. This signature does not move funds.';
+const contractAcceptanceStatement = 'I accept this exact NEXUM Contract Version. This signature does not move funds.';
 const baseSepoliaChainId = 84532;
 const oneDayInMilliseconds = 86_400_000;
 const coPilotProjectStartOffsetDays = 1;
@@ -22,7 +22,7 @@ const coPilotAuthorityNotice = 'These are editable drafting suggestions. The co-
 
 export function contractAcceptanceTypedData({ contractId, versionId, versionHash }) {
   return {
-    domain: { name: 'PactFlow Contract Acceptance', version: '1', chainId: baseSepoliaChainId },
+    domain: { name: 'NEXUM Contract Acceptance', version: '1', chainId: baseSepoliaChainId },
     types: { ContractAcceptance: [{ name: 'contractId', type: 'string' }, { name: 'versionId', type: 'string' }, { name: 'versionHash', type: 'string' }, { name: 'statement', type: 'string' }] },
     message: { contractId, versionId, versionHash, statement: contractAcceptanceStatement }
   };
@@ -39,7 +39,7 @@ function verifiedWalletAcceptance({ contractId, versionId, versionHash, walletAd
 
 function configuredValue(environment, key) {
   const value = environment[key]?.trim();
-  if (!value) throw new Error(`${key} must be configured before PactFlow starts.`);
+  if (!value) throw new Error(`${key} must be configured before NEXUM starts.`);
   return value;
 }
 function configuredHttpUrl(environment, key) {
@@ -109,9 +109,9 @@ export function createProfileLoader(config = publicSupabaseConfigFromEnvironment
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
-    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow profile.');
+    await ensureProfileForAppData(supabase, 'We could not prepare your NEXUM profile.');
     const { data, error } = await supabase.from('profiles').select('id, email, display_name, username, professional_headline, bio, avatar_seed, avatar_path, discoverable, onboarding_completed_at').eq('id', userId).single();
-    if (error || !data) throw new AuthenticationError('Your PactFlow profile is unavailable.');
+    if (error || !data) throw new AuthenticationError('Your NEXUM profile is unavailable.');
     return profileResponse(data, true);
   };
 }
@@ -154,12 +154,12 @@ export function createContractsLoader(config = publicSupabaseConfigFromEnvironme
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
-    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow Home.');
+    await ensureProfileForAppData(supabase, 'We could not prepare your NEXUM Home.');
     const { data, error } = await supabase
       .from('contracts')
       .select('id, status, updated_at, contract_versions(version_number, contract_sections(section_type, terms)), contract_parties(profile_id)')
       .order('updated_at', { ascending: false });
-    if (error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
+    if (error) throw new AuthenticationError('Your NEXUM Home is unavailable.');
     return { contracts: (data ?? []).map(contract => mapContractListItem(contract, userId)) };
   };
 }
@@ -211,9 +211,9 @@ export function createNotificationLoader(config = publicSupabaseConfigFromEnviro
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
-    await ensureProfileForAppData(supabase, 'We could not prepare your PactFlow inbox.');
+    await ensureProfileForAppData(supabase, 'We could not prepare your NEXUM inbox.');
     const { data, error } = await supabase.rpc('list_my_notifications');
-    if (error) throw new AuthenticationError('Your PactFlow inbox is unavailable.');
+    if (error) throw new AuthenticationError('Your NEXUM inbox is unavailable.');
     return mapNotifications(data);
   };
 }
@@ -257,7 +257,7 @@ function createLocalAuthorityRegistryFixture() {
   return {
     load: async () => mapAuthorityRegistry([{
       id: '00000000-0000-4000-8000-000000000201',
-      display_name: 'PactFlow Simulation Authority',
+      display_name: 'NEXUM Simulation Authority',
       jurisdiction_label: 'Testnet simulation',
       ruleset_version: 'v1',
       is_simulated: true
@@ -316,7 +316,7 @@ function createLocalContractsFixture() {
   const contracts = [];
   const authority = {
     id: '00000000-0000-4000-8000-000000000201',
-    name: 'PactFlow Simulation Authority',
+    name: 'NEXUM Simulation Authority',
     jurisdictionLabel: 'Testnet simulation',
     rulesetVersion: 'v1'
   };
@@ -447,13 +447,14 @@ function createLocalContractsFixture() {
       contract.updatedAt = new Date().toISOString();
       return draftFor(contract);
     },
-    invite: async ({ contractId, email }) => {
+    invite: async ({ contractId, email, role = 'counterparty' }) => {
       const contract = find(requiredText(contractId, 'Contract'));
       if (!contract) throw new ValidationError('This Contract is unavailable.');
-      const inviteeEmail = validatePublishableDraft(draftFor(contract), email);
+      const inviteeEmail = validatePublishableDraft(draftFor(contract), email, role);
       contract.status = 'negotiation';
       contract.invitationId = `00000000-0000-4000-8000-${String(400 + invitationSequence++).padStart(12, '0')}`;
       contract.invitedEmail = inviteeEmail;
+      contract.invitationRole = role;
       contract.updatedAt = new Date().toISOString();
       return { id: contract.invitationId };
     }
@@ -650,16 +651,22 @@ function validatedDraft(draft) {
   const buyer = section(parties.buyer, 'parties');
   const serviceProvider = section(parties.serviceProvider, 'parties');
   const counterpartyEmail = optionalEmail(parties.counterparty_email ?? parties.counterpartyEmail);
+  const additionalViewerEmails = Array.isArray(parties.additional_viewer_emails)
+    ? parties.additional_viewer_emails.map((value, index) => email(value, 'parties', `additional_viewer_emails.${index}`, 'Viewer email'))
+    : [];
   const validatedParties = {
     buyer: {
       partyRef: enumValue(buyer.partyRef, ['initiating_party', 'counterparty'], 'parties', 'buyer.partyRef', 'Buyer party'),
-      responsibility: text(buyer.responsibility, 'parties', 'buyer.responsibility', 'Buyer responsibility', 500)
+      responsibility: text(buyer.responsibility, 'parties', 'buyer.responsibility', 'Buyer responsibility', 500),
+      ...(typeof buyer.legalName === 'string' && buyer.legalName.trim() ? { legalName: text(buyer.legalName, 'parties', 'buyer.legalName', 'Buyer legal name', 200) } : {})
     },
     serviceProvider: {
       partyRef: enumValue(serviceProvider.partyRef, ['initiating_party', 'counterparty'], 'parties', 'serviceProvider.partyRef', 'Service provider party'),
-      responsibility: text(serviceProvider.responsibility, 'parties', 'serviceProvider.responsibility', 'Service provider responsibility', 500)
+      responsibility: text(serviceProvider.responsibility, 'parties', 'serviceProvider.responsibility', 'Service provider responsibility', 500),
+      ...(typeof serviceProvider.legalName === 'string' && serviceProvider.legalName.trim() ? { legalName: text(serviceProvider.legalName, 'parties', 'serviceProvider.legalName', 'Service provider legal name', 200) } : {})
     },
-    ...(counterpartyEmail ? { counterparty_email: counterpartyEmail } : {})
+    ...(counterpartyEmail ? { counterparty_email: counterpartyEmail } : {}),
+    ...(additionalViewerEmails.length ? { additional_viewer_emails: additionalViewerEmails } : {})
   };
   if (validatedParties.buyer.partyRef === validatedParties.serviceProvider.partyRef) invalid('parties', 'serviceProvider.partyRef', 'duplicate_party', 'Buyer and service provider must be different Contract Parties.');
 
@@ -838,12 +845,13 @@ function draftInputForPublication(draft) {
     milestones: draft.sections?.milestones
   };
 }
-function validatePublishableDraft(draft, invitationEmail) {
+function validatePublishableDraft(draft, invitationEmail, role = 'counterparty') {
   if (!draft.shareReady) throw new ValidationError('Complete and save the Contract terms before sending an invitation.');
   const savedEmail = optionalEmail(draft.sections?.parties?.counterparty_email ?? draft.sections?.parties?.counterpartyEmail);
   if (!savedEmail) throw new ValidationError('An exact counterparty email is required before sending an invitation.');
   const requestedEmail = requiredEmail(invitationEmail);
-  if (savedEmail !== requestedEmail) throw new ValidationError('The invitation email must match the saved counterparty email.');
+  if (role !== 'viewer' && savedEmail !== requestedEmail) throw new ValidationError('The invitation email must match the saved counterparty email.');
+  if (role !== 'counterparty' && role !== 'viewer') throw new ValidationError('The invitation access type is invalid.');
   validatedDraft(draftInputForPublication(draft));
   return requestedEmail;
 }
@@ -931,11 +939,11 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
       counterparty_email: optionalEmail(counterpartyEmail),
       initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility')
     }, 'We could not create this Contract Draft.') }),
-    invite: async ({ accessToken, contractId, email }) => {
+    invite: async ({ accessToken, contractId, email, role = 'counterparty' }) => {
       const targetContractId = requiredText(contractId, 'Contract');
       const draft = await getDraft({ accessToken, contractId: targetContractId });
-      const inviteeEmail = validatePublishableDraft(draft, email);
-      return { id: await call({ accessToken }, 'create_contract_invitation', {
+      const inviteeEmail = validatePublishableDraft(draft, email, role);
+      return { id: await call({ accessToken }, role === 'viewer' ? 'create_contract_viewer_invitation' : 'create_contract_invitation', {
         target_contract_id: targetContractId,
         invitee_email: inviteeEmail
       }, 'We could not create this Contract invitation.') };
@@ -992,7 +1000,7 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
   return async ({ userId, accessToken }) => {
     const supabase = createClient(config.url, config.publishableKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { autoRefreshToken: false, persistSession: false } });
     const { data, error } = await supabase.from('profiles').update({ onboarding_completed_at: new Date().toISOString() }).eq('id', userId).select('id, email, display_name, onboarding_completed_at').single();
-    if (error || !data) throw new AuthenticationError('We could not save your PactFlow setup.');
+    if (error || !data) throw new AuthenticationError('We could not save your NEXUM setup.');
     return { id: data.id, email: data.email, displayName: data.display_name, onboardingCompletedAt: data.onboarding_completed_at };
   };
 }
@@ -1135,10 +1143,10 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       const contractInvitationMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/invitations$/);
       if (contractInvitationMatch && request.method === 'POST') {
         const session = await authenticate();
-        const { email } = await json(request);
+        const { email, role = 'counterparty' } = await json(request);
         const invitation = session.localTest
-          ? await localContracts.invite({ contractId: contractInvitationMatch[1], email })
-          : await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contractInvitationMatch[1], email });
+          ? await localContracts.invite({ contractId: contractInvitationMatch[1], email, role })
+          : await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contractInvitationMatch[1], email, role });
         return respond(response, 201, { invitation });
       }
       const durableInvitationMatch = url.pathname.match(/^\/api\/invitations\/([^/]+)\/accept$/);
@@ -1169,6 +1177,6 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const runtimeConfiguration = runtimeConfigurationFromEnvironment();
   createApp({ publicSupabaseConfig: runtimeConfiguration.publicSupabaseConfig, localTestProfile: runtimeConfiguration.localTestProfile }).listen(runtimeConfiguration.port, () => {
-    console.log(`PactFlow ready at http://localhost:${runtimeConfiguration.port}`);
+    console.log(`NEXUM ready at http://localhost:${runtimeConfiguration.port}`);
   });
 }

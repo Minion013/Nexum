@@ -60,6 +60,26 @@ export function ProjectDetailsPage({ contractId }: { contractId: string }) {
     setIssues([]);
   }
 
+  function updatePartyName(party: 'buyer' | 'serviceProvider', value: string) {
+    setDraft(current => current ? { ...current, parties: { ...current.parties, [party]: { ...current.parties[party], legalName: value } } } : current);
+    setIssues([]);
+  }
+
+  function addViewer() {
+    setDraft(current => current ? { ...current, parties: { ...current.parties, additional_viewer_emails: [...current.parties.additional_viewer_emails, ''] } } : current);
+    setIssues([]);
+  }
+
+  function updateViewer(index: number, value: string) {
+    setDraft(current => current ? { ...current, parties: { ...current.parties, additional_viewer_emails: current.parties.additional_viewer_emails.map((email, viewerIndex) => viewerIndex === index ? value : email) } } : current);
+    setIssues([]);
+  }
+
+  function removeViewer(index: number) {
+    setDraft(current => current ? { ...current, parties: { ...current.parties, additional_viewer_emails: current.parties.additional_viewer_emails.filter((_, viewerIndex) => viewerIndex !== index) } } : current);
+    setIssues([]);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft || !auth || saving) return;
@@ -85,10 +105,22 @@ export function ProjectDetailsPage({ contractId }: { contractId: string }) {
   const counterparty = draft.parties.counterparty_email || 'Counterparty to be confirmed';
   return <section className="contract-authoring-flow draft-editor app-panel" aria-labelledby="project-details-title">
     <DraftStepper current="Project details" />
-    <div className="draft-heading"><div><p className="eyebrow">Step 2 of 4 · Project details</p><h1 id="project-details-title">Give the work a clear shape.</h1><p className="page-intro">Save the scope before reviewing responsibilities, payment, evidence, and the exact terms the other Contract Party will see.</p></div><span className="draft-status">Private draft</span></div>
-    <dl className="draft-context"><div><dt>Counterparty</dt><dd>{counterparty}</dd></div><div><dt>Access</dt><dd>Only Contract Parties</dd></div><div><dt>Authority</dt><dd>{draft.authorityId ? 'Selected registry authority' : 'Choose an authority'}</dd></div></dl>
+    <div className="draft-heading"><div><p className="eyebrow">Step 2 of 4 · Project details</p><h1 id="project-details-title">Describe the project.</h1><p className="page-intro">Tell us what you&apos;re building, name the legal entity on each side, and set the exact terms the other Contract Party will see.</p></div><span className="draft-status">Private draft</span></div>
+    <dl className="draft-context"><div><dt>Counterparty</dt><dd>{counterparty}</dd></div><div><dt>Access</dt><dd>{draft.parties.additional_viewer_emails.length ? `${draft.parties.additional_viewer_emails.length} viewer${draft.parties.additional_viewer_emails.length === 1 ? '' : 's'} planned` : 'Contract Parties only'}</dd></div><div><dt>Authority</dt><dd>{draft.authorityId ? 'Selected registry authority' : 'Choose an authority'}</dd></div></dl>
     {error && <div className="notice draft-error" role="alert"><strong>Project details could not be saved.</strong><span>{error.message}</span><DraftIssues issues={issues} /></div>}
     <form className="draft-form" onSubmit={submit}>
+      <fieldset className="draft-card draft-people-card">
+        <legend>Parties and access</legend>
+        <p className="muted">Use the legal entity names that should appear in the Contract, including a suffix such as LLC, Ltd, or Inc. Either Contract Party can add people who only need to view the contents.</p>
+        <div className="draft-two-column">
+          <label htmlFor="buyer-legal-name">Buyer legal entity<input id="buyer-legal-name" value={draft.parties.buyer.legalName} onChange={event => updatePartyName('buyer', event.target.value)} placeholder="e.g. Northstar Labs LLC" required /></label>
+          <label htmlFor="provider-legal-name">Service Provider legal entity<input id="provider-legal-name" value={draft.parties.serviceProvider.legalName} onChange={event => updatePartyName('serviceProvider', event.target.value)} placeholder="e.g. Fieldwork Studio Ltd" required /></label>
+        </div>
+        <div className="viewer-access-editor">
+          <div className="viewer-access-heading"><div><h2>Additional viewers</h2><p className="muted">They can review the Contract contents after accepting an invitation. They do not become a signing party.</p></div><button className="ghost" type="button" onClick={addViewer}>Add a viewer</button></div>
+          {draft.parties.additional_viewer_emails.length > 0 && <div className="viewer-access-list">{draft.parties.additional_viewer_emails.map((email, index) => <label key={`viewer-${index}`} htmlFor={`viewer-${index}`}>Viewer {index + 1}<span className="viewer-input-row"><input id={`viewer-${index}`} type="email" value={email} onChange={event => updateViewer(index, event.target.value)} placeholder="colleague@company.com" autoComplete="email" required /><button className="ghost viewer-remove" type="button" onClick={() => removeViewer(index)} aria-label={`Remove viewer ${index + 1}`}>Remove</button></span></label>)}</div>}
+        </div>
+      </fieldset>
       <fieldset className="draft-card">
         <legend>Project scope</legend>
         <p className="muted">Describe the outcome both Contract Parties can recognise, including what is and is not included.</p>

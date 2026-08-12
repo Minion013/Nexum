@@ -1,0 +1,94 @@
+/* Login-specific polish: quieter type hierarchy and clear action contrast. */
+.auth-page {
+  --auth-accent: #4258b7;
+  --auth-accent-hover: #33479f;
+  --auth-accent-soft: #eef1ff;
+  background: #ffffff;
+}
+
+.auth-header {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+
+.auth-header .back-link {
+  font-weight: 500;
+}
+
+.auth-card h1 {
+  font-weight: 600;
+}
+
+.auth-card .eyebrow {
+  font-weight: 650 !important;
+}
+
+.auth-card label {
+  color: #3f4c64;
+  font-weight: 500;
+}
+
+.auth-card .auth-intro,
+.auth-card .auth-assurance {
+  font-weight: 400;
+}
+
+.auth-card .auth-intro strong {
+  font-weight: 600;
+}
+
+.auth-card .button {
+  font-weight: 600;
+}
+
+.auth-card .button-dark {
+  background: var(--auth-accent);
+  border-color: var(--auth-accent);
+  box-shadow: 0 8px 18px rgb(66 88 183 / 18%);
+  color: #ffffff;
+}
+
+.auth-card .button-dark:hover:not(:disabled),
+.auth-card .button-dark:focus-visible {
+  background: var(--auth-accent-hover);
+  border-color: var(--auth-accent-hover);
+}
+
+.auth-card .button-dark:focus-visible,
+.auth-card .text-button:focus-visible {
+  outline: 3px solid rgb(66 88 183 / 28%);
+  outline-offset: 3px;
+}
+
+.auth-card .text-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  color: var(--auth-accent);
+  font-weight: 500;
+  text-align: center;
+}
+
+.auth-card .text-button:hover:not(:disabled) {
+  color: var(--auth-accent-hover);
+}
+
+.access-choice .auth-submit {
+  margin-top: 30px;
+}
+
+.access-choice .text-button {
+  margin-top: 14px;
+}
+
+.auth-card .role-options button {
+  background: var(--auth-accent-soft);
+  color: #2f3f75;
+  font-weight: 500;
+}
+
+.auth-card .form-message {
+  font-weight: 500;
+}

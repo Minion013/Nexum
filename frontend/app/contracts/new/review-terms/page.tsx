@@ -3,7 +3,7 @@ import { ReviewTermsPage } from '../../../../src/contracts/review-terms';
 import { NewContractStepUnavailable } from '../../../../src/contracts/new-step';
 import { SignedInShell } from '../../../../src/signed-in/app-shell';
 
-export const metadata: Metadata = { title: 'Review terms - PactFlow', description: 'Review the exact saved PactFlow Contract Version.' };
+export const metadata: Metadata = { title: 'Review terms - NEXUM', description: 'Review the exact saved NEXUM Contract Version.' };
 
 type RouteProps = { searchParams: Promise<{ contractId?: string | string[] }> };
 

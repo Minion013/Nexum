@@ -10,13 +10,13 @@ type ContractsPayload = { contracts: ContractListItem[] };
 
 function LoadingState() {
   return <>
-    <section className="dashboard-intro"><p className="eyebrow">Contracts</p><h1>Your Contract work, in one place.</h1><p className="page-intro">Loading your Contracts...</p></section>
-    <section className="app-panel" aria-busy="true"><p className="empty" role="status">Loading authorised Contracts...</p></section>
+    <section className="contracts-page-heading"><p className="eyebrow">Contracts</p><h1>Your Contract work, in one place.</h1><p className="page-intro">Loading your Contracts...</p></section>
+    <section className="contracts-panel" aria-busy="true"><p className="empty" role="status">Loading authorised Contracts...</p></section>
   </>;
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <section className="app-panel" aria-labelledby="contracts-error-title"><p className="eyebrow">Contracts</p><h1 id="contracts-error-title">Contracts could not be loaded.</h1><p className="page-intro" role="alert">{message}</p><button className="primary" type="button" onClick={onRetry}>Try again</button></section>;
+  return <section className="contracts-panel" aria-labelledby="contracts-error-title"><p className="eyebrow">Contracts</p><h1 id="contracts-error-title">Contracts could not be loaded.</h1><p className="page-intro" role="alert">{message}</p><button className="primary" type="button" onClick={onRetry}>Try again</button></section>;
 }
 
 function ContractTable({ contracts }: { contracts: ReturnType<typeof filterContracts> }) {
@@ -55,7 +55,7 @@ export function ContractsPage() {
   if (error && !data) return <ErrorState message={error} onRetry={() => auth && void loadContracts(auth)} />;
 
   return <>
-    <section className="dashboard-intro"><p className="eyebrow">Contracts</p><h1>Your Contract work, in one place.</h1><p className="page-intro">Open authorised Contract records or start a protected Contract Draft. A counterparty selection never grants access by itself.</p></section>
+    <section className="contracts-page-heading"><p className="eyebrow">Contracts</p><h1>Your Contract work, in one place.</h1><p className="page-intro">Open authorised Contract records or start a protected Contract Draft. Choose the people who should be able to see it when you are ready to share.</p></section>
     <section className="app-panel contracts-panel" aria-labelledby="contracts-list-title">
       <div className="dashboard-section-heading"><div><p className="eyebrow">Authorised records</p><h2 id="contracts-list-title">Contracts</h2></div><Link className="button primary" href="/contracts/new/choose-person" id="new-contract">Create a Contract Draft</Link></div>
       <div className="contract-filters" aria-label="Filter Contracts"><label htmlFor="stage-filter">Stage<select id="stage-filter" value={stage} onChange={event => setStage(event.target.value)}><option value="">All stages</option><option value="private_draft">Contract Draft</option><option value="negotiation">Awaiting review</option><option value="active">In progress</option><option value="complete">Complete</option></select></label><label htmlFor="responsibility-filter">Your responsibility<select id="responsibility-filter" value={responsibility} onChange={event => setResponsibility(event.target.value)}><option value="">All responsibilities</option><option value="Buyer">Buyer</option><option value="Service Provider">Service Provider</option></select></label></div>

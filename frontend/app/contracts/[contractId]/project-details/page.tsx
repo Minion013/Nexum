@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ProjectDetailsHandoffPage } from '../../../../src/contracts/project-details-handoff';
 import { SignedInShell } from '../../../../src/signed-in/app-shell';
 
-export const metadata: Metadata = { title: 'Project details - PactFlow', description: 'Continue an authorised PactFlow Contract Draft.' };
+export const metadata: Metadata = { title: 'Project details - NEXUM', description: 'Continue an authorised NEXUM Contract Draft.' };
 
 type RouteProps = { params: Promise<{ contractId: string }> };
 

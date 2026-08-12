@@ -27,7 +27,7 @@ async function unusedPort() {
 async function waitForHealth(url, process) {
   let lastError;
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (process.exitCode !== null) throw new Error(`PactFlow exited before becoming healthy (code ${process.exitCode}).`);
+    if (process.exitCode !== null) throw new Error(`NEXUM exited before becoming healthy (code ${process.exitCode}).`);
     try { return await fetch(url); } catch (error) { lastError = error; }
     await new Promise(resolve => setTimeout(resolve, 50));
   }
@@ -86,7 +86,7 @@ test.skip('public entry and health check are safe to render', async () => {
     const entry = await request(server, '/');
     assert.equal(entry.status, 200);
     const entryMarkup = await entry.text();
-    assert.match(entryMarkup, /PactFlow/);
+    assert.match(entryMarkup, /NEXUM/);
     assert.match(entryMarkup, /Testnet only\. No real funds\./);
     assert.equal((await request(server, '/../.env')).status, 404);
   } finally {
@@ -109,7 +109,7 @@ test.skip('authenticated area pages are served from their canonical URLs', async
     ]) {
       const response = await request(server, path);
       assert.equal(response.status, 200, path);
-      assert.match(await response.text(), /PactFlow/, path);
+      assert.match(await response.text(), /NEXUM/, path);
     }
     const home = await request(server, '/home');
     const homeMarkup = await home.text();
@@ -232,7 +232,7 @@ test.skip('People is the canonical signed-in directory and legacy Contacts links
     for (const path of ['/people', '/contacts', '/settings']) {
       const response = await request(server, path);
       assert.equal(response.status, 200, path);
-      assert.match(await response.text(), /PactFlow/, path);
+      assert.match(await response.text(), /NEXUM/, path);
     }
     const people = await (await request(server, '/people')).text();
     const contacts = await (await request(server, '/contacts')).text();

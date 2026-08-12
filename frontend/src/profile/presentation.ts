@@ -24,11 +24,11 @@ function contrastRatio(foreground: string, background: string): number {
 for (const appearance of Object.values(appearances)) appearance.contrastRatio = contrastRatio(appearance.foreground, appearance.background);
 
 export function profileLabel(profile: Pick<Profile, 'displayName' | 'email'>): string {
-  return profile.displayName?.trim() || profile.email?.trim() || 'PactFlow Profile';
+  return profile.displayName?.trim() || profile.email?.trim() || 'NEXUM Profile';
 }
 
 export function profileInitials(profile: Pick<Profile, 'displayName' | 'email'>): string {
-  return profileLabel(profile).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PF';
+  return profileLabel(profile).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'NX';
 }
 
 export function avatarAppearance(seed: string | null | undefined): AvatarAppearance {

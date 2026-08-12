@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { apiRequest, createBrowserSupabase, getAuthConfig, localFixtureEmail, type AuthConfig, type Profile, type SessionPayload } from '../../src/auth/client';
+import { NexumLogo } from '../../src/branding/logo';
 
 type Step = 'email' | 'code' | 'account' | 'onboarding';
 
@@ -155,11 +156,11 @@ export default function LoginPage() {
 
   return (
     <div className="auth-page">
-      <header className="auth-header"><a className="brand" href="/">Pact<span>Flow</span></a><a className="back-link" href="/">← Back to home</a></header>
+      <header className="auth-header"><a className="brand" href="/" aria-label="NEXUM home"><NexumLogo /></a><a className="back-link" href="/">← Back to home</a></header>
       <main className="auth-main">
         <section className="auth-card" aria-labelledby="login-title">
           {step === 'email' && <>
-            <p className="eyebrow">PactFlow account</p>
+            <p className="eyebrow">NEXUM account</p>
             <h1 id="login-title">Sign in or create your account.</h1>
             <p className="auth-intro">Use the same six-digit email code whether you are new here or returning.</p>
             <form onSubmit={sendEmailCode} noValidate>
@@ -177,20 +178,20 @@ export default function LoginPage() {
             <p className="auth-intro">We sent a six-digit sign-in code to <strong>{sentEmail}</strong>.</p>
             <form onSubmit={verifyEmailCode} noValidate><label htmlFor="code">Six-digit sign-in code</label><input id="code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="123456" required value={code} onChange={event => setCode(event.target.value)} /><button className="button button-dark auth-submit" type="submit" disabled={busy}>Verify sign-in code</button></form>
             <div className="email-actions"><button className="button button-dark" type="button" disabled={busy || loading || cooldown > 0} onClick={() => void sendEmailCode({ preventDefault: () => undefined } as FormEvent<HTMLFormElement>)}>{cooldown ? `Resend sign-in code (${cooldown}s)` : 'Resend sign-in code'}</button><button className="text-button" type="button" disabled={busy} onClick={() => { setStep('email'); setMessage(''); setCooldown(0); }}>Use a different email</button></div>
-            <p className="auth-assurance">The code works for both new and returning PactFlow accounts.</p>
+            <p className="auth-assurance">The code works for both new and returning NEXUM accounts.</p>
           </section>}
 
           {step === 'account' && <section className="access-choice" aria-labelledby="account-choice-title">
             <p className="eyebrow">Signed in</p>
-            <h1 id="account-choice-title">Continue as {profile?.displayName || 'your PactFlow account'}?</h1>
+            <h1 id="account-choice-title">Continue as {profile?.displayName || 'your NEXUM account'}?</h1>
             <p className="auth-intro">This account is signed in on this device. Continue only if it is yours.</p>
             <button className="button button-dark auth-submit" type="button" disabled={busy} onClick={continueAsAccount}>Continue</button>
             <button className="text-button" type="button" disabled={busy} onClick={() => void useDifferentAccount()}>Use a different account</button>
           </section>}
 
           {step === 'onboarding' && <section className="access-choice" aria-labelledby="onboarding-title">
-            <p className="eyebrow">Welcome to PactFlow</p>
-            <h1 id="onboarding-title">Your PactFlow Profile is ready.</h1>
+            <p className="eyebrow">Welcome to NEXUM</p>
+            <h1 id="onboarding-title">Your NEXUM Profile is ready.</h1>
             <p className="auth-intro">Start a private Contract or join one by invitation. What you can do is defined by each Contract—not by an account role.</p>
             <button className="button button-dark auth-submit" type="button" disabled={busy} onClick={() => void continueToHome()}>Continue to Home</button>
             <p className="auth-assurance">You can create or join Contracts as your work grows.</p>

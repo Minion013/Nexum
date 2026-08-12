@@ -10,9 +10,9 @@ test('the email-code template is minimal, test-environment-safe, and exposes onl
   const [config, template] = await Promise.all([readFile(configPath, 'utf8'), readFile(templatePath, 'utf8')]);
 
   assert.match(config, /otp_length = 6/);
-  assert.match(config, /subject = "Your PactFlow sign-in code"/);
-  assert.match(config, /\[auth\.email\.template\.confirmation\]\nsubject = "Your PactFlow sign-in code"\ncontent_path = "\.\/supabase\/templates\/magic_link\.html"/);
-  assert.match(template, /PactFlow test environment/);
+  assert.match(config, /subject = "Your NEXUM sign-in code"/);
+  assert.match(config, /\[auth\.email\.template\.confirmation\]\nsubject = "Your NEXUM sign-in code"\ncontent_path = "\.\/supabase\/templates\/magic_link\.html"/);
+  assert.match(template, /NEXUM test environment/);
   assert.match(template, /Your six-digit sign-in code/);
   assert.match(template, /\{\{ \.Token \}\}/);
   assert.match(template, /This code will expire soon\./);

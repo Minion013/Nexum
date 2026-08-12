@@ -12,11 +12,11 @@ Every PactFlow browser URL is rendered by a Next.js App Router TypeScript page o
 - End-to-end completion is a confirmed requirement: each frontend page must have its required backend support, rather than relying on unimplemented or placeholder workflow behavior.
 - The current implementation uses `frontend/public/*.html` rewrites and TypeScript modules under `frontend/src/legacy/`; this is an interim state, not the destination.
 - Page inventory: [Complete Next.js TypeScript route inventory](complete-nextjs-typescript-route-inventory.md).
-- This map uses the repository-local Markdown tracker. Each file in `wayfinder/tickets/` is a child issue of this map. `Blocked by` records native-dependency-equivalent edges for this tracker.
+- This map uses the repository-local Markdown tracker. Open planning tickets remain in `wayfinder/tickets/`; completed child tickets are archived in `docs/wayfinder/tickets/`. `Blocked by` records native-dependency-equivalent edges for this tracker.
 
 ## Decisions so far
 
-- [Preserve the PactFlow URL contract](tickets/001-preserve-pactflow-url-contract.md) — the conversion retains all current URLs and their user-visible behavior.
+- [Preserve the PactFlow URL contract](../docs/wayfinder/tickets/001-preserve-pactflow-url-contract.md) — the conversion retains all current URLs and their user-visible behavior.
 
 ## Not yet specified
 

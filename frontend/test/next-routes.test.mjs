@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer as createTcpServer } from 'node:net';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fileURLToPath } from 'node:url';
 import { createApp, localTestProfileFromEnvironment } from '../../backend/src/server.mjs';
@@ -86,7 +88,9 @@ test('built Next routes render public landing/login and truthful invalid-route s
     await waitForNext(origin, next);
     const landing = await fetch(`${origin}/`);
     assert.equal(landing.status, 200);
-    assert.match(await landing.text(), /Make every creative/);
+    const landingMarkup = await landing.text();
+    assert.match(landingMarkup, /Make every creative/);
+    assert.equal((landingMarkup.match(/<link rel="stylesheet"/g) ?? []).length, 1, 'the shared layout should emit one bundled stylesheet');
     const login = await fetch(`${origin}/login`);
     assert.equal(login.status, 200);
     assert.match(await login.text(), /Sign in or create your account/);
@@ -132,6 +136,9 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const contractDetail = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300`);
     assert.equal(contractDetail.status, 200);
     assert.match(await contractDetail.text(), /Loading Contract detail/);
+    const contractAcceptance = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/accept`);
+    assert.equal(contractAcceptance.status, 200);
+    assert.match(await contractAcceptance.text(), /Loading Version review/);
     const choosePerson = await fetch(`${origin}/contracts/new/choose-person`);
     assert.equal(choosePerson.status, 200);
     assert.match(await choosePerson.text(), /counterparty choices/);
@@ -212,6 +219,93 @@ test('Wallet presentation covers connection, local-test, error, and safe-balance
   assert.match(renderToStaticMarkup(WalletSummary({ state: 'disconnected' })), /No personal wallet connected/);
 });
 
+test('Contract detail navigation does not load the wallet SDK into its initial route chunk', async () => {
+  const routeChunkDirectory = join(frontendRoot, '.next', 'static', 'chunks', 'app', 'contracts', '[contractId]');
+  const routeChunkName = (await readdir(routeChunkDirectory)).find(name => name.startsWith('page-') && name.endsWith('.js'));
+  assert.ok(routeChunkName, 'the Contract detail route chunk should be present after build');
+  const routeChunk = await readFile(join(routeChunkDirectory, routeChunkName), 'utf8');
+  assert.doesNotMatch(routeChunk, /@privy-io|viem/, 'wallet SDK code should be split from the initial Contract detail route');
+});
+
+test('signed-in shell renders after the critical session request', async () => {
+  const shell = await readFile(new URL('../src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(shell, /Promise\.all\(\[\s*apiRequest<SessionPayload>[\s\S]*api\/notifications/s, 'notification counts must not gate the signed-in shell');
+  assert.match(shell, /setStatus\('ready'\)/);
+  assert.match(shell, /void apiRequest<\{ notifications: NotificationSummary \}>\('\/api\/notifications'/, 'notification counts should load in the background');
+});
+
+test('workspace search tolerates browser-extension attributes before hydration', async () => {
+  const shell = await readFile(new URL('../src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
+  assert.match(shell, /<input type="search"[^>]*suppressHydrationWarning/, 'extension-injected search attributes must not break shell hydration');
+});
+
+test('profile settings uses the signed-in shell content frame', async () => {
+  const settingsCss = await readFile(new URL('../public/settings.css', import.meta.url), 'utf8');
+  assert.match(settingsCss, /\.app-content > \.profile-settings-page\s*\{[\s\S]*?max-width:\s*none;[\s\S]*?margin:\s*0;/, 'settings should align to the shell content frame instead of floating in a centered canvas');
+});
+
+test('signed-in shell keeps primary workspace pages full-width', async () => {
+  const shellCss = await readFile(new URL('../public/signed-in.css', import.meta.url), 'utf8');
+  assert.match(shellCss, /\.app-content > :not\(\.app-topbar\)\s*\{[\s\S]*?max-width:\s*none;/, 'workspace pages should use the full content frame like Profile Settings');
+});
+
+test('site branding uses the NEXUM SVG and has no stale visible PactFlow copy', async () => {
+  const sources = await Promise.all([
+    readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/login/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/branding/logo.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/signed-in/app-shell.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/settings/settings.tsx', import.meta.url), 'utf8')
+  ]);
+  const branding = sources.join('\n');
+  assert.match(branding, /NEXUM\.svg/);
+  assert.doesNotMatch(branding, /PactFlow/);
+});
+
+test('post-login shell gives the smaller NEXUM logo its own row above New Contract', async () => {
+  const [shell, brandingCss, shellCss] = await Promise.all([
+    readFile(new URL('../src/signed-in/app-shell.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../public/branding.css', import.meta.url), 'utf8'),
+    readFile(new URL('../public/signed-in.css', import.meta.url), 'utf8')
+  ]);
+  assert.match(shell, /className="sidebar-brand-row"[\s\S]*?className="brand app-brand"[\s\S]*?className="sidebar-top"[\s\S]*?className="new-contract-button"/);
+  assert.match(brandingCss, /\.app-brand \.nexum-logo\s*\{\s*width:\s*58px;\s*height:\s*38px;/);
+  assert.match(brandingCss, /@media \(max-width: 760px\)[\s\S]*?\.app-brand \.nexum-logo\s*\{\s*width:\s*58px;\s*height:\s*38px;/);
+  assert.match(brandingCss, /\.site-header \.nexum-logo,[\s\S]*?\.auth-header \.nexum-logo\s*\{[\s\S]*?width:\s*88px;[\s\S]*?height:\s*58px;[\s\S]*?margin:\s*9px 0;/);
+  assert.match(brandingCss, /@media \(max-width: 760px\)[\s\S]*?\.site-header \.nexum-logo,[\s\S]*?\.auth-header \.nexum-logo\s*\{[\s\S]*?width:\s*82px;[\s\S]*?height:\s*54px;[\s\S]*?margin:\s*11px 0;/);
+  assert.match(shellCss, /\.sidebar-brand-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;[\s\S]*?min-height:\s*48px;/);
+  assert.doesNotMatch(shellCss, /\.sidebar-brand-row\s*\{[^}]*position:\s*absolute;/);
+  assert.match(shellCss, /\.sidebar-top\s*\{[\s\S]*?display:\s*grid;[\s\S]*?gap:\s*10px;/);
+  assert.match(shellCss, /\.app-brand\s*\{[\s\S]*?margin:\s*0;/);
+});
+
+test('signed-in shell contains desktop page overflow in the content pane', async () => {
+  const shellCss = await readFile(new URL('../public/signed-in.css', import.meta.url), 'utf8');
+  assert.match(shellCss, /\.app-shell\s*\{[\s\S]*?height:\s*100vh;[\s\S]*?overflow:\s*hidden;/, 'desktop shell should own the viewport height');
+  assert.match(shellCss, /\.app-content\s*\{[\s\S]*?height:\s*100vh;[\s\S]*?overflow-y:\s*auto;/, 'desktop content should scroll inside the shell');
+  assert.match(shellCss, /@media \(max-width: 760px\)\s*\{[\s\S]*?\.app-shell\s*\{\s*display: block;[\s\S]*?height:\s*auto;/, 'mobile layout should return to document scrolling');
+});
+
+test('development Next output is isolated from production builds', async () => {
+  const nextConfig = await readFile(new URL('../next.config.ts', import.meta.url), 'utf8');
+  assert.match(nextConfig, /PHASE_DEVELOPMENT_SERVER/);
+  assert.match(nextConfig, /distDir/);
+  assert.match(nextConfig, /\.next-dev/);
+  assert.match(nextConfig, /\.next/);
+});
+
+test('Contract detail keeps wallet acceptance outside its route graph and defers Version review', async () => {
+  const detail = await readFile(new URL('../src/contracts/detail.tsx', import.meta.url), 'utf8');
+  const acceptanceRoute = await readFile(new URL('../app/contracts/[contractId]/accept/page.tsx', import.meta.url), 'utf8');
+  const acceptanceClient = await readFile(new URL('../src/contracts/acceptance.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(detail, /wallet-acceptance|@privy-io/);
+  assert.match(detail, /requestIdleCallback/);
+  assert.match(acceptanceRoute, /ContractAcceptancePage/);
+  assert.match(acceptanceClient, /wallet-acceptance/);
+  assert.match(acceptanceClient, /Loading Version review/);
+});
+
 test('Wallet provider seam enforces Base Sepolia and reads only personal MockEUSD balance', async () => {
   const { readMockEusdBalance, formatMockEusdBalance, baseSepoliaChainId } = await loadWalletProvider();
   assert.equal(formatMockEusdBalance('1250000000'), '1250');
@@ -240,8 +334,8 @@ test('Authority Registry presentation renders loading, empty, populated, unavail
   const { AuthoritiesContent, AuthoritiesError, AuthoritiesForbidden, AuthoritiesLoading } = await loadAuthorityPresentation();
   assert.match(renderToStaticMarkup(AuthoritiesLoading()), /Loading the Authority Registry/);
   assert.match(renderToStaticMarkup(AuthoritiesContent({ data: { entries: [] } })), /No published Resolution Authorities are available yet/);
-  const populated = renderToStaticMarkup(AuthoritiesContent({ data: { entries: [{ id: 'authority-id', name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }] } }));
-  assert.match(populated, /PactFlow Simulation Authority/);
+  const populated = renderToStaticMarkup(AuthoritiesContent({ data: { entries: [{ id: 'authority-id', name: 'NEXUM Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }] } }));
+  assert.match(populated, /NEXUM Simulation Authority/);
   assert.match(populated, /Ruleset v1/);
   assert.match(renderToStaticMarkup(AuthoritiesError({ message: 'Registry is unavailable.' })), /Authority Registry unavailable/);
   assert.match(renderToStaticMarkup(AuthoritiesForbidden()), /access is restricted/);

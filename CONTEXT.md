@@ -1,11 +1,11 @@
-# PactFlow
+# NEXUM
 
-PactFlow is where two people structure and govern custom-service projects through contracts, milestones, evidence, and decisions.
+NEXUM is where two people structure and govern custom-service projects through contracts, milestones, evidence, and decisions.
 
 ## Identity and access
 
 **User Profile**:
-The durable PactFlow identity belonging to one authenticated person. It may be a party to multiple Contracts and hold a different Contract-scoped responsibility in each.
+The durable NEXUM identity belonging to one authenticated person. It may be a party to multiple Contracts and hold a different Contract-scoped responsibility in each.
 _Avoid_: buyer account, creator account, resolver account
 
 **Profile Settings**:
@@ -97,5 +97,5 @@ The signed-in social discovery experience for Profiles. It has Discover, My Netw
 _Avoid_: contacts page, member directory
 
 **Onboarding Guidance**:
-The non-binding indication of why a person is starting with PactFlow, such as hiring a creator, providing a service, or resolving disputes. It shapes the initial experience but never determines authorization.
+The non-binding indication of why a person is starting with NEXUM, such as hiring a creator, providing a service, or resolving disputes. It shapes the initial experience but never determines authorization.
 _Avoid_: role, account type

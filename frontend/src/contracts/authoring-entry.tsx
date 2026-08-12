@@ -26,6 +26,7 @@ export function AuthoringEntryPage({ contractId }: { contractId?: string }) {
   const existing = Boolean(contractId);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState('');
+  const [personSearch, setPersonSearch] = useState('');
   const [email, setEmail] = useState('');
   const [savedEmail, setSavedEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,11 @@ export function AuthoringEntryPage({ contractId }: { contractId?: string }) {
   }, [auth, loadEntry, status]);
 
   const selectedPerson = useMemo(() => connections.find(connection => connection.other_profile_id === selectedPersonId), [connections, selectedPersonId]);
+  const filteredConnections = useMemo(() => {
+    const query = personSearch.trim().toLowerCase();
+    if (!query) return connections;
+    return connections.filter(connection => [connection.display_name, connection.email].filter(Boolean).some(value => String(value).toLowerCase().includes(query)));
+  }, [connections, personSearch]);
 
   function choosePerson(connection: Connection) {
     setSelectedPersonId(connection.other_profile_id);
@@ -107,10 +113,10 @@ export function AuthoringEntryPage({ contractId }: { contractId?: string }) {
   if (status === 'loading' || loading) return <LoadingState existing={existing} />;
   if (error && existing && !savedEmail) return <section className="app-panel" aria-labelledby="authoring-error-title"><p className="eyebrow">Contract Draft</p><h1 id="authoring-error-title">This authoring entry is unavailable.</h1><p className="page-intro" role="alert">{error}</p><Link className="button" href="/contracts">Back to Contracts</Link></section>;
 
-  return <section className="contract-authoring-flow app-panel" aria-labelledby="authoring-title"><Stepper existing={existing} /><p className="eyebrow">Contract Draft</p><h1 id="authoring-title">Choose the other Contract Party.</h1><p className="page-intro">People discovery and Contract access stay separate. Choose a Person, enter an exact email, or continue without one. A choice only records the intended counterparty on your private draft; it does not grant them access.</p>
+  return <section className="contract-authoring-flow app-panel" aria-labelledby="authoring-title"><Stepper existing={existing} /><p className="eyebrow">Contract Draft</p><h1 id="authoring-title">Who should be part of this Contract?</h1><p className="page-intro">Choose the Contract Party, invite someone by exact email, or continue with a private draft. You can add additional viewers later; access is granted only when you send an invitation.</p>
     {savedEmail && <p className="notice" role="status">This authorised draft already names <strong>{savedEmail}</strong>. Continue to Project details when you are ready.</p>}
     <form onSubmit={submit}>
-      {!existing && <fieldset><legend>Choose an accepted Person</legend>{connections.length ? <div className="person-list">{connections.map(connection => <button className="person-choice" type="button" key={connection.other_profile_id} aria-pressed={selectedPersonId === connection.other_profile_id} onClick={() => choosePerson(connection)}><span className="person-avatar" aria-hidden="true">{(connection.display_name?.trim() || 'P').slice(0, 1).toUpperCase()}</span><span><strong>{connection.display_name?.trim() || 'PactFlow Profile'}</strong><small>{connection.email}</small></span></button>)}</div> : <p className="empty">No accepted People are available yet. Use an exact email below.</p>}</fieldset>}
+      {!existing && <fieldset><legend>Choose an accepted Person</legend>{connections.length ? <><label className="sr-only" htmlFor="person-search">Search people</label><input id="person-search" type="search" value={personSearch} onChange={event => setPersonSearch(event.target.value)} placeholder="Search contacts by name or email" autoComplete="off" /><div className="person-list">{filteredConnections.length ? filteredConnections.map(connection => <button className="person-choice" type="button" key={connection.other_profile_id} aria-pressed={selectedPersonId === connection.other_profile_id} onClick={() => choosePerson(connection)}><span className="person-avatar" aria-hidden="true">{(connection.display_name?.trim() || 'P').slice(0, 1).toUpperCase()}</span><span><strong>{connection.display_name?.trim() || 'NEXUM Profile'}</strong><small>{connection.email}</small></span></button>) : <p className="empty">No people match that search.</p>}</div></> : <p className="empty">No accepted People are available yet. Use an exact email below.</p>}</fieldset>}
       {!existing && <><hr className="authoring-divider" /><fieldset><legend>Or enter an exact email</legend><label htmlFor="counterparty-email">Counterparty email<input id="counterparty-email" className="exact-email" type="email" value={email} onChange={event => changeEmail(event.target.value)} placeholder="person@example.com" autoComplete="email" aria-invalid={Boolean(validationError)} aria-describedby="counterparty-help" /></label><p id="counterparty-help" className="muted">Optional. Leave this blank for a private draft; the invitation and access workflow happen later.</p></fieldset></>}
       {validationError && <p className="notice" role="alert">{validationError}</p>}
       {error && <p className="notice" role="alert">{error}</p>}

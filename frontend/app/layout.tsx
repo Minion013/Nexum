@@ -1,7 +1,8 @@
+import './globals.css';
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = { title: 'PactFlow', description: 'Clearer creative work.' };
+export const metadata: Metadata = { title: 'NEXUM', description: 'Clearer creative work.', icons: { icon: '/NEXUM.svg', apple: '/NEXUM.svg' } };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><head><link rel="stylesheet" href="/styles.css" /><link rel="stylesheet" href="/marketing.css" /><link rel="stylesheet" href="/responsive.css" /><link rel="stylesheet" href="/home.css" /><link rel="stylesheet" href="/signed-in.css" /><link rel="stylesheet" href="/profile-presentation.css" /><link rel="stylesheet" href="/profile-identity.css" /><link rel="stylesheet" href="/dashboard.css" /><link rel="stylesheet" href="/people.css" /><link rel="stylesheet" href="/notifications.css" /><link rel="stylesheet" href="/contracts.css" /><link rel="stylesheet" href="/contracts-conversion.css" /><link rel="stylesheet" href="/contract-authoring.css" /><link rel="stylesheet" href="/contract-detail.css" /><link rel="stylesheet" href="/contract-detail-conversion.css" /><link rel="stylesheet" href="/wallet.css" /></head><body>{children}</body></html>;
+  return <html lang="en"><body>{children}</body></html>;
 }

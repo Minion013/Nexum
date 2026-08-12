@@ -1,6 +1,6 @@
 # Preserve the PactFlow URL contract
 
-Parent: [Complete Next.js TypeScript conversion](../complete-nextjs-typescript-conversion-map.md)  
+Parent: [Complete Next.js TypeScript conversion](../../../wayfinder/complete-nextjs-typescript-conversion-map.md)  
 Labels: `wayfinder:task`  
 Status: closed
 

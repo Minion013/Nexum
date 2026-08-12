@@ -1,6 +1,6 @@
-# PactFlow implementation tracker
+# NEXUM implementation tracker
 
-This is the canonical operating overview for implementation. Ticket files in [`tickets`](tickets) hold the acceptance criteria and blockers; this register is the single place to see the programme and current evidence.
+This is the canonical operating overview for implementation. Ticket files in [`tickets`](tickets) hold the acceptance criteria and blockers; this register is the single place to see the programme and current evidence. Completed conversion tickets 01–13 have been moved from `/wayfinder` into this directory. Open planning tickets remain in `/wayfinder/tickets`.
 
 ## Completion reference
 
@@ -21,19 +21,19 @@ Conversion Ticket 08 is **complete 2026-08-12**; its typed Project-details and R
 Conversion Ticket 10 is **complete 2026-08-12**; its typed dynamic Contract detail route, protected Version review, exact client-wallet acceptance handoff, authorization states, loopback detail/review evidence, and exact-version signature tests are recorded in the ticket.
 Conversion Ticket 13 is **complete 2026-08-12**; its typed route/API parity inventory, interim-layer removal, production build, full suite, route tests, contract checks, and combined-start smoke evidence are recorded in the ticket.
 
-1. [Typed landing and authentication entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/01-typed-landing-and-authentication-entry.md) — **complete 2026-08-12**.
-2. [Signed-in shell and Dashboard](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/02-signed-in-shell-and-dashboard.md) — **complete 2026-08-12**.
-3. [People Directory and Contacts compatibility](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/03-people-directory-and-contacts-compatibility.md) — **complete 2026-08-12**.
-4. [Profile Settings and private avatar workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/04-profile-settings-and-private-avatar-workflow.md) — **complete 2026-08-12**.
-5. [Private Notifications workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/05-private-notifications-workflow.md) — **complete 2026-08-12**.
-6. [Authority Registry read model and page](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/06-authority-registry-read-model-and-page.md) — **complete 2026-08-12**; Ticket 02 is complete.
-7. [Contracts list and authoring entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/07-contracts-list-and-authoring-entry.md) — **complete 2026-08-12**; Ticket 02 is complete.
-8. [Contract project details and editable terms](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/08-contract-project-details-and-editable-terms.md) — **complete 2026-08-12**.
-9. [Contract publishing and authoring deep links](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/09-contract-publishing-and-authoring-deep-links.md) — **complete 2026-08-12**.
-10. [Dynamic Contract detail and exact-version acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/10-dynamic-contract-detail-and-exact-version-acceptance.md) — **complete 2026-08-12**; typed route, protected review/acceptance, authorization, loopback, and exact-signature evidence recorded in the ticket.
-11. [Standalone Wallet](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/11-standalone-wallet.md) — **complete 2026-08-12**; typed Wallet route and provider-boundary criteria verified.
-12. [Invitation acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/12-invitation-acceptance.md) — **complete 2026-08-12**: typed route and protected invitation-state API render truthful eligibility, expiry, resolution, authentication, failure, and success states. Migration `20260812100000` and linked RLS regression evidence verify exact-invitee access and repeat-acceptance protection.
-13. [Remove interim frontend and verify route/API parity](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/13-remove-interim-frontend-and-verify-route-api-parity.md) — **complete 2026-08-12**; all three acceptance criteria are verified.
+1. [Typed landing and authentication entry](tickets/01-typed-landing-and-authentication-entry.md) — **complete 2026-08-12**.
+2. [Signed-in shell and Dashboard](tickets/02-signed-in-shell-and-dashboard.md) — **complete 2026-08-12**.
+3. [People Directory and Contacts compatibility](tickets/03-people-directory-and-contacts-compatibility.md) — **complete 2026-08-12**.
+4. [Profile Settings and private avatar workflow](tickets/04-profile-settings-and-private-avatar-workflow.md) — **complete 2026-08-12**.
+5. [Private Notifications workflow](tickets/05-private-notifications-workflow.md) — **complete 2026-08-12**.
+6. [Authority Registry read model and page](tickets/06-authority-registry-read-model-and-page.md) — **complete 2026-08-12**; Ticket 02 is complete.
+7. [Contracts list and authoring entry](tickets/07-contracts-list-and-authoring-entry.md) — **complete 2026-08-12**; Ticket 02 is complete.
+8. [Contract project details and editable terms](tickets/08-contract-project-details-and-editable-terms.md) — **complete 2026-08-12**.
+9. [Contract publishing and authoring deep links](tickets/09-contract-publishing-and-authoring-deep-links.md) — **complete 2026-08-12**.
+10. [Dynamic Contract detail and exact-version acceptance](tickets/10-dynamic-contract-detail-and-exact-version-acceptance.md) — **complete 2026-08-12**; typed route, protected review/acceptance, authorization, loopback, and exact-signature evidence recorded in the ticket.
+11. [Standalone Wallet](tickets/11-standalone-wallet.md) — **complete 2026-08-12**; typed Wallet route and provider-boundary criteria verified.
+12. [Invitation acceptance](tickets/12-invitation-acceptance.md) — **complete 2026-08-12**: typed route and protected invitation-state API render truthful eligibility, expiry, resolution, authentication, failure, and success states. Migration `20260812100000` and linked RLS regression evidence verify exact-invitee access and repeat-acceptance protection.
+13. [Remove interim frontend and verify route/API parity](tickets/13-remove-interim-frontend-and-verify-route-api-parity.md) — **complete 2026-08-12**; all three acceptance criteria are verified.
 
 ## Current evidence
 

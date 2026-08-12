@@ -23,8 +23,8 @@ function avatarAppearance(seed: string | null | undefined): AvatarAppearance {
   return appearance;
 }
 
-function profileLabel(profile: ProfileIdentity): string { return profile.displayName?.trim() || profile.email?.trim() || 'PactFlow Profile'; }
-function profileInitials(profile: ProfileIdentity): string { return profileLabel(profile).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PF'; }
+function profileLabel(profile: ProfileIdentity): string { return profile.displayName?.trim() || profile.email?.trim() || 'NEXUM Profile'; }
+function profileInitials(profile: ProfileIdentity): string { return profileLabel(profile).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'NX'; }
 
 export function loadingProfileIdentity() { return { status: 'loading' as const, accessibleLabel: 'Loading profile' }; }
 

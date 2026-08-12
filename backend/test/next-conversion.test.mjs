@@ -164,23 +164,31 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
 test('dynamic Contract detail uses typed authorised reads and exact wallet-backed acceptance', async () => {
   const route = await readFile(new URL('../../frontend/app/contracts/[contractId]/page.tsx', import.meta.url), 'utf8');
   const detailClient = await readFile(new URL('../../frontend/src/contracts/detail.tsx', import.meta.url), 'utf8');
+  const acceptanceRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/accept/page.tsx', import.meta.url), 'utf8');
+  const acceptanceClient = await readFile(new URL('../../frontend/src/contracts/acceptance.tsx', import.meta.url), 'utf8');
+  const walletAcceptanceClient = await readFile(new URL('../../frontend/src/contracts/wallet-acceptance.tsx', import.meta.url), 'utf8');
   const presentation = await readFile(new URL('../../frontend/src/contracts/detail-presentation.ts', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
-  const layout = await readFile(new URL('../../frontend/app/layout.tsx', import.meta.url), 'utf8');
+  const globals = await readFile(new URL('../../frontend/app/globals.css', import.meta.url), 'utf8');
 
   assert.match(route, /SignedInShell/);
   assert.match(route, /ContractDetailPage/);
   assert.match(detailClient, /\/api\/contracts\/.*\/detail/);
   assert.match(detailClient, /\/api\/contracts\/.*\/review/);
-  assert.match(detailClient, /eth_signTypedData_v4/);
-  assert.match(detailClient, /exact Contract Version/);
+  assert.match(detailClient, /requestIdleCallback/);
+  assert.doesNotMatch(detailClient, /wallet-acceptance|@privy-io/);
+  assert.match(acceptanceRoute, /ContractAcceptancePage/);
+  assert.match(acceptanceClient, /wallet-acceptance/);
+  assert.match(acceptanceClient, /Loading Version review/);
   assert.match(detailClient, /unauthenticated/);
   assert.match(detailClient, /forbidden/);
   assert.match(detailClient, /Contract not found/);
-  assert.match(detailClient, /server-only wallet credentials/);
+  assert.match(walletAcceptanceClient, /eth_signTypedData_v4/);
+  assert.match(walletAcceptanceClient, /exact Contract Version/);
+  assert.match(walletAcceptanceClient, /server-only wallet credentials/);
   assert.match(presentation, /Chain-authoritative settlement status/);
   assert.match(presentation, /No payment has been verified/);
-  assert.match(layout, /contract-detail\.css/);
+  assert.match(globals, /contract-detail\.css/);
   assert.doesNotMatch(nextConfig, /source: '\/contracts\/:contractId'/);
 });
 
@@ -215,7 +223,7 @@ test('Notifications uses a typed route, private API workflow, and explicit state
   const presentation = await readFile(new URL('../../frontend/src/notifications/presentation.tsx', import.meta.url), 'utf8');
   const shell = await readFile(new URL('../../frontend/src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
-  const layout = await readFile(new URL('../../frontend/app/layout.tsx', import.meta.url), 'utf8');
+  const globals = await readFile(new URL('../../frontend/app/globals.css', import.meta.url), 'utf8');
 
   assert.match(route, /SignedInShell/);
   assert.match(route, /NotificationsPage/);
@@ -223,7 +231,7 @@ test('Notifications uses a typed route, private API workflow, and explicit state
   assert.match(notifications, /markNotificationRead/);
   for (const stateText of ['Loading your private inbox', 'You have no notifications yet', 'Notifications could not be loaded', 'Mark read']) assert.match(presentation, new RegExp(stateText));
   assert.match(shell, /markNotificationRead/);
-  assert.match(layout, /notifications\.css/);
+  assert.match(globals, /notifications\.css/);
   assert.doesNotMatch(nextConfig, /source: '\/notifications'/);
 });
 

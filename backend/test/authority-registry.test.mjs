@@ -15,7 +15,7 @@ async function request(origin, path, { token, headers = {} } = {}) {
 test('the Authority Registry endpoint is authenticated and returns only safe published fields', async () => {
   const calls = [];
   const registry = {
-    entries: [{ id: 'authority-id', name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }]
+    entries: [{ id: 'authority-id', name: 'NEXUM Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }]
   };
   const { server, origin } = await start({
     verifySupabaseSession: async token => {
@@ -101,7 +101,7 @@ test('the documented loopback fixture can read the Authority Registry only with 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       authorities: {
-        entries: [{ id: '00000000-0000-4000-8000-000000000201', name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }]
+        entries: [{ id: '00000000-0000-4000-8000-000000000201', name: 'NEXUM Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }]
       }
     });
   } finally {

@@ -1,0 +1,54 @@
+:root {
+  --paper: #ffffff;
+  --pf-paper: #ffffff;
+  --home-background: #ffffff;
+}
+
+body,
+.marketing-page,
+.auth-page,
+body.workspace-app { background: #ffffff; }
+
+.site-header,
+.auth-header,
+.app-sidebar { background: #ffffff; }
+
+.nexum-logo {
+  position: relative;
+  display: block;
+  width: 112px;
+  height: 74px;
+  flex: none;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.nexum-logo img {
+  position: absolute;
+  top: -113.5%;
+  left: -65.3%;
+  display: block;
+  width: 232.5%;
+  max-width: none;
+  height: auto;
+}
+
+.site-header .nexum-logo,
+.auth-header .nexum-logo {
+  width: 88px;
+  height: 58px;
+  margin: 9px 0;
+}
+
+.app-brand .nexum-logo { width: 58px; height: 38px; }
+footer .nexum-logo { width: 98px; height: 64px; }
+
+@media (max-width: 760px) {
+  .site-header .nexum-logo,
+  .auth-header .nexum-logo {
+    width: 82px;
+    height: 54px;
+    margin: 11px 0;
+  }
+  .app-brand .nexum-logo { width: 58px; height: 38px; }
+}

@@ -3,7 +3,7 @@ import { ProjectDetailsHandoffPage } from '../../../../src/contracts/project-det
 import { NewContractStepUnavailable } from '../../../../src/contracts/new-step';
 import { SignedInShell } from '../../../../src/signed-in/app-shell';
 
-export const metadata: Metadata = { title: 'Project details - PactFlow', description: 'Continue a saved PactFlow Contract Draft.' };
+export const metadata: Metadata = { title: 'Project details - NEXUM', description: 'Continue a saved NEXUM Contract Draft.' };
 
 type RouteProps = { searchParams: Promise<{ contractId?: string | string[] }> };
 

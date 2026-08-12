@@ -33,7 +33,7 @@ const actionLabels: Record<ConnectionAction, string> = {
 };
 
 function displayName(person: Pick<Person, 'display_name'>): string {
-  return person.display_name?.trim() || 'PactFlow Profile';
+  return person.display_name?.trim() || 'NEXUM Profile';
 }
 
 function connectionStatus(connection: Connection | undefined): string {

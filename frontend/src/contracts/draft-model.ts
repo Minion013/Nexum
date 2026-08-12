@@ -15,9 +15,10 @@ export type DraftMilestone = {
 export type EditableContractDraft = {
   authorityId: string;
   parties: {
-    buyer: { partyRef: PartyReference; responsibility: string };
-    serviceProvider: { partyRef: PartyReference; responsibility: string };
+    buyer: { partyRef: PartyReference; responsibility: string; legalName: string };
+    serviceProvider: { partyRef: PartyReference; responsibility: string; legalName: string };
     counterparty_email?: string | null;
+    additional_viewer_emails: string[];
     initiator_responsibility?: 'buyer' | 'service_provider';
   };
   scope: {
@@ -144,6 +145,9 @@ export function editableDraftFromContract(contract: ContractDraftResponse, profi
     reviewWindowHours: reviewWindow(milestone?.reviewWindowHours)
   }));
   const counterpartyEmail = text(rawParties.counterparty_email ?? rawParties.counterpartyEmail, '');
+  const additionalViewerEmails = Array.isArray(rawParties.additional_viewer_emails)
+    ? rawParties.additional_viewer_emails.map(item => text(item, '')).filter(Boolean)
+    : [];
   const buyerContact = text(sections.notices?.buyerContact, profileEmail || 'buyer@example.com');
   const serviceProviderContact = text(sections.notices?.serviceProviderContact, counterpartyEmail || 'provider@example.com');
   const resolvedAuthorityId = contract.authority?.id || contract.authorities?.[0]?.id || localAuthorityId;
@@ -153,13 +157,16 @@ export function editableDraftFromContract(contract: ContractDraftResponse, profi
     parties: {
       buyer: {
         partyRef: partyReference(rawParties.buyer?.partyRef, initiatorResponsibility === 'buyer' ? 'initiating_party' : 'counterparty'),
-        responsibility: text(rawParties.buyer?.responsibility, 'Funds the agreed gross allocation.')
+        responsibility: text(rawParties.buyer?.responsibility, 'Funds the agreed gross allocation.'),
+        legalName: text(rawParties.buyer?.legalName, 'Buyer legal entity')
       },
       serviceProvider: {
         partyRef: partyReference(rawParties.serviceProvider?.partyRef, initiatorResponsibility === 'service_provider' ? 'initiating_party' : 'counterparty'),
-        responsibility: text(rawParties.serviceProvider?.responsibility, 'Delivers the agreed service outcomes.')
+        responsibility: text(rawParties.serviceProvider?.responsibility, 'Delivers the agreed service outcomes.'),
+        legalName: text(rawParties.serviceProvider?.legalName, 'Service Provider legal entity')
       },
       ...(counterpartyEmail ? { counterparty_email: counterpartyEmail } : {}),
+      additional_viewer_emails: additionalViewerEmails,
       initiator_responsibility: initiatorResponsibility
     },
     scope: {
