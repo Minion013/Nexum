@@ -21,10 +21,5 @@ docs/
 CONTEXT.md
 milestonepay/
 
-# Keep the Wayfinder implementation ticket archive versioned.
-!docs/
-docs/*
-!docs/wayfinder/
-docs/wayfinder/*
-!docs/wayfinder/tickets/
-!docs/wayfinder/tickets/*.md
+# Keep the consolidated Wayfinder planning and ticket files versioned.
+docs/
