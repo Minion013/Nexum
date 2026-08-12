@@ -665,6 +665,27 @@ test('Profile Settings accept only the caller-owned private image path and deter
   assert.equal(calls.length, 1);
 });
 
+test('Profile Settings rejects malformed values before calling the protected persistence workflow', async () => {
+  const calls = [];
+  const profileSettingsWorkflow = createProfileSettingsWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    () => { calls.push('supabase'); throw new Error('The persistence boundary should not be reached.'); }
+  );
+  const { server, origin } = await start({
+    publicSupabaseConfig: { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    verifySupabaseSession: async token => token === 'settings-jwt' ? { id: '66666666-6666-4666-8666-666666666666', email: 'member@example.com' } : (() => { throw new Error('invalid token'); })(),
+    profileSettingsWorkflow
+  });
+  try {
+    const response = await request(origin, '/api/profile/settings', { token: 'settings-jwt', method: 'PUT', body: { displayName: '', avatarSeed: 'not-a-colour' } });
+    assert.equal(response.status, 422);
+    assert.match((await response.json()).error, /Display name is required/);
+    assert.deepEqual(calls, []);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('only a verified signed-in Profile can submit an invitation acceptance to the durable workflow', async () => {
   const calls = [];
   const { server, origin } = await start({

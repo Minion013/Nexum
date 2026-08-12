@@ -39,3 +39,14 @@ export async function resolvePrivateAvatar(profile: { avatarPath?: string | null
     return null;
   }
 }
+
+export async function uploadPrivateAvatar(file: File, profileId: string, auth: AuthHeaders): Promise<string> {
+  if (auth.localTestEmail) throw new Error('Private image upload is unavailable in the local test fixture; your existing avatar remains unchanged.');
+  const allowedTypes = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'], ['image/webp', 'webp']]);
+  const extension = allowedTypes.get(file.type);
+  if (!extension || file.size > 5 * 1024 * 1024) throw new Error('Choose a JPEG, PNG, or WebP image no larger than 5 MB.');
+  const path = `${profileId}/avatar.${extension}`;
+  const { error } = await (await getBrowserSupabase()).storage.from('profile-images').upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw new Error('Your profile image was not uploaded. Your existing avatar remains unchanged.');
+  return path;
+}

@@ -11,8 +11,12 @@ export type Profile = {
   id: string;
   email: string | null;
   displayName: string | null;
+  username?: string | null;
+  professionalHeadline?: string | null;
+  bio?: string | null;
   avatarSeed?: string | null;
   avatarPath?: string | null;
+  discoverable?: boolean;
   onboardingCompletedAt?: string | null;
 };
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiRequest, type AuthHeaders, type Profile, type SessionPayload } from '../auth/client';
 import { getBrowserAuth, resolvePrivateAvatar, signOutBrowser } from '../auth/browser';
 import { avatarAppearance, profileInitials, profileLabel } from '../profile/presentation';
@@ -13,12 +13,13 @@ type AuthContextValue = {
   status: AuthStatus;
   auth: AuthHeaders | null;
   profile: Profile | null;
+  updateProfile: (profile: Profile) => void;
   notifications: NotificationSummary | null;
   notificationError: boolean;
   error: string | null;
 };
 
-const AuthContext = createContext<AuthContextValue>({ status: 'loading', auth: null, profile: null, notifications: null, notificationError: false, error: null });
+const AuthContext = createContext<AuthContextValue>({ status: 'loading', auth: null, profile: null, updateProfile: () => undefined, notifications: null, notificationError: false, error: null });
 
 export function useSignedInAuth(): AuthContextValue {
   return useContext(AuthContext);
@@ -154,7 +155,8 @@ export function SignedInShell({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
 
-  const contextValue = useMemo(() => ({ status, auth, profile, notifications, notificationError, error }), [status, auth, profile, notifications, notificationError, error]);
+  const updateProfile = useCallback((nextProfile: Profile) => setProfile(nextProfile), []);
+  const contextValue = useMemo(() => ({ status, auth, profile, updateProfile, notifications, notificationError, error }), [status, auth, profile, updateProfile, notifications, notificationError, error]);
   const loading = status === 'loading';
   return <AuthContext.Provider value={contextValue}>
     <div className="workspace-app">

@@ -75,6 +75,29 @@ test('People and Contacts use typed routes and the authenticated connection work
   assert.doesNotMatch(nextConfig, /source: '\/contacts'/);
 });
 
+test('Profile Settings uses a typed route and the protected private-avatar workflow', async () => {
+  const settingsRoute = await readFile(new URL('../../frontend/app/settings/page.tsx', import.meta.url), 'utf8');
+  const settingsClient = await readFile(new URL('../../frontend/src/settings/settings.tsx', import.meta.url), 'utf8');
+  const settingsPresentation = await readFile(new URL('../../frontend/src/settings/presentation.ts', import.meta.url), 'utf8');
+  const authBrowser = await readFile(new URL('../../frontend/src/auth/browser.ts', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(settingsRoute, /SignedInShell/);
+  assert.match(settingsRoute, /SettingsPage/);
+  assert.match(settingsClient, /Loading your Profile Settings/);
+  assert.match(settingsClient, /api\/profile\/settings/);
+  assert.match(settingsClient, /validateSettings/);
+  assert.match(settingsClient, /resolvePrivateAvatar/);
+  assert.match(settingsClient, /Choose a JPEG, PNG, or WebP/);
+  assert.match(settingsClient, /Profile Settings could not be saved/);
+  assert.match(settingsClient, /onError/);
+  assert.match(settingsPresentation, /avatarPresentation/);
+  assert.match(settingsPresentation, /avatarFileError/);
+  assert.match(authBrowser, /createSignedUrl/);
+  assert.match(authBrowser, /profile-images/);
+  assert.doesNotMatch(nextConfig, /source: '\/settings'/);
+});
+
 test('the invitation URL is a typed dynamic route with protected state handling', async () => {
   const invitation = await readFile(new URL('../../frontend/app/invitations/[invitationId]/page.tsx', import.meta.url), 'utf8');
   const invitationClient = await readFile(new URL('../../frontend/src/invitations/acceptance.tsx', import.meta.url), 'utf8');
