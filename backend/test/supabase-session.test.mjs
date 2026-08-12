@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, isLoopbackAddress, localTestProfileFromEnvironment, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
+import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createNotificationWorkflow, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, isLoopbackAddress, localTestProfileFromEnvironment, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -247,6 +247,84 @@ test('the inbox loader maps only RLS-returned entries and derives the unread cou
     ]
   });
   assert.deepEqual(calls, ['ensure_profile', 'list_my_notifications']);
+});
+
+test('the configured loopback test email can list and mark its private fixture notification', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': 'pactflow-wallet-test@local.invalid' };
+  try {
+    assert.equal((await request(origin, '/api/notifications')).status, 401);
+    const listed = await request(origin, '/api/notifications', { headers });
+    assert.equal(listed.status, 200);
+    const payload = await listed.json();
+    assert.equal(payload.notifications.unreadCount, 1);
+    assert.equal(payload.notifications.entries.length, 1);
+    const notificationId = payload.notifications.entries[0].id;
+
+    const markedRead = await request(origin, `/api/notifications/${notificationId}/read`, { method: 'POST', headers });
+    assert.equal(markedRead.status, 200);
+    assert.equal((await markedRead.json()).notification.id, notificationId);
+
+    const reread = await request(origin, '/api/notifications', { headers });
+    assert.equal((await reread.json()).notifications.unreadCount, 0);
+    assert.equal((await request(origin, '/api/notifications/00000000-0000-4000-8000-000000000121/read', { method: 'POST', headers })).status, 422);
+    assert.equal((await request(origin, '/api/notifications/00000000-0000-4000-8000-000000000120/read', { method: 'POST', headers: { 'x-pactflow-local-test-email': 'another@local.invalid' } })).status, 401);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('marking a notification succeeds only when the authenticated RPC returns the caller-owned row', async () => {
+  const calls = [];
+  const workflow = createNotificationWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    (_url, _key, options) => ({
+      rpc: async (name, args) => {
+        calls.push({ name, args, authorization: options.global.headers.Authorization });
+        if (args.target_notification_id === '00000000-0000-4000-8000-000000000122') return { data: [], error: null };
+        return { data: [{ id: '00000000-0000-4000-8000-000000000121', read_at: '2026-08-12T08:05:00.000Z' }], error: null };
+      }
+    })
+  );
+  assert.deepEqual(await workflow({ accessToken: 'notification-jwt', notificationId: '00000000-0000-4000-8000-000000000121' }), { id: '00000000-0000-4000-8000-000000000121', readAt: '2026-08-12T08:05:00.000Z' });
+  await assert.rejects(() => workflow({ accessToken: 'notification-jwt', notificationId: '00000000-0000-4000-8000-000000000122' }), /This notification is unavailable/);
+  assert.deepEqual(calls, [
+    { name: 'mark_my_notification_read', args: { target_notification_id: '00000000-0000-4000-8000-000000000121' }, authorization: 'Bearer notification-jwt' },
+    { name: 'mark_my_notification_read', args: { target_notification_id: '00000000-0000-4000-8000-000000000122' }, authorization: 'Bearer notification-jwt' }
+  ]);
+});
+
+test('two authenticated Profiles cannot mark each other\'s notification identifiers as read', async () => {
+  const firstNotificationId = '00000000-0000-4000-8000-000000000123';
+  const secondNotificationId = '00000000-0000-4000-8000-000000000124';
+  const workflow = createNotificationWorkflow(
+    { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
+    (_url, _key, options) => ({
+      rpc: async (_name, args) => {
+        const token = options.global.headers.Authorization.replace('Bearer ', '');
+        const ownedNotificationId = token === 'first-profile-jwt' ? firstNotificationId : secondNotificationId;
+        return args.target_notification_id === ownedNotificationId
+          ? { data: [{ id: ownedNotificationId, read_at: '2026-08-12T08:10:00.000Z' }], error: null }
+          : { data: [], error: null };
+      }
+    })
+  );
+  const { server, origin } = await start({
+    notificationWorkflow: workflow,
+    verifySupabaseSession: async token => {
+      if (token === 'first-profile-jwt') return { id: '00000000-0000-4000-8000-000000000201', email: 'first@example.test' };
+      if (token === 'second-profile-jwt') return { id: '00000000-0000-4000-8000-000000000202', email: 'second@example.test' };
+      throw new Error('invalid token');
+    }
+  });
+  try {
+    assert.equal((await request(origin, `/api/notifications/${firstNotificationId}/read`, { token: 'first-profile-jwt', method: 'POST' })).status, 200);
+    assert.equal((await request(origin, `/api/notifications/${firstNotificationId}/read`, { token: 'second-profile-jwt', method: 'POST' })).status, 422);
+    assert.equal((await request(origin, `/api/notifications/${secondNotificationId}/read`, { token: 'second-profile-jwt', method: 'POST' })).status, 200);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test('retired Workspace endpoints are not exposed, regardless of authentication', async () => {

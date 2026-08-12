@@ -19,7 +19,6 @@ const nextConfig: NextConfig = {
         { source: '/contracts/:contractId/send', destination: '/contract-author-send.html' },
         { source: '/contracts/:contractId', destination: '/contract.html' },
         { source: '/wallet', destination: '/wallet.html' },
-        { source: '/notifications', destination: '/notifications.html' },
         { source: '/authorities', destination: '/authorities.html' }
       ]
     };

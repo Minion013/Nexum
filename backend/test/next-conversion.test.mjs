@@ -98,6 +98,24 @@ test('Profile Settings uses a typed route and the protected private-avatar workf
   assert.doesNotMatch(nextConfig, /source: '\/settings'/);
 });
 
+test('Notifications uses a typed route, private API workflow, and explicit state coverage', async () => {
+  const route = await readFile(new URL('../../frontend/app/notifications/page.tsx', import.meta.url), 'utf8');
+  const notifications = await readFile(new URL('../../frontend/src/notifications/notifications.tsx', import.meta.url), 'utf8');
+  const presentation = await readFile(new URL('../../frontend/src/notifications/presentation.tsx', import.meta.url), 'utf8');
+  const shell = await readFile(new URL('../../frontend/src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+  const layout = await readFile(new URL('../../frontend/app/layout.tsx', import.meta.url), 'utf8');
+
+  assert.match(route, /SignedInShell/);
+  assert.match(route, /NotificationsPage/);
+  assert.match(notifications, /\/api\/notifications/);
+  assert.match(notifications, /markNotificationRead/);
+  for (const stateText of ['Loading your private inbox', 'You have no notifications yet', 'Notifications could not be loaded', 'Mark read']) assert.match(presentation, new RegExp(stateText));
+  assert.match(shell, /markNotificationRead/);
+  assert.match(layout, /notifications\.css/);
+  assert.doesNotMatch(nextConfig, /source: '\/notifications'/);
+});
+
 test('the invitation URL is a typed dynamic route with protected state handling', async () => {
   const invitation = await readFile(new URL('../../frontend/app/invitations/[invitationId]/page.tsx', import.meta.url), 'utf8');
   const invitationClient = await readFile(new URL('../../frontend/src/invitations/acceptance.tsx', import.meta.url), 'utf8');

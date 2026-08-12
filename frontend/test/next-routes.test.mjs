@@ -2,12 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { build } from 'esbuild';
 import { createServer as createTcpServer } from 'node:net';
+import { createRequire } from 'node:module';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { fileURLToPath } from 'node:url';
 import { createApp, localTestProfileFromEnvironment } from '../../backend/src/server.mjs';
 
 const frontendRoot = fileURLToPath(new URL('..', import.meta.url));
 const nextBin = fileURLToPath(new URL('../../node_modules/next/dist/bin/next', import.meta.url));
+const require = createRequire(import.meta.url);
+
+async function loadNotificationPresentation() {
+  const result = await build({ entryPoints: ['./src/notifications/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
 
 async function unusedPort() {
   const listener = createTcpServer();
@@ -77,6 +88,12 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const settings = await fetch(origin + '/settings');
     assert.equal(settings.status, 200);
     assert.match(await settings.text(), /Profile Settings/);
+    const notifications = await fetch(origin + '/notifications');
+    assert.equal(notifications.status, 200);
+    const notificationsMarkup = await notifications.text();
+    assert.match(notificationsMarkup, /Private inbox/);
+    assert.match(notificationsMarkup, /Loading your private inbox/);
+    assert.match(notificationsMarkup, /notification-inbox/);
     const invitation = await fetch(`${origin}/invitations/11111111-1111-4111-8111-111111111111`);
     assert.equal(invitation.status, 200);
     assert.match(await invitation.text(), /Accept Contract invitation/);
@@ -88,4 +105,17 @@ test('built Next routes render public landing/login and truthful invalid-route s
     await stop(next);
     await new Promise(resolve => backend.close(resolve));
   }
+});
+
+test('Notifications presentation renders empty, populated, error, and read-transition states', async () => {
+  const { NotificationsContent, NotificationsError, NotificationsLoading } = await loadNotificationPresentation();
+  const notification = { id: '00000000-0000-4000-8000-000000000120', category: 'connection', title: 'Connection request', body: 'A Profile sent you a request.', href: '/people', createdAt: '2026-08-12T08:00:00.000Z', readAt: null };
+  const noop = () => undefined;
+  assert.match(renderToStaticMarkup(NotificationsLoading()), /Loading your private inbox/);
+  assert.match(renderToStaticMarkup(NotificationsError({ message: 'Inbox unavailable.' })), /Notifications could not be loaded/);
+  assert.match(renderToStaticMarkup(NotificationsContent({ data: { unreadCount: 0, entries: [] }, markingId: null, actionError: '', onMarkRead: noop })), /You have no notifications yet/);
+  const populated = renderToStaticMarkup(NotificationsContent({ data: { unreadCount: 1, entries: [notification] }, markingId: notification.id, actionError: '', onMarkRead: noop }));
+  assert.match(populated, /Connection request/);
+  assert.match(populated, /Marking read/);
+  assert.match(renderToStaticMarkup(NotificationsContent({ data: { unreadCount: 0, entries: [{ ...notification, readAt: '2026-08-12T08:05:00.000Z' }] }, markingId: null, actionError: '', onMarkRead: noop })), /Read notification/);
 });

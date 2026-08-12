@@ -266,6 +266,27 @@ function createLocalPeopleFixture() {
     }
   };
 }
+function createLocalNotificationsFixture() {
+  const notificationId = '00000000-0000-4000-8000-000000000120';
+  let readAt = null;
+  const localNotification = () => ({
+    id: notificationId,
+    category: 'connection',
+    title: 'Local connection request',
+    body: 'A local test Profile sent you a connection request.',
+    href: '/people',
+    created_at: '2026-08-12T08:00:00.000Z',
+    read_at: readAt
+  });
+  return {
+    load: async () => mapNotifications([localNotification()]),
+    markRead: async ({ notificationId: targetNotificationId }) => {
+      if (requiredUuid(targetNotificationId, 'Notification') !== notificationId) throw new ValidationError('This notification is unavailable.');
+      readAt ??= new Date().toISOString();
+      return { id: notificationId, readAt };
+    }
+  };
+}
 export function createProfileSettingsWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken, displayName, professionalHeadline, bio, avatarSeed, avatarPath, discoverable }) => {
@@ -760,6 +781,7 @@ function sessionPayload(session, profile) { return { user: { id: session.userId,
 export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   const localPeople = localTestProfile ? createLocalPeopleFixture() : null;
+  const localNotifications = localTestProfile ? createLocalNotificationsFixture() : null;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const authenticate = async () => {
@@ -791,13 +813,17 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/notifications' && request.method === 'GET') {
         const session = await authenticate();
-        const notifications = await loadNotifications({ userId: session.userId, accessToken: session.accessToken });
+        const notifications = session.localTest
+          ? await localNotifications.load()
+          : await loadNotifications({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { notifications });
       }
       const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
       if (notificationReadMatch && request.method === 'POST') {
         const session = await authenticate();
-        const notification = await notificationWorkflow({ userId: session.userId, accessToken: session.accessToken, notificationId: notificationReadMatch[1] });
+        const notification = session.localTest
+          ? await localNotifications.markRead({ notificationId: notificationReadMatch[1] })
+          : await notificationWorkflow({ userId: session.userId, accessToken: session.accessToken, notificationId: notificationReadMatch[1] });
         return respond(response, 200, { notification });
       }
       if (url.pathname === '/api/people/connections' && request.method === 'POST') {

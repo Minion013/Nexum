@@ -14,12 +14,13 @@ type AuthContextValue = {
   auth: AuthHeaders | null;
   profile: Profile | null;
   updateProfile: (profile: Profile) => void;
+  markNotificationRead: () => void;
   notifications: NotificationSummary | null;
   notificationError: boolean;
   error: string | null;
 };
 
-const AuthContext = createContext<AuthContextValue>({ status: 'loading', auth: null, profile: null, updateProfile: () => undefined, notifications: null, notificationError: false, error: null });
+const AuthContext = createContext<AuthContextValue>({ status: 'loading', auth: null, profile: null, updateProfile: () => undefined, markNotificationRead: () => undefined, notifications: null, notificationError: false, error: null });
 
 export function useSignedInAuth(): AuthContextValue {
   return useContext(AuthContext);
@@ -156,7 +157,8 @@ export function SignedInShell({ children }: { children: ReactNode }) {
   }, []);
 
   const updateProfile = useCallback((nextProfile: Profile) => setProfile(nextProfile), []);
-  const contextValue = useMemo(() => ({ status, auth, profile, updateProfile, notifications, notificationError, error }), [status, auth, profile, updateProfile, notifications, notificationError, error]);
+  const markNotificationRead = useCallback(() => setNotifications(current => current ? { unreadCount: Math.max(0, current.unreadCount - 1) } : current), []);
+  const contextValue = useMemo(() => ({ status, auth, profile, updateProfile, markNotificationRead, notifications, notificationError, error }), [status, auth, profile, updateProfile, markNotificationRead, notifications, notificationError, error]);
   const loading = status === 'loading';
   return <AuthContext.Provider value={contextValue}>
     <div className="workspace-app">
