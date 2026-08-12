@@ -41,6 +41,13 @@ async function loadAuthoringEntryPresentation() {
   return module.exports;
 }
 
+async function loadContractDetailPresentation() {
+  const result = await build({ entryPoints: ['./src/contracts/detail-presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
 async function unusedPort() {
   const listener = createTcpServer();
   await new Promise(resolve => listener.listen(0, resolve));
@@ -109,6 +116,9 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const contracts = await fetch(`${origin}/contracts`);
     assert.equal(contracts.status, 200);
     assert.match(await contracts.text(), /Your Contract work, in one place/);
+    const contractDetail = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300`);
+    assert.equal(contractDetail.status, 200);
+    assert.match(await contractDetail.text(), /Loading Contract detail/);
     const choosePerson = await fetch(`${origin}/contracts/new/choose-person`);
     assert.equal(choosePerson.status, 200);
     assert.match(await choosePerson.text(), /counterparty choices/);
@@ -200,6 +210,27 @@ test('typed Contracts presentation covers empty, populated, and filtered records
   assert.deepEqual(filterContracts(contracts, '', 'Buyer').map(contract => contract.id), ['draft']);
   assert.equal(emptyContractsMessage(false), 'No Contracts yet. Create a Contract when you are ready.');
   assert.equal(emptyContractsMessage(true), 'No Contracts match these filters.');
+});
+
+test('typed Contract detail presentation keeps lifecycle and payment provenance truthful', async () => {
+  const { contractDetailPresentation } = await loadContractDetailPresentation();
+  const base = {
+    id: 'contract-id', versionNumber: 2, counterparty: 'Counterparty', buyer: 'Buyer', paymentAuthority: 'not configured',
+    sections: {
+      scope: { title: 'Identity kit', description: 'Deliver the identity kit.', projectStartDateUtc: '2030-09-01T00:00:00.000Z' },
+      payment: { settlementToken: 'MockEUSD', totalAllocation: 1000 },
+      milestones: [{ title: 'Research', allocation: 400, deliveryDeadlineUtc: '2030-09-10T00:00:00.000Z' }, { title: 'Delivery', allocation: 600, deliveryDeadlineUtc: '2030-09-20T00:00:00.000Z' }]
+    }
+  };
+  const negotiation = contractDetailPresentation({ ...base, status: 'negotiation' });
+  assert.deepEqual(negotiation.milestones.map(item => item.state), ['awaiting-acceptance', 'awaiting-acceptance']);
+  assert.match(negotiation.payment.label, /not chain verified/);
+  const active = contractDetailPresentation({ ...base, status: 'active' });
+  assert.deepEqual(active.milestones.map(item => item.state), ['active', 'pending']);
+  assert.equal(active.payment.percent, 0);
+  const complete = contractDetailPresentation({ ...base, status: 'complete' });
+  assert.deepEqual(complete.milestones.map(item => item.state), ['complete', 'complete']);
+  assert.equal(complete.payment.percent, 100);
 });
 
 test('typed authoring entry exposes only accepted People and validates exact emails', async () => {

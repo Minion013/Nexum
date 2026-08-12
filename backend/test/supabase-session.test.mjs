@@ -987,6 +987,54 @@ test('the loopback test email can publish only a complete private draft to its e
   }
 });
 
+test('the tracker loopback test email can read private Contract detail and Version review without faking wallet acceptance', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  const draft = validServiceEngagementDraft({ parties: { ...validServiceEngagementDraft().parties, counterparty_email: 'counterparty@example.com' } });
+  try {
+    const created = await request(origin, '/api/contracts', { method: 'POST', headers, body: { name: draft.scope.title, scope: draft.scope.description, counterpartyEmail: draft.parties.counterparty_email, initiatorResponsibility: 'buyer' } });
+    const contractId = (await created.json()).contract.id;
+    assert.equal((await request(origin, `/api/contracts/${contractId}`, { method: 'PUT', headers, body: draft })).status, 200);
+
+    const detail = await request(origin, `/api/contracts/${contractId}/detail`, { headers });
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).contract.sections.scope.title, draft.scope.title);
+    const review = await request(origin, `/api/contracts/${contractId}/review`, { headers });
+    assert.equal(review.status, 200);
+    const reviewPayload = (await review.json()).review;
+    assert.equal(reviewPayload.version.number, 2);
+    assert.equal(reviewPayload.canAccept, false);
+    assert.equal(reviewPayload.version.hash, null);
+    const acceptance = await request(origin, `/api/contracts/${contractId}/versions/${reviewPayload.version.id}/acceptances`, { method: 'POST', headers, body: {} });
+    assert.equal(acceptance.status, 422);
+    assert.match((await acceptance.json()).error, /does not emulate wallet-backed/i);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a non-Contract-Party cannot read dynamic Contract detail', async () => {
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => token === 'party-jwt' || token === 'non-party-jwt' ? { id: token === 'party-jwt' ? 'party-id' : 'unrelated-profile-id', email: `${token}@example.com` } : (() => { throw new Error('invalid token'); })(),
+    contractWorkflow: {
+      getDetail: async ({ userId }) => {
+        if (userId !== 'party-id') throw new AuthorizationError('Only a Contract Party can view this Contract.');
+        return { id: 'contract-id', status: 'active', versionNumber: 1, counterparty: 'Counterparty', buyer: 'Buyer', sections: {}, paymentAuthority: 'not configured' };
+      }
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/contracts/contract-id/detail')).status, 401);
+    const forbidden = await request(origin, '/api/contracts/contract-id/detail', { token: 'non-party-jwt' });
+    assert.equal(forbidden.status, 403);
+    assert.match((await forbidden.json()).error, /Contract Party/);
+    assert.equal((await request(origin, '/api/contracts/contract-id/detail', { token: 'party-jwt' })).status, 200);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('stale and forbidden Contract Draft reads remain unavailable to the Send workflow', async () => {
   const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
   const local = await start({ localTestProfile });
@@ -1169,6 +1217,21 @@ test('the review workflow reads RLS-visible Version terms and accepts only its r
         })
       })
     })
+  );
+
+  await assert.rejects(
+    workflow.acceptVersion({ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'stale-version-id', versionHash: 'version-hash', walletAddress: wallet.address, walletSignature }),
+    /cannot be accepted/
+  );
+  await assert.rejects(
+    workflow.acceptVersion({ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id', versionHash: 'stale-version-hash', walletAddress: wallet.address, walletSignature }),
+    /latest exact Contract Version hash/
+  );
+  const unrelatedWallet = Wallet.createRandom();
+  const unrelatedSignature = await unrelatedWallet.signTypedData(typedData.domain, typedData.types, typedData.message);
+  await assert.rejects(
+    workflow.acceptVersion({ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id', versionHash: 'version-hash', walletAddress: wallet.address, walletSignature: unrelatedSignature }),
+    /does not belong/
   );
 
   const review = await workflow.acceptVersion({ userId: '11111111-1111-4111-8111-111111111111', accessToken: 'party-jwt', contractId: 'contract-id', versionId: 'version-id', versionHash: 'version-hash', walletAddress: wallet.address, walletSignature });

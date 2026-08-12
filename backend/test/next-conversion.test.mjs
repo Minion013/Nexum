@@ -129,6 +129,29 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   assert.doesNotMatch(nextConfig, /contract-author-send\.html/);
 });
 
+test('dynamic Contract detail uses typed authorised reads and exact wallet-backed acceptance', async () => {
+  const route = await readFile(new URL('../../frontend/app/contracts/[contractId]/page.tsx', import.meta.url), 'utf8');
+  const detailClient = await readFile(new URL('../../frontend/src/contracts/detail.tsx', import.meta.url), 'utf8');
+  const presentation = await readFile(new URL('../../frontend/src/contracts/detail-presentation.ts', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+  const layout = await readFile(new URL('../../frontend/app/layout.tsx', import.meta.url), 'utf8');
+
+  assert.match(route, /SignedInShell/);
+  assert.match(route, /ContractDetailPage/);
+  assert.match(detailClient, /\/api\/contracts\/.*\/detail/);
+  assert.match(detailClient, /\/api\/contracts\/.*\/review/);
+  assert.match(detailClient, /eth_signTypedData_v4/);
+  assert.match(detailClient, /exact Contract Version/);
+  assert.match(detailClient, /unauthenticated/);
+  assert.match(detailClient, /forbidden/);
+  assert.match(detailClient, /Contract not found/);
+  assert.match(detailClient, /server-only wallet credentials/);
+  assert.match(presentation, /Chain-authoritative settlement status/);
+  assert.match(presentation, /No payment has been verified/);
+  assert.match(layout, /contract-detail\.css/);
+  assert.doesNotMatch(nextConfig, /source: '\/contracts\/:contractId'/);
+});
+
 test('Profile Settings uses a typed route and the protected private-avatar workflow', async () => {
   const settingsRoute = await readFile(new URL('../../frontend/app/settings/page.tsx', import.meta.url), 'utf8');
   const settingsClient = await readFile(new URL('../../frontend/src/settings/settings.tsx', import.meta.url), 'utf8');

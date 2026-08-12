@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export type AuthConfig = {
   url: string | null;
   publishableKey: string | null;
+  privyAppId?: string;
   localTestEmail?: string;
   mode?: 'supabase-auth';
 };

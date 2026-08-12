@@ -8,7 +8,6 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         { source: '/api/:path*', destination: `${backendUrl}/api/:path*` },
         { source: '/health', destination: `${backendUrl}/health` },
-        { source: '/contracts/:contractId', destination: '/contract.html' },
         { source: '/wallet', destination: '/wallet.html' },
       ]
     };

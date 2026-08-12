@@ -350,6 +350,53 @@ function createLocalContractsFixture() {
     paymentAuthority: 'not configured',
     shareReady: contract.shareReady === true
   });
+  const detailFor = contract => {
+    const draft = draftFor(contract);
+    return {
+      id: contract.id,
+      status: contract.status,
+      versionNumber: draft.versionNumber,
+      counterparty: draft.sections.parties.counterparty_email ?? 'Counterparty to be confirmed',
+      buyer: draft.sections.parties.initiator_responsibility === 'buyer' ? 'Local Wallet Tester' : 'Counterparty to be confirmed',
+      sections: {
+        scope: draft.sections.scope,
+        milestones: draft.sections.milestones,
+        payment: draft.sections.payment,
+        evidence: draft.sections.evidence,
+        changeControl: draft.sections.changeControl
+      },
+      paymentAuthority: 'not configured'
+    };
+  };
+  const reviewFor = contract => {
+    const draft = draftFor(contract);
+    const sections = Object.entries({
+      parties: draft.sections.parties,
+      scope: draft.sections.scope,
+      milestones: { items: draft.sections.milestones },
+      payment: draft.sections.payment,
+      evidence: draft.sections.evidence,
+      intellectual_property: draft.sections.intellectualProperty,
+      change_control: draft.sections.changeControl,
+      notices: draft.sections.notices
+    }).map(([type, terms]) => ({ type, terms }));
+    return {
+      id: contract.id,
+      status: contract.status,
+      version: {
+        id: `${contract.id}-version-${draft.versionNumber}`,
+        number: draft.versionNumber,
+        hash: null,
+        acceptanceReadyAt: null,
+        authority: { authority_name: draft.authority.name, jurisdiction_label: draft.authority.jurisdictionLabel, ruleset_version: draft.authority.rulesetVersion },
+        sections
+      },
+      parties: [{ id: 'local-wallet-tester-party', label: 'Local Wallet Tester', acceptedAt: null, walletAddress: null }],
+      requiredSections: requiredContractSectionTypes.map(type => ({ type, complete: sections.some(section => section.type === type) })),
+      canAccept: false,
+      paymentAuthority: 'not configured'
+    };
+  };
   return {
     load: async () => ({ contracts: list() }),
     create: async ({ name, scope, counterpartyEmail, initiatorResponsibility }) => {
@@ -372,6 +419,16 @@ function createLocalContractsFixture() {
       const contract = find(requiredText(contractId, 'Contract'));
       if (!contract) throw new ValidationError('This Contract is unavailable.');
       return draftFor(contract);
+    },
+    getDetail: async ({ contractId }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Contract is unavailable.');
+      return detailFor(contract);
+    },
+    getReview: async ({ contractId }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Contract review is unavailable.');
+      return reviewFor(contract);
     },
     saveDraft: async ({ contractId, ...draft }) => {
       const contract = find(requiredText(contractId, 'Contract'));
@@ -1038,7 +1095,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       const contractDetailMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/detail$/);
       if (contractDetailMatch && request.method === 'GET') {
         const session = await authenticate();
-        const contract = await contractWorkflow.getDetail({ userId: session.userId, accessToken: session.accessToken, contractId: contractDetailMatch[1] });
+        const contract = session.localTest
+          ? await localContracts.getDetail({ contractId: contractDetailMatch[1] })
+          : await contractWorkflow.getDetail({ userId: session.userId, accessToken: session.accessToken, contractId: contractDetailMatch[1] });
         return respond(response, 200, { contract });
       }
       const contractMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)$/);
@@ -1060,12 +1119,15 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       const contractReviewMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/review$/);
       if (contractReviewMatch && request.method === 'GET') {
         const session = await authenticate();
-        const review = await contractWorkflow.getReview({ userId: session.userId, accessToken: session.accessToken, contractId: contractReviewMatch[1] });
+        const review = session.localTest
+          ? await localContracts.getReview({ contractId: contractReviewMatch[1] })
+          : await contractWorkflow.getReview({ userId: session.userId, accessToken: session.accessToken, contractId: contractReviewMatch[1] });
         return respond(response, 200, { review });
       }
       const contractAcceptanceMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/versions\/([^/]+)\/acceptances$/);
       if (contractAcceptanceMatch && request.method === 'POST') {
         const session = await authenticate();
+        if (session.localTest) throw new ValidationError('The local test identity does not emulate wallet-backed Contract Acceptance.');
         const payload = await json(request);
         const review = await contractWorkflow.acceptVersion({ userId: session.userId, accessToken: session.accessToken, contractId: contractAcceptanceMatch[1], versionId: contractAcceptanceMatch[2], ...payload });
         return respond(response, 200, { review });
