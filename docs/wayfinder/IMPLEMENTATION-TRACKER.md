@@ -6,10 +6,35 @@ This is the canonical operating overview for implementation. Ticket files in [`t
 
 The [implementation completion reference](implementation-completion-reference.md) defines the target-architecture bar. No local simulator, browser-only state, or schema-only proof may be reported as a complete testnet MVP.
 
+## Current conversion priority — complete Next.js TypeScript and backend delivery
+
+The [complete Next.js TypeScript and backend conversion specification](complete-nextjs-typescript-and-backend-conversion-spec.md) is the delivery source for replacing the interim static-page migration. All frontend pages must become typed Next.js routes, while each interactive page receives complete authorised backend support. The current frontier is Tickets 02 and 12.
+
+Ticket 01 was completed in this implementation session; Ticket 02 is now the first conversion ticket in listed order.
+
+Canonical status: Conversion Ticket 01 is **complete 2026-08-12**. Its first list entry below is retained from the pre-existing tracker text; the completed evidence is recorded here and in the ticket.
+Ticket 02's Ticket 01 dependency is now satisfied; it is the next eligible conversion ticket for a later implementation session.
+
+1. [Typed landing and authentication entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/01-typed-landing-and-authentication-entry.md) — in progress.
+2. [Signed-in shell and Dashboard](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/02-signed-in-shell-and-dashboard.md) — blocked by 1.
+3. [People Directory and Contacts compatibility](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/03-people-directory-and-contacts-compatibility.md) — blocked by 2.
+4. [Profile Settings and private avatar workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/04-profile-settings-and-private-avatar-workflow.md) — blocked by 2.
+5. [Private Notifications workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/05-private-notifications-workflow.md) — blocked by 2.
+6. [Authority Registry read model and page](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/06-authority-registry-read-model-and-page.md) — blocked by 2.
+7. [Contracts list and authoring entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/07-contracts-list-and-authoring-entry.md) — blocked by 2.
+8. [Contract project details and editable terms](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/08-contract-project-details-and-editable-terms.md) — blocked by 7.
+9. [Contract publishing and authoring deep links](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/09-contract-publishing-and-authoring-deep-links.md) — blocked by 8.
+10. [Dynamic Contract detail and exact-version acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/10-dynamic-contract-detail-and-exact-version-acceptance.md) — blocked by 2.
+11. [Standalone Wallet](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/11-standalone-wallet.md) — blocked by 2.
+12. [Invitation acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/12-invitation-acceptance.md) — ready to select.
+13. [Remove interim frontend and verify route/API parity](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/13-remove-interim-frontend-and-verify-route-api-parity.md) — blocked by 3 through 6 and 9 through 12.
+
 ## Current evidence
 
+- Conversion Ticket 01 is complete: public landing/authentication now render through typed Next App Router pages, with the Node API retaining auth configuration, session, onboarding, and loopback fixture boundaries. Rendered route/API checks plus production build and full-suite evidence are recorded in the ticket.
+
 - Durable Supabase Profile, Profile-owned Contract party/access, invitation, Contract-Version, Authority, case-access, and notification foundations have linked-project RLS coverage.
-- The responsive signed-in shell, People discovery/connection foundation, Profile Settings hydration, Contract Draft handoff, and standalone Wallet have committed browser and endpoint coverage.
+- The responsive signed-in shell, People discovery/connection foundation, Profile Settings hydration, Contract Draft handoff, and standalone Wallet have committed browser and endpoint coverage. The permanent Contract detail has presentation and endpoint coverage and is backed by durable Profile-scoped simulator records for interaction checking; its simulated amounts and activity are not chain-authoritative settlement evidence.
 - Temporary local browser-auth fixtures are documented in ticket 03. They are disabled by default, production-refused, and must be removed after the normal `/api/session` failure is resolved.
 - Base Sepolia MockEUSD and the EscrowVaultFactory are deployed, but Contract-specific Vault creation, wallet funding, authoritative chain reads, settlement, and end-to-end judge verification remain incomplete.
 
@@ -32,7 +57,7 @@ The [one-to-one Contract UX migration specification](one-to-one-contract-ux-migr
 3. [Clean the retired product model from the repository](tickets/06-clean-legacy-repository-and-retire-reference.md) - **complete 2026-08-10**: removed retired routes, code, assets, documentation, and generated output; migrated the Vault's Contract-facing terminology. Repository scans, production build, typecheck, Solidity compilation, `git diff --check`, and the 59-test suite pass.
 4. [Deliver focused signed-in navigation and Wallet](tickets/03-deliver-focused-signed-in-navigation-and-wallet.md) - **complete 2026-08-10**: standalone `/wallet` keeps available MockEUSD separate from Contract Escrow Vault funds and history; desktop and 390 px signed-in browser checks verify the four-destination navigation plus empty/connected Wallet states. Route coverage, 61 tests, typecheck, production build, and `git diff --check` pass. The local-only test-auth fixture emails and mandatory cleanup are recorded in ticket 03.
 5. [Deliver MilestonePay-informed Dashboard](tickets/04-deliver-milestonepay-informed-dashboard.md) - **complete 2026-08-10**: action-first Contract surfaces, no-money boundary, and empty/attention/populated state coverage are implemented; focused route/presentation coverage, 63 tests, typecheck, build, and `git diff --check` pass. The product owner independently verified authenticated Dashboard rendering at desktop and 390 px widths with the local test fixture.
-6. [Deliver MilestonePay-informed Contracts experience](tickets/05-deliver-milestonepay-informed-contracts-experience.md) - **complete 2026-08-10**: authenticated Contract records now have a scan-ready table and equivalent 390 px records with lifecycle actions and no unverified monetary values; the Contract Draft detail retains its authorized lifecycle context without a review-context failure blocking editing. Desktop and narrow browser checks, focused route/presentation tests, typecheck, build, `git diff --check`, and 65 tests pass.
+6. [Deliver MilestonePay-informed Contracts experience](tickets/05-deliver-milestonepay-informed-contracts-experience.md) - **complete 2026-08-10; detail implementation superseded 2026-08-11**: authenticated Contract records retain the scan-ready table and equivalent narrow-screen records with lifecycle actions and no unverified monetary values. The former dense detail is replaced by permanent authenticated `/contracts/:id` Overview, Deliverables, and Chat tabs with a Profile-scoped durable simulator; it does not replace the active evidence, review, payment-provenance, or responsive-verification tickets.
 7. [Retire MilestonePay reference after approval](tickets/07-retire-milestonepay-reference-after-approval.md) - blocked by 4 through 6 and explicit product-owner authorization to remove `milestonepay`.
 
 ## Legacy queues

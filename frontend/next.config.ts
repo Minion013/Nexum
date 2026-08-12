@@ -1,0 +1,34 @@
+import type { NextConfig } from 'next';
+
+const backendUrl = process.env.BACKEND_URL ?? 'http://127.0.0.1:3001';
+
+const nextConfig: NextConfig = {
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: '/api/:path*', destination: `${backendUrl}/api/:path*` },
+        { source: '/health', destination: `${backendUrl}/health` },
+        { source: '/home', destination: '/home.html' },
+        { source: '/contracts', destination: '/contracts.html' },
+        { source: '/contracts/new/choose-person', destination: '/contract-author-choose-person.html' },
+        { source: '/contracts/new/project-details', destination: '/contract-author-project-details.html' },
+        { source: '/contracts/new/review-terms', destination: '/contract-author-review-terms.html' },
+        { source: '/contracts/new/send', destination: '/contract-author-send.html' },
+        { source: '/contracts/:contractId/choose-person', destination: '/contract-author-choose-person.html' },
+        { source: '/contracts/:contractId/project-details', destination: '/contract-author-project-details.html' },
+        { source: '/contracts/:contractId/review-terms', destination: '/contract-author-review-terms.html' },
+        { source: '/contracts/:contractId/send', destination: '/contract-author-send.html' },
+        { source: '/contracts/:contractId', destination: '/contract.html' },
+        { source: '/wallet', destination: '/wallet.html' },
+        { source: '/people', destination: '/people.html' },
+        { source: '/contacts', destination: '/people.html' },
+        { source: '/notifications', destination: '/notifications.html' },
+        { source: '/settings', destination: '/settings.html' },
+        { source: '/authorities', destination: '/authorities.html' },
+        { source: '/invitations/:invitationId', destination: '/invitation.html' }
+      ]
+    };
+  }
+};
+
+export default nextConfig;
