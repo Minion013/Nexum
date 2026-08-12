@@ -177,7 +177,15 @@ export function createPeopleLoader(config = publicSupabaseConfigFromEnvironment(
         username: person.username,
         professional_headline: person.professional_headline
       })),
-      connections: connectionResult.data ?? []
+      connections: (connectionResult.data ?? []).map(connection => ({
+        id: connection.id,
+        other_profile_id: connection.other_profile_id,
+        display_name: connection.display_name,
+        email: connection.email,
+        professional_headline: connection.professional_headline,
+        status: connection.status,
+        direction: connection.direction
+      }))
     };
   };
 }
@@ -221,6 +229,41 @@ export function createPeopleWorkflow(config = publicSupabaseConfigFromEnvironmen
     });
     if (error || !data) throw new ValidationError('This connection action is unavailable.');
     return { id: data };
+  };
+}
+function createLocalPeopleFixture() {
+  const profile = {
+    id: '00000000-0000-4000-8000-000000000100',
+    display_name: 'Local Directory Partner',
+    username: 'local-directory-partner',
+    professional_headline: 'Testnet service designer'
+  };
+  const connectionId = '00000000-0000-4000-8000-000000000110';
+  let connection = null;
+  const responseConnection = () => connection ? {
+    id: connectionId,
+    other_profile_id: profile.id,
+    display_name: profile.display_name,
+    professional_headline: profile.professional_headline,
+    status: connection.status,
+    direction: connection.direction
+  } : null;
+  return {
+    load: async ({ search = '' }) => {
+      const query = typeof search === 'string' ? search.trim().toLowerCase() : '';
+      const matches = !query || [profile.display_name, profile.username, profile.professional_headline].some(value => value.toLowerCase().includes(query));
+      const currentConnection = responseConnection();
+      return { discover: matches && connection?.status !== 'blocked' ? [profile] : [], connections: currentConnection ? [currentConnection] : [] };
+    },
+    manage: async ({ profileId, action }) => {
+      if (requiredUuid(profileId, 'Profile') !== profile.id) throw new ValidationError('This Profile is not available for local testing.');
+      if (action === 'send' && !connection) connection = { status: 'pending', direction: 'outgoing' };
+      else if (action === 'withdraw' && connection?.status === 'pending' && connection.direction === 'outgoing') connection.status = 'withdrawn';
+      else if (action === 'remove' && connection?.status === 'accepted') connection = null;
+      else if (action === 'block' && connection) connection.status = 'blocked';
+      else throw new ValidationError('This connection action is not available.');
+      return { id: connectionId };
+    }
   };
 }
 export function createProfileSettingsWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
@@ -716,6 +759,7 @@ function sessionPayload(session, profile) { return { user: { id: session.userId,
 
 export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
+  const localPeople = localTestProfile ? createLocalPeopleFixture() : null;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const authenticate = async () => {
@@ -740,7 +784,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       if (url.pathname === '/api/people' && request.method === 'GET') {
         const session = await authenticate();
-        const people = await loadPeople({ userId: session.userId, accessToken: session.accessToken, search: url.searchParams.get('q') ?? '' });
+        const people = session.localTest
+          ? await localPeople.load({ search: url.searchParams.get('q') ?? '' })
+          : await loadPeople({ userId: session.userId, accessToken: session.accessToken, search: url.searchParams.get('q') ?? '' });
         return respond(response, 200, { people });
       }
       if (url.pathname === '/api/notifications' && request.method === 'GET') {
@@ -757,7 +803,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       if (url.pathname === '/api/people/connections' && request.method === 'POST') {
         const session = await authenticate();
         const { profileId, action } = await json(request);
-        const connection = await peopleWorkflow({ userId: session.userId, accessToken: session.accessToken, profileId, action });
+        const connection = session.localTest
+          ? await localPeople.manage({ profileId, action })
+          : await peopleWorkflow({ userId: session.userId, accessToken: session.accessToken, profileId, action });
         return respond(response, 200, { connection });
       }
       if (url.pathname === '/api/profile/settings' && request.method === 'PUT') {

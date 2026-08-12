@@ -61,6 +61,30 @@ test('local test sign-in requires an explicit non-production email flag and perm
     const home = await request(origin, '/api/home', { headers: { 'x-pactflow-local-test-email': localTestProfile.email } });
     assert.equal(home.status, 200);
     assert.deepEqual(await home.json(), { home: { contracts: [] } });
+    const peopleHeaders = { 'x-pactflow-local-test-email': localTestProfile.email };
+    const people = await request(origin, '/api/people?q=designer', { headers: peopleHeaders });
+    assert.equal(people.status, 200);
+    assert.deepEqual((await people.json()).people.discover[0], {
+      id: '00000000-0000-4000-8000-000000000100',
+      display_name: 'Local Directory Partner',
+      username: 'local-directory-partner',
+      professional_headline: 'Testnet service designer'
+    });
+    const sent = await request(origin, '/api/people/connections', {
+      method: 'POST',
+      headers: peopleHeaders,
+      body: { profileId: '00000000-0000-4000-8000-000000000100', action: 'send' }
+    });
+    assert.equal(sent.status, 200);
+    assert.deepEqual(await sent.json(), { connection: { id: '00000000-0000-4000-8000-000000000110' } });
+    const pending = await request(origin, '/api/people', { headers: peopleHeaders });
+    assert.equal((await pending.json()).people.connections[0].status, 'pending');
+    const forbidden = await request(origin, '/api/people/connections', {
+      method: 'POST',
+      headers: peopleHeaders,
+      body: { profileId: '00000000-0000-4000-8000-000000000100', action: 'accept' }
+    });
+    assert.equal(forbidden.status, 422);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

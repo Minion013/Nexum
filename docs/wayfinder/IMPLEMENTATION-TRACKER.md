@@ -8,9 +8,9 @@ The [implementation completion reference](implementation-completion-reference.md
 
 ## Current conversion priority — complete Next.js TypeScript and backend delivery
 
-The [complete Next.js TypeScript and backend conversion specification](complete-nextjs-typescript-and-backend-conversion-spec.md) is the delivery source for replacing the interim static-page migration. All frontend pages must become typed Next.js routes, while each interactive page receives complete authorised backend support. The current frontier is Tickets 02 and 12.
+The [complete Next.js TypeScript and backend conversion specification](complete-nextjs-typescript-and-backend-conversion-spec.md) is the delivery source for replacing the interim static-page migration. All frontend pages must become typed Next.js routes, while each interactive page receives complete authorised backend support. The current frontier is Ticket 04.
 
-Ticket 01 was completed in this implementation session; Ticket 02 is now the first conversion ticket in listed order.
+Tickets 01 through 03 are complete; Ticket 04 is now the first conversion ticket in listed order.
 
 Canonical status: Conversion Ticket 01 is **complete 2026-08-12**. Its first list entry below is retained from the pre-existing tracker text; the completed evidence is recorded here and in the ticket.
 Ticket 02's Ticket 01 dependency is now satisfied; it was the sole conversion ticket selected for this implementation session and is complete.
@@ -18,8 +18,8 @@ Conversion Ticket 02 is **complete 2026-08-12**; its signed-in shell, typed Dash
 
 1. [Typed landing and authentication entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/01-typed-landing-and-authentication-entry.md) — **complete 2026-08-12**.
 2. [Signed-in shell and Dashboard](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/02-signed-in-shell-and-dashboard.md) — **complete 2026-08-12**.
-3. [People Directory and Contacts compatibility](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/03-people-directory-and-contacts-compatibility.md) — blocked by 2.
-4. [Profile Settings and private avatar workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/04-profile-settings-and-private-avatar-workflow.md) — blocked by 2.
+3. [People Directory and Contacts compatibility](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/03-people-directory-and-contacts-compatibility.md) — **complete 2026-08-12**.
+4. [Profile Settings and private avatar workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/04-profile-settings-and-private-avatar-workflow.md) — **ready-for-agent**.
 5. [Private Notifications workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/05-private-notifications-workflow.md) — blocked by 2.
 6. [Authority Registry read model and page](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/06-authority-registry-read-model-and-page.md) — blocked by 2.
 7. [Contracts list and authoring entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/07-contracts-list-and-authoring-entry.md) — blocked by 2.
@@ -34,6 +34,8 @@ Conversion Ticket 02 is **complete 2026-08-12**; its signed-in shell, typed Dash
 
 - Conversion Ticket 01 is complete: public landing/authentication now render through typed Next App Router pages, with the Node API retaining auth configuration, session, onboarding, and loopback fixture boundaries. Rendered route/API checks plus production build and full-suite evidence are recorded in the ticket.
 - Conversion Ticket 02 is complete: /home is a typed Next App Router route with a shared responsive signed-in shell, profile identity/avatar menu, notification indicator, and caller-authorised Home-backed Dashboard states. Rendered route checks, unauthenticated API rejection, production build, typecheck, and the full suite are recorded in the ticket.
+- Conversion Ticket 03 is complete: `/people` and `/contacts` now render through typed Next routes with caller-authorised discovery, network, request, and connection-action workflows. Route/API parity, the loopback test-email path, production build, typecheck, and the full suite are recorded in the ticket.
+- Conversion Ticket 03 remaining gaps: none. The next conversion gap is Ticket 04; interim static pages and legacy bundles remain intentionally deferred to Ticket 13 after the remaining route migrations.
 - Conversion Ticket 12 is complete: the typed invitation route surfaces eligible, expired, resolved, successful, unauthenticated, invalid, and failure states through a protected backend read/acceptance boundary. Migration `20260812100000` is applied, and the linked RLS regression suite verifies exact-invitee access, repeat-acceptance rejection, and non-invitee protection.
 
 - Durable Supabase Profile, Profile-owned Contract party/access, invitation, Contract-Version, Authority, case-access, and notification foundations have linked-project RLS coverage.

@@ -53,6 +53,28 @@ test('signed-in Dashboard uses typed shell and Home workflow without a static re
   assert.doesNotMatch(nextConfig, /source: '\/home'/);
 });
 
+test('People and Contacts use typed routes and the authenticated connection workflow', async () => {
+  const peopleRoute = await readFile(new URL('../../frontend/app/people/page.tsx', import.meta.url), 'utf8');
+  const contactsRoute = await readFile(new URL('../../frontend/app/contacts/page.tsx', import.meta.url), 'utf8');
+  const peopleClient = await readFile(new URL('../../frontend/src/people/people.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(peopleRoute, /SignedInShell/);
+  assert.match(peopleRoute, /PeoplePage/);
+  assert.match(contactsRoute, /people\/page/);
+  assert.match(peopleClient, /\/api\/people/);
+  assert.match(peopleClient, /\/api\/people\/connections/);
+  assert.match(peopleClient, /people-search/);
+  assert.match(peopleClient, /people-access-note/);
+  assert.match(peopleClient, /accept/);
+  assert.match(peopleClient, /decline/);
+  assert.match(peopleClient, /withdraw/);
+  assert.match(peopleClient, /remove/);
+  assert.match(peopleClient, /block/);
+  assert.doesNotMatch(nextConfig, /source: '\/people'/);
+  assert.doesNotMatch(nextConfig, /source: '\/contacts'/);
+});
+
 test('the invitation URL is a typed dynamic route with protected state handling', async () => {
   const invitation = await readFile(new URL('../../frontend/app/invitations/[invitationId]/page.tsx', import.meta.url), 'utf8');
   const invitationClient = await readFile(new URL('../../frontend/src/invitations/acceptance.tsx', import.meta.url), 'utf8');
