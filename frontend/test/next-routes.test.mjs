@@ -20,6 +20,13 @@ async function loadNotificationPresentation() {
   return module.exports;
 }
 
+async function loadAuthorityPresentation() {
+  const result = await build({ entryPoints: ['./src/authorities/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
 async function unusedPort() {
   const listener = createTcpServer();
   await new Promise(resolve => listener.listen(0, resolve));
@@ -94,6 +101,11 @@ test('built Next routes render public landing/login and truthful invalid-route s
     assert.match(notificationsMarkup, /Private inbox/);
     assert.match(notificationsMarkup, /Loading your private inbox/);
     assert.match(notificationsMarkup, /notification-inbox/);
+    const authorities = await fetch(`${origin}/authorities`);
+    assert.equal(authorities.status, 200);
+    const authoritiesMarkup = await authorities.text();
+    assert.match(authoritiesMarkup, /Resolution Authorities/);
+    assert.match(authoritiesMarkup, /Loading the Authority Registry/);
     const invitation = await fetch(`${origin}/invitations/11111111-1111-4111-8111-111111111111`);
     assert.equal(invitation.status, 200);
     assert.match(await invitation.text(), /Accept Contract invitation/);
@@ -105,6 +117,17 @@ test('built Next routes render public landing/login and truthful invalid-route s
     await stop(next);
     await new Promise(resolve => backend.close(resolve));
   }
+});
+
+test('Authority Registry presentation renders loading, empty, populated, unavailable, and forbidden states', async () => {
+  const { AuthoritiesContent, AuthoritiesError, AuthoritiesForbidden, AuthoritiesLoading } = await loadAuthorityPresentation();
+  assert.match(renderToStaticMarkup(AuthoritiesLoading()), /Loading the Authority Registry/);
+  assert.match(renderToStaticMarkup(AuthoritiesContent({ data: { entries: [] } })), /No published Resolution Authorities are available yet/);
+  const populated = renderToStaticMarkup(AuthoritiesContent({ data: { entries: [{ id: 'authority-id', name: 'PactFlow Simulation Authority', jurisdictionLabel: 'Testnet simulation', rulesetVersion: 'v1', isSimulated: true }] } }));
+  assert.match(populated, /PactFlow Simulation Authority/);
+  assert.match(populated, /Ruleset v1/);
+  assert.match(renderToStaticMarkup(AuthoritiesError({ message: 'Registry is unavailable.' })), /Authority Registry unavailable/);
+  assert.match(renderToStaticMarkup(AuthoritiesForbidden()), /access is restricted/);
 });
 
 test('Notifications presentation renders empty, populated, error, and read-transition states', async () => {

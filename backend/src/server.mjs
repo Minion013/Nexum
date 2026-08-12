@@ -89,6 +89,8 @@ export function isLoopbackAddress(address) {
 
 function respond(response, status, body, headers = {}) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers }); response.end(JSON.stringify(body)); }
 class AuthenticationError extends Error {}
+export class AuthorizationError extends Error {}
+export class ServiceUnavailableError extends Error {}
 async function json(request) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > 64_000) throw new ValidationError('Request is too large.'); } return body ? JSON.parse(body) : {}; }
 function bearerToken(request) { const match = typeof request.headers.authorization === 'string' && request.headers.authorization.match(/^Bearer\s+(.+)$/i); return match?.[1]; }
 
@@ -221,6 +223,44 @@ export function createNotificationWorkflow(config = publicSupabaseConfigFromEnvi
     return { id: notification.id, readAt: notification.read_at };
   };
 }
+
+export function mapAuthorityRegistry(rows) {
+  return {
+    entries: (rows ?? []).map(authority => ({
+      id: authority.id,
+      name: authority.display_name,
+      jurisdictionLabel: authority.jurisdiction_label,
+      rulesetVersion: authority.ruleset_version,
+      isSimulated: authority.is_simulated === true
+    }))
+  };
+}
+
+export function createAuthorityRegistryLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
+  return async ({ accessToken }) => {
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken)
+      .from('resolution_authorities')
+      .select('id, display_name, jurisdiction_label, ruleset_version, is_simulated')
+      .eq('status', 'published')
+      .order('display_name', { ascending: true });
+    if (error) throw new ServiceUnavailableError('The Authority Registry is unavailable.');
+    return mapAuthorityRegistry(data);
+  };
+}
+
+function createLocalAuthorityRegistryFixture() {
+  return {
+    load: async () => mapAuthorityRegistry([{
+      id: '00000000-0000-4000-8000-000000000201',
+      display_name: 'PactFlow Simulation Authority',
+      jurisdiction_label: 'Testnet simulation',
+      ruleset_version: 'v1',
+      is_simulated: true
+    }])
+  };
+}
+
 export function createPeopleWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ accessToken, profileId, action }) => {
@@ -778,10 +818,11 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: session.localTest ? 'local-test-auth' : 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), loadAuthorities = createAuthorityRegistryLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   const localPeople = localTestProfile ? createLocalPeopleFixture() : null;
   const localNotifications = localTestProfile ? createLocalNotificationsFixture() : null;
+  const localAuthorities = localTestProfile ? createLocalAuthorityRegistryFixture() : null;
   return createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
     const authenticate = async () => {
@@ -817,6 +858,13 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
           ? await localNotifications.load()
           : await loadNotifications({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { notifications });
+      }
+      if (url.pathname === '/api/authorities' && request.method === 'GET') {
+        const session = await authenticate();
+        const authorities = session.localTest
+          ? await localAuthorities.load()
+          : await loadAuthorities({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, { authorities });
       }
       const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
       if (notificationReadMatch && request.method === 'POST') {
@@ -911,7 +959,7 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       }
       respond(response, 404, { error: url.pathname.startsWith('/api/') ? 'Unknown endpoint.' : 'Not found.' });
     } catch (error) {
-      const status = error instanceof SyntaxError ? 400 : error instanceof AuthenticationError ? 401 : error instanceof ValidationError ? 422 : 500;
+      const status = error instanceof SyntaxError ? 400 : error instanceof AuthenticationError ? 401 : error instanceof AuthorizationError ? 403 : error instanceof ValidationError ? 422 : error instanceof ServiceUnavailableError ? 503 : 500;
       respond(response, status, { error: status === 500 ? 'Request failed.' : error.message, ...(error instanceof DraftValidationError ? { issues: error.issues } : {}) });
     }
   });
