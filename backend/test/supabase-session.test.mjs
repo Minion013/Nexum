@@ -372,6 +372,29 @@ test('an authenticated user receives only their durable Home data', async () => 
   }
 });
 
+test('an authenticated user receives only the authorised Contracts list and unauthenticated access is rejected', async () => {
+  const calls = [];
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token !== 'contracts-jwt') throw new Error('invalid token');
+      return { id: '55555555-5555-4555-8555-555555555555', email: 'member@example.com' };
+    },
+    loadContracts: async input => {
+      calls.push(input);
+      return { contracts: [{ id: 'authorised-contract', status: 'private_draft', title: 'Private draft', responsibility: 'Buyer' }] };
+    }
+  });
+  try {
+    assert.equal((await request(origin, '/api/contracts')).status, 401);
+    const response = await request(origin, '/api/contracts', { token: 'contracts-jwt' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { contracts: [{ id: 'authorised-contract', status: 'private_draft', title: 'Private draft', responsibility: 'Buyer' }] });
+    assert.deepEqual(calls, [{ userId: '55555555-5555-4555-8555-555555555555', accessToken: 'contracts-jwt' }]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('the Home loader queries only RLS-visible profile-party Contracts', async () => {
   const calls = [];
   const loadHome = createHomeLoader(

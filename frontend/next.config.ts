@@ -8,13 +8,9 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         { source: '/api/:path*', destination: `${backendUrl}/api/:path*` },
         { source: '/health', destination: `${backendUrl}/health` },
-        { source: '/contracts', destination: '/contracts.html' },
-        { source: '/contracts/new/choose-person', destination: '/contract-author-choose-person.html' },
         { source: '/contracts/new/project-details', destination: '/contract-author-project-details.html' },
         { source: '/contracts/new/review-terms', destination: '/contract-author-review-terms.html' },
         { source: '/contracts/new/send', destination: '/contract-author-send.html' },
-        { source: '/contracts/:contractId/choose-person', destination: '/contract-author-choose-person.html' },
-        { source: '/contracts/:contractId/project-details', destination: '/contract-author-project-details.html' },
         { source: '/contracts/:contractId/review-terms', destination: '/contract-author-review-terms.html' },
         { source: '/contracts/:contractId/send', destination: '/contract-author-send.html' },
         { source: '/contracts/:contractId', destination: '/contract.html' },

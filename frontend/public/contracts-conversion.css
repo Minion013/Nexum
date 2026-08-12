@@ -1,0 +1,2 @@
+.contract-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:20px 0}.contract-filters label{display:grid;gap:5px;color:var(--pf-muted);font-size:13px}.contract-filters select{margin:0}
+@media(max-width:560px){.contract-filters{grid-template-columns:1fr}}

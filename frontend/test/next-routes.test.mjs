@@ -27,6 +27,20 @@ async function loadAuthorityPresentation() {
   return module.exports;
 }
 
+async function loadContractsPresentation() {
+  const result = await build({ entryPoints: ['./src/contracts/presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
+async function loadAuthoringEntryPresentation() {
+  const result = await build({ entryPoints: ['./src/contracts/authoring-entry-presentation.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
 async function unusedPort() {
   const listener = createTcpServer();
   await new Promise(resolve => listener.listen(0, resolve));
@@ -92,6 +106,15 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const contactsMarkup = await contacts.text();
     assert.match(contactsMarkup, /Professional connections, kept separate from access/);
     assert.match(contactsMarkup, /href="\/people"/);
+    const contracts = await fetch(`${origin}/contracts`);
+    assert.equal(contracts.status, 200);
+    assert.match(await contracts.text(), /Your Contract work, in one place/);
+    const choosePerson = await fetch(`${origin}/contracts/new/choose-person`);
+    assert.equal(choosePerson.status, 200);
+    assert.match(await choosePerson.text(), /counterparty choices/);
+    const projectDetails = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/project-details`);
+    assert.equal(projectDetails.status, 200);
+    assert.match(await projectDetails.text(), /persisted draft/);
     const settings = await fetch(origin + '/settings');
     assert.equal(settings.status, 200);
     assert.match(await settings.text(), /Profile Settings/);
@@ -141,4 +164,28 @@ test('Notifications presentation renders empty, populated, error, and read-trans
   assert.match(populated, /Connection request/);
   assert.match(populated, /Marking read/);
   assert.match(renderToStaticMarkup(NotificationsContent({ data: { unreadCount: 0, entries: [{ ...notification, readAt: '2026-08-12T08:05:00.000Z' }] }, markingId: null, actionError: '', onMarkRead: noop })), /Read notification/);
+});
+
+test('typed Contracts presentation covers empty, populated, and filtered records', async () => {
+  const { emptyContractsMessage, filterContracts } = await loadContractsPresentation();
+  const contracts = [
+    { id: 'draft', title: 'Website refresh', status: 'private_draft', latestVersionNumber: 1, counterparty: 'Lee', responsibility: 'Buyer', milestoneCount: 0, lastActivityAt: '2026-08-12T00:00:00.000Z' },
+    { id: 'active', title: 'Identity kit', status: 'active', latestVersionNumber: 2, counterparty: 'Maya', responsibility: 'Service Provider', milestoneCount: 2, lastActivityAt: '2026-08-11T00:00:00.000Z' }
+  ];
+  assert.deepEqual(filterContracts(contracts, '', '').map(contract => contract.id), ['draft', 'active']);
+  assert.deepEqual(filterContracts(contracts, 'active', '').map(contract => contract.id), ['active']);
+  assert.deepEqual(filterContracts(contracts, '', 'Buyer').map(contract => contract.id), ['draft']);
+  assert.equal(emptyContractsMessage(false), 'No Contracts yet. Create a Contract when you are ready.');
+  assert.equal(emptyContractsMessage(true), 'No Contracts match these filters.');
+});
+
+test('typed authoring entry exposes only accepted People and validates exact emails', async () => {
+  const { acceptedCounterparties, normalizeExactEmail } = await loadAuthoringEntryPresentation();
+  assert.equal(normalizeExactEmail(' Person@Example.COM '), 'person@example.com');
+  assert.equal(normalizeExactEmail('not-an-email'), null);
+  assert.deepEqual(acceptedCounterparties([
+    { other_profile_id: 'accepted', display_name: 'Accepted Person', email: 'accepted@example.com', status: 'accepted', direction: 'outgoing' },
+    { other_profile_id: 'pending', display_name: 'Pending Person', email: 'pending@example.com', status: 'pending', direction: 'outgoing' },
+    { other_profile_id: 'missing-email', display_name: 'No Email', status: 'accepted', direction: 'outgoing' }
+  ]).map(connection => connection.other_profile_id), ['accepted']);
 });

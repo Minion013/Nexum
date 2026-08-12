@@ -122,7 +122,35 @@ async function ensureProfileForAppData(supabase, unavailableMessage) {
   const { error } = await supabase.rpc('ensure_profile');
   if (error) throw new AuthenticationError(unavailableMessage);
 }
-export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+function mapContractListItem(contract, userId) {
+  const versions = contract.contract_versions ?? [];
+  const latestVersion = [...versions].sort((left, right) => right.version_number - left.version_number)[0] ?? { version_number: 0, contract_sections: [] };
+  const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
+  const scope = sections.get('scope') ?? {};
+  const parties = sections.get('parties') ?? {};
+  const notices = sections.get('notices') ?? {};
+  const milestones = sections.get('milestones')?.items ?? [];
+  const nextMilestone = milestones
+    .filter(item => item?.title && item?.deliveryDeadlineUtc && Date.parse(item.deliveryDeadlineUtc) > Date.now())
+    .sort((left, right) => Date.parse(left.deliveryDeadlineUtc) - Date.parse(right.deliveryDeadlineUtc))[0];
+  const initiatorIsBuyer = parties.initiator_responsibility === 'buyer' || parties.buyer?.partyRef === 'initiating_party';
+  const isInitiator = (contract.contract_parties ?? []).some(party => party.profile_id === userId);
+  const responsibility = isInitiator ? (initiatorIsBuyer ? 'Buyer' : 'Service Provider') : (initiatorIsBuyer ? 'Service Provider' : 'Buyer');
+  const counterparty = parties.counterparty_email ?? parties.counterpartyEmail ?? (responsibility === 'Buyer' ? notices.serviceProviderContact : notices.buyerContact) ?? 'Counterparty to be confirmed';
+  return {
+    id: contract.id,
+    title: typeof scope.title === 'string' && scope.title.trim() ? scope.title.trim() : null,
+    status: contract.status,
+    latestVersionNumber: latestVersion.version_number,
+    counterparty,
+    responsibility,
+    milestoneCount: milestones.length,
+    ...(nextMilestone ? { nextMilestone: { title: nextMilestone.title, deadlineUtc: nextMilestone.deliveryDeadlineUtc } } : {}),
+    lastActivityAt: contract.updated_at
+  };
+}
+
+export function createContractsLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
   return async ({ userId, accessToken }) => {
     const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
@@ -132,36 +160,12 @@ export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(),
       .select('id, status, updated_at, contract_versions(version_number, contract_sections(section_type, terms)), contract_parties(profile_id)')
       .order('updated_at', { ascending: false });
     if (error) throw new AuthenticationError('Your PactFlow Home is unavailable.');
-    return {
-      contracts: (data ?? []).map(contract => {
-        const versions = contract.contract_versions ?? [];
-        const latestVersion = [...versions].sort((left, right) => right.version_number - left.version_number)[0] ?? { version_number: 0, contract_sections: [] };
-        const sections = new Map((latestVersion.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
-        const scope = sections.get('scope') ?? {};
-        const parties = sections.get('parties') ?? {};
-        const notices = sections.get('notices') ?? {};
-        const milestones = sections.get('milestones')?.items ?? [];
-        const nextMilestone = milestones
-          .filter(item => item?.title && item?.deliveryDeadlineUtc && Date.parse(item.deliveryDeadlineUtc) > Date.now())
-          .sort((left, right) => Date.parse(left.deliveryDeadlineUtc) - Date.parse(right.deliveryDeadlineUtc))[0];
-        const initiatorIsBuyer = parties.initiator_responsibility === 'buyer' || parties.buyer?.partyRef === 'initiating_party';
-        const isInitiator = (contract.contract_parties ?? []).some(party => party.profile_id === userId);
-        const responsibility = isInitiator ? (initiatorIsBuyer ? 'Buyer' : 'Service Provider') : (initiatorIsBuyer ? 'Service Provider' : 'Buyer');
-        const counterparty = parties.counterparty_email ?? parties.counterpartyEmail ?? (responsibility === 'Buyer' ? notices.serviceProviderContact : notices.buyerContact) ?? 'Counterparty to be confirmed';
-        return {
-          id: contract.id,
-          title: typeof scope.title === 'string' && scope.title.trim() ? scope.title.trim() : null,
-          status: contract.status,
-          latestVersionNumber: latestVersion.version_number,
-          counterparty,
-          responsibility,
-          milestoneCount: milestones.length,
-          ...(nextMilestone ? { nextMilestone: { title: nextMilestone.title, deadlineUtc: nextMilestone.deliveryDeadlineUtc } } : {}),
-          lastActivityAt: contract.updated_at
-        };
-      })
-    };
+    return { contracts: (data ?? []).map(contract => mapContractListItem(contract, userId)) };
   };
+}
+
+export function createHomeLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
+  return createContractsLoader(config, createSupabaseClient);
 }
 export function createPeopleLoader(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return async () => { throw new AuthenticationError('Supabase authentication is not configured.'); };
@@ -303,6 +307,53 @@ function createLocalPeopleFixture() {
       else if (action === 'block' && connection) connection.status = 'blocked';
       else throw new ValidationError('This connection action is not available.');
       return { id: connectionId };
+    }
+  };
+}
+function createLocalContractsFixture() {
+  let sequence = 0;
+  const contracts = [];
+  const find = contractId => contracts.find(contract => contract.id === contractId);
+  const list = () => contracts.map(contract => ({
+    id: contract.id,
+    title: contract.sections.scope.title,
+    status: contract.status,
+    latestVersionNumber: contract.versionNumber,
+    counterparty: contract.sections.parties.counterparty_email ?? 'Counterparty to be confirmed',
+    responsibility: contract.sections.parties.initiator_responsibility === 'buyer' ? 'Buyer' : 'Service Provider',
+    milestoneCount: 0,
+    lastActivityAt: contract.updatedAt
+  }));
+  return {
+    load: async () => ({ contracts: list() }),
+    create: async ({ name, scope, counterpartyEmail, initiatorResponsibility }) => {
+      const id = `00000000-0000-4000-8000-${String(300 + sequence++).padStart(12, '0')}`;
+      const contract = {
+        id,
+        status: 'private_draft',
+        versionNumber: 1,
+        updatedAt: new Date().toISOString(),
+        sections: {
+          parties: { counterparty_email: optionalEmail(counterpartyEmail), initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility') },
+          scope: { title: requiredText(name, 'Contract name', 160), description: requiredText(scope, 'Contract scope') }
+        }
+      };
+      contracts.push(contract);
+      return { id };
+    },
+    getDraft: async ({ contractId }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Contract is unavailable.');
+      return {
+        id: contract.id,
+        status: contract.status,
+        versionNumber: contract.versionNumber,
+        sections: { parties: contract.sections.parties, scope: contract.sections.scope, milestones: [], payment: {}, evidence: {}, intellectualProperty: {}, changeControl: {}, notices: {} },
+        authority: { id: null, name: '', jurisdictionLabel: '', rulesetVersion: '' },
+        authorities: [],
+        paymentAuthority: 'not configured',
+        shareReady: false
+      };
     }
   };
 }
@@ -818,9 +869,10 @@ function createProfileOnboardingCompleter(config = publicSupabaseConfigFromEnvir
 }
 function sessionPayload(session, profile) { return { user: { id: session.userId, email: session.email, profile }, mode: session.localTest ? 'local-test-auth' : 'supabase-auth' }; }
 
-export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), loadAuthorities = createAuthorityRegistryLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
+export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadContracts = createContractsLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), loadAuthorities = createAuthorityRegistryLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   const localPeople = localTestProfile ? createLocalPeopleFixture() : null;
+  const localContracts = localTestProfile ? createLocalContractsFixture() : null;
   const localNotifications = localTestProfile ? createLocalNotificationsFixture() : null;
   const localAuthorities = localTestProfile ? createLocalAuthorityRegistryFixture() : null;
   return createServer(async (request, response) => {
@@ -844,6 +896,13 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
         const session = await authenticate();
         const home = session.localTest ? { contracts: [] } : await loadHome({ userId: session.userId, accessToken: session.accessToken });
         return respond(response, 200, { home });
+      }
+      if (url.pathname === '/api/contracts' && request.method === 'GET') {
+        const session = await authenticate();
+        const contracts = session.localTest
+          ? await localContracts.load()
+          : await loadContracts({ userId: session.userId, accessToken: session.accessToken });
+        return respond(response, 200, contracts);
       }
       if (url.pathname === '/api/people' && request.method === 'GET') {
         const session = await authenticate();
@@ -892,7 +951,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       if (url.pathname === '/api/contracts' && request.method === 'POST') {
         const session = await authenticate();
         const { workspaceId: _legacyWorkspaceId, ...payload } = await json(request);
-        const contract = await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
+        const contract = session.localTest
+          ? await localContracts.create(payload)
+          : await contractWorkflow.create({ ...payload, userId: session.userId, accessToken: session.accessToken });
         return respond(response, 201, { contract });
       }
       const contractSuggestionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/copilot-suggestions$/);
@@ -911,7 +972,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       const contractMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)$/);
       if (contractMatch && request.method === 'GET') {
         const session = await authenticate();
-        const contract = await contractWorkflow.getDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1] });
+        const contract = session.localTest
+          ? await localContracts.getDraft({ contractId: contractMatch[1] })
+          : await contractWorkflow.getDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1] });
         return respond(response, 200, { contract });
       }
       if (contractMatch && request.method === 'PUT') {

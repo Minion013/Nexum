@@ -75,6 +75,34 @@ test('People and Contacts use typed routes and the authenticated connection work
   assert.doesNotMatch(nextConfig, /source: '\/contacts'/);
 });
 
+test('Contracts and the initial authoring entry use typed routes, protected choices, and persisted handoff', async () => {
+  const contractsRoute = await readFile(new URL('../../frontend/app/contracts/page.tsx', import.meta.url), 'utf8');
+  const contractsClient = await readFile(new URL('../../frontend/src/contracts/contracts.tsx', import.meta.url), 'utf8');
+  const contractsPresentation = await readFile(new URL('../../frontend/src/contracts/presentation.ts', import.meta.url), 'utf8');
+  const newEntryRoute = await readFile(new URL('../../frontend/app/contracts/new/choose-person/page.tsx', import.meta.url), 'utf8');
+  const existingEntryRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/choose-person/page.tsx', import.meta.url), 'utf8');
+  const projectDetailsRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/project-details/page.tsx', import.meta.url), 'utf8');
+  const entryClient = await readFile(new URL('../../frontend/src/contracts/authoring-entry.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(contractsRoute, /SignedInShell/);
+  assert.match(contractsRoute, /ContractsPage/);
+  assert.match(contractsClient, /\/api\/contracts/);
+  assert.match(contractsClient, /stage-filter/);
+  assert.match(contractsClient, /responsibility-filter/);
+  assert.match(contractsPresentation, /No Contracts match these filters/);
+  assert.match(newEntryRoute, /AuthoringEntryPage/);
+  assert.match(existingEntryRoute, /AuthoringEntryPage/);
+  assert.match(projectDetailsRoute, /ProjectDetailsHandoffPage/);
+  assert.match(entryClient, /\/api\/people/);
+  assert.match(entryClient, /\/api\/contracts/);
+  assert.match(entryClient, /exact-email/);
+  assert.match(entryClient, /selectedPersonId/);
+  assert.match(entryClient, /project-details/);
+  assert.doesNotMatch(entryClient, /counterpartyProfileId/);
+  assert.doesNotMatch(nextConfig, /source: '\/contracts'/);
+});
+
 test('Profile Settings uses a typed route and the protected private-avatar workflow', async () => {
   const settingsRoute = await readFile(new URL('../../frontend/app/settings/page.tsx', import.meta.url), 'utf8');
   const settingsClient = await readFile(new URL('../../frontend/src/settings/settings.tsx', import.meta.url), 'utf8');
@@ -173,5 +201,26 @@ test('authentication boundary covers valid, expired, unauthenticated, unavailabl
     assert.equal((await request(local.origin, '/api/session', { headers: { 'x-pactflow-local-test-email': 'wrong@local.invalid' } })).status, 401);
   } finally {
     await new Promise(resolve => local.server.close(resolve));
+  }
+});
+
+test('the loopback test email can persist a private Contract Draft handoff without granting counterparty access', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  try {
+    const before = await request(origin, '/api/contracts', { headers });
+    assert.deepEqual(await before.json(), { contracts: [] });
+    const invalid = await fetch(`${origin}/api/contracts`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Draft', scope: 'Scope', counterpartyEmail: 'not-an-email', initiatorResponsibility: 'buyer' }) });
+    assert.equal(invalid.status, 422);
+    const created = await fetch(`${origin}/api/contracts`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Identity refresh', scope: 'Refresh the identity system.', counterpartyEmail: 'person@example.com', initiatorResponsibility: 'buyer' }) });
+    assert.equal(created.status, 201);
+    const contractId = (await created.json()).contract.id;
+    const listed = await request(origin, '/api/contracts', { headers });
+    assert.equal((await listed.json()).contracts[0].counterparty, 'person@example.com');
+    const draft = await request(origin, `/api/contracts/${contractId}`, { headers });
+    assert.equal((await draft.json()).contract.sections.parties.counterparty_email, 'person@example.com');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
   }
 });
