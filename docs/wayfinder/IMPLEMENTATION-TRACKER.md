@@ -13,10 +13,11 @@ The [complete Next.js TypeScript and backend conversion specification](complete-
 Ticket 01 was completed in this implementation session; Ticket 02 is now the first conversion ticket in listed order.
 
 Canonical status: Conversion Ticket 01 is **complete 2026-08-12**. Its first list entry below is retained from the pre-existing tracker text; the completed evidence is recorded here and in the ticket.
-Ticket 02's Ticket 01 dependency is now satisfied; it is the next eligible conversion ticket for a later implementation session.
+Ticket 02's Ticket 01 dependency is now satisfied; it was the sole conversion ticket selected for this implementation session and is complete.
+Conversion Ticket 02 is **complete 2026-08-12**; its signed-in shell, typed Dashboard, authenticated Home workflow, and authorization evidence are recorded in the ticket.
 
-1. [Typed landing and authentication entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/01-typed-landing-and-authentication-entry.md) — in progress.
-2. [Signed-in shell and Dashboard](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/02-signed-in-shell-and-dashboard.md) — blocked by 1.
+1. [Typed landing and authentication entry](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/01-typed-landing-and-authentication-entry.md) — **complete 2026-08-12**.
+2. [Signed-in shell and Dashboard](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/02-signed-in-shell-and-dashboard.md) — **complete 2026-08-12**.
 3. [People Directory and Contacts compatibility](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/03-people-directory-and-contacts-compatibility.md) — blocked by 2.
 4. [Profile Settings and private avatar workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/04-profile-settings-and-private-avatar-workflow.md) — blocked by 2.
 5. [Private Notifications workflow](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/05-private-notifications-workflow.md) — blocked by 2.
@@ -32,6 +33,7 @@ Ticket 02's Ticket 01 dependency is now satisfied; it is the next eligible conve
 ## Current evidence
 
 - Conversion Ticket 01 is complete: public landing/authentication now render through typed Next App Router pages, with the Node API retaining auth configuration, session, onboarding, and loopback fixture boundaries. Rendered route/API checks plus production build and full-suite evidence are recorded in the ticket.
+- Conversion Ticket 02 is complete: /home is a typed Next App Router route with a shared responsive signed-in shell, profile identity/avatar menu, notification indicator, and caller-authorised Home-backed Dashboard states. Rendered route checks, unauthenticated API rejection, production build, typecheck, and the full suite are recorded in the ticket.
 - Conversion Ticket 12 is complete: the typed invitation route surfaces eligible, expired, resolved, successful, unauthenticated, invalid, and failure states through a protected backend read/acceptance boundary. Migration `20260812100000` is applied, and the linked RLS regression suite verifies exact-invitee access, repeat-acceptance rejection, and non-invitee protection.
 
 - Durable Supabase Profile, Profile-owned Contract party/access, invitation, Contract-Version, Authority, case-access, and notification foundations have linked-project RLS coverage.

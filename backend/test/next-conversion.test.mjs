@@ -32,6 +32,27 @@ test('landing and login are typed App Router pages without public-page rewrites'
   assert.doesNotMatch(nextConfig, /source: '\/login'/);
 });
 
+test('signed-in Dashboard uses typed shell and Home workflow without a static rewrite', async () => {
+  const home = await readFile(new URL('../../frontend/app/home/page.tsx', import.meta.url), 'utf8');
+  const shell = await readFile(new URL('../../frontend/src/signed-in/app-shell.tsx', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../../frontend/src/dashboard/dashboard.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(home, /SignedInShell/);
+  assert.match(home, /DashboardPage/);
+  assert.match(shell, /\/api\/session/);
+  assert.match(shell, /\/api\/notifications/);
+  assert.match(shell, /aria-label="Open navigation"/);
+  assert.match(shell, /aria-expanded/);
+  assert.match(shell, /resolvePrivateAvatar/);
+  assert.match(shell, /Notifications unavailable/);
+  assert.match(shell, /Profile Settings/);
+  assert.match(dashboard, /\/api\/home/);
+  assert.match(dashboard, /Loading your Contract actions/);
+  assert.match(dashboard, /Dashboard could not be loaded/);
+  assert.doesNotMatch(nextConfig, /source: '\/home'/);
+});
+
 test('the invitation URL is a typed dynamic route with protected state handling', async () => {
   const invitation = await readFile(new URL('../../frontend/app/invitations/[invitationId]/page.tsx', import.meta.url), 'utf8');
   const invitationClient = await readFile(new URL('../../frontend/src/invitations/acceptance.tsx', import.meta.url), 'utf8');
@@ -63,7 +84,8 @@ test('authentication boundary covers valid, expired, unauthenticated, unavailabl
     assert.equal((await valid.json()).user.profile.displayName, 'Person');
     assert.equal((await request(origin, '/api/session', { token: 'expired-token' })).status, 401);
     assert.equal((await request(origin, '/api/session')).status, 401);
-    assert.deepEqual(calls, ['current-token', 'expired-token', undefined]);
+    assert.equal((await request(origin, '/api/home')).status, 401);
+    assert.deepEqual(calls, ['current-token', 'expired-token', undefined, undefined]);
     assert.equal((await request(origin, '/api/not-a-real-route')).status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));

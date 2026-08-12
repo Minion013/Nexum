@@ -60,6 +60,9 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const login = await fetch(`${origin}/login`);
     assert.equal(login.status, 200);
     assert.match(await login.text(), /Sign in or create your account/);
+    const home = await fetch(`${origin}/home`);
+    assert.equal(home.status, 200);
+    assert.match(await home.text(), /Your work, with the next step clear/);
     const invitation = await fetch(`${origin}/invitations/11111111-1111-4111-8111-111111111111`);
     assert.equal(invitation.status, 200);
     assert.match(await invitation.text(), /Accept Contract invitation/);

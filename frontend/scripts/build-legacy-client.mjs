@@ -9,13 +9,12 @@ await build({
     'app-shell', 'dashboard', 'contracts', 'notifications', 'login', 'contract', 'invitation', 'wallet', 'settings', 'contract-authoring',
     'contract-authoring-flow', 'contract-detail-presentation', 'contract-network', 'contracts-presentation', 'dashboard-presentation',
     'email-code', 'private-avatar', 'profile-identity', 'profile-presentation', 'profile-settings', 'signed-in-navigation'
-  ].map(name => `./src/legacy/${name}.ts`),
+  ].map(name => resolve(frontendRoot, 'src', 'legacy', `${name}.ts`)),
   bundle: true,
   splitting: true,
   format: 'esm',
   platform: 'browser',
   target: 'es2022',
-  absWorkingDir: frontendRoot,
-  outdir: './public',
+  outdir: resolve(frontendRoot, 'public'),
   entryNames: '[name].bundle'
 });

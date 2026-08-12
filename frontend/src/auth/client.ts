@@ -11,8 +11,12 @@ export type Profile = {
   id: string;
   email: string | null;
   displayName: string | null;
+  avatarSeed?: string | null;
+  avatarPath?: string | null;
   onboardingCompletedAt?: string | null;
 };
+
+export type AuthHeaders = { accessToken?: string; localTestEmail?: string };
 
 export type SessionPayload = {
   user: { id: string; email: string | null; profile: Profile };
@@ -52,7 +56,7 @@ export function localFixtureEmail(config: AuthConfig, email: string, hostname: s
   return isLoopbackHost(hostname) && config.localTestEmail && candidate === config.localTestEmail ? candidate : null;
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}, auth: { accessToken?: string; localTestEmail?: string } = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestInit = {}, auth: AuthHeaders = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (auth.accessToken) headers.set('authorization', `Bearer ${auth.accessToken}`);
