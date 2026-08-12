@@ -83,8 +83,11 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   const existingEntryRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/choose-person/page.tsx', import.meta.url), 'utf8');
   const projectDetailsRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/project-details/page.tsx', import.meta.url), 'utf8');
   const reviewTermsRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/review-terms/page.tsx', import.meta.url), 'utf8');
+  const sendRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/send/page.tsx', import.meta.url), 'utf8');
+  const newSendRoute = await readFile(new URL('../../frontend/app/contracts/new/send/page.tsx', import.meta.url), 'utf8');
   const projectDetailsClient = await readFile(new URL('../../frontend/src/contracts/project-details-handoff.tsx', import.meta.url), 'utf8');
   const reviewTermsClient = await readFile(new URL('../../frontend/src/contracts/review-terms.tsx', import.meta.url), 'utf8');
+  const sendClient = await readFile(new URL('../../frontend/src/contracts/send.tsx', import.meta.url), 'utf8');
   const draftModel = await readFile(new URL('../../frontend/src/contracts/draft-model.ts', import.meta.url), 'utf8');
   const entryClient = await readFile(new URL('../../frontend/src/contracts/authoring-entry.tsx', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
@@ -105,6 +108,14 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   assert.match(reviewTermsClient, /Required Acceptance Criterion/);
   assert.match(reviewTermsClient, /Evidence and change control/);
   assert.match(reviewTermsClient, /\/api\/contracts\/.*PUT|method: 'PUT'/s);
+  assert.match(sendRoute, /SendPage/);
+  assert.match(newSendRoute, /SendPage/);
+  assert.match(sendClient, /\/api\/contracts\//);
+  assert.match(sendClient, /\/invitations/);
+  assert.match(sendClient, /shareReady/);
+  assert.match(sendClient, /exact email/i);
+  assert.match(sendClient, /status === 403/);
+  assert.match(newSendRoute, /searchParams/);
   assert.match(draftModel, /editableDraftFromContract/);
   assert.match(draftModel, /utcFromLocalDateTime/);
   assert.match(entryClient, /\/api\/people/);
@@ -115,6 +126,7 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   assert.doesNotMatch(entryClient, /counterpartyProfileId/);
   assert.doesNotMatch(nextConfig, /source: '\/contracts'/);
   assert.doesNotMatch(nextConfig, /contract-author-review-terms\.html/);
+  assert.doesNotMatch(nextConfig, /contract-author-send\.html/);
 });
 
 test('Profile Settings uses a typed route and the protected private-avatar workflow', async () => {

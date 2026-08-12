@@ -312,6 +312,7 @@ function createLocalPeopleFixture() {
 }
 function createLocalContractsFixture() {
   let sequence = 0;
+  let invitationSequence = 0;
   const contracts = [];
   const authority = {
     id: '00000000-0000-4000-8000-000000000201',
@@ -347,7 +348,7 @@ function createLocalContractsFixture() {
     authority,
     authorities: [authority],
     paymentAuthority: 'not configured',
-    shareReady: false
+    shareReady: contract.shareReady === true
   });
   return {
     load: async () => ({ contracts: list() }),
@@ -357,6 +358,7 @@ function createLocalContractsFixture() {
         id,
         status: 'private_draft',
         versionNumber: 1,
+        shareReady: false,
         updatedAt: new Date().toISOString(),
         sections: {
           parties: { counterparty_email: optionalEmail(counterpartyEmail), initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility') },
@@ -384,8 +386,19 @@ function createLocalContractsFixture() {
         }
       };
       contract.versionNumber += 1;
+      contract.shareReady = true;
       contract.updatedAt = new Date().toISOString();
       return draftFor(contract);
+    },
+    invite: async ({ contractId, email }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Contract is unavailable.');
+      const inviteeEmail = validatePublishableDraft(draftFor(contract), email);
+      contract.status = 'negotiation';
+      contract.invitationId = `00000000-0000-4000-8000-${String(400 + invitationSequence++).padStart(12, '0')}`;
+      contract.invitedEmail = inviteeEmail;
+      contract.updatedAt = new Date().toISOString();
+      return { id: contract.invitationId };
     }
   };
 }
@@ -761,6 +774,22 @@ export function mapContractDetail(contract, userId) {
     paymentAuthority: sections.get('payment')?.paymentAuthority ?? 'not configured'
   };
 }
+function draftInputForPublication(draft) {
+  return {
+    authorityId: draft.authority?.id,
+    ...draft.sections,
+    milestones: draft.sections?.milestones
+  };
+}
+function validatePublishableDraft(draft, invitationEmail) {
+  if (!draft.shareReady) throw new ValidationError('Complete and save the Contract terms before sending an invitation.');
+  const savedEmail = optionalEmail(draft.sections?.parties?.counterparty_email ?? draft.sections?.parties?.counterpartyEmail);
+  if (!savedEmail) throw new ValidationError('An exact counterparty email is required before sending an invitation.');
+  const requestedEmail = requiredEmail(invitationEmail);
+  if (savedEmail !== requestedEmail) throw new ValidationError('The invitation email must match the saved counterparty email.');
+  validatedDraft(draftInputForPublication(draft));
+  return requestedEmail;
+}
 function mapContractReview(contract) {
   const version = [...(contract.contract_versions ?? [])].sort((left, right) => right.version_number - left.version_number)[0];
   if (!version) throw new ValidationError('This Contract has no readable version.');
@@ -845,10 +874,15 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
       counterparty_email: optionalEmail(counterpartyEmail),
       initiator_responsibility: enumValue(initiatorResponsibility, ['buyer', 'service_provider'], 'parties', 'initiatorResponsibility', 'Contract responsibility')
     }, 'We could not create this Contract Draft.') }),
-    invite: async ({ accessToken, contractId, email }) => ({ id: await call({ accessToken }, 'create_contract_invitation', {
-      target_contract_id: requiredText(contractId, 'Contract'),
-      invitee_email: requiredEmail(email)
-    }, 'We could not create this Contract invitation.') }),
+    invite: async ({ accessToken, contractId, email }) => {
+      const targetContractId = requiredText(contractId, 'Contract');
+      const draft = await getDraft({ accessToken, contractId: targetContractId });
+      const inviteeEmail = validatePublishableDraft(draft, email);
+      return { id: await call({ accessToken }, 'create_contract_invitation', {
+        target_contract_id: targetContractId,
+        invitee_email: inviteeEmail
+      }, 'We could not create this Contract invitation.') };
+    },
     accept: async ({ accessToken, invitationId }) => ({ id: await call({ accessToken }, 'accept_contract_invitation', {
       target_invitation_id: requiredUuid(invitationId, 'Invitation')
     }, 'This Contract invitation cannot be accepted.') }),
@@ -1040,7 +1074,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       if (contractInvitationMatch && request.method === 'POST') {
         const session = await authenticate();
         const { email } = await json(request);
-        const invitation = await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contractInvitationMatch[1], email });
+        const invitation = session.localTest
+          ? await localContracts.invite({ contractId: contractInvitationMatch[1], email })
+          : await contractWorkflow.invite({ userId: session.userId, accessToken: session.accessToken, contractId: contractInvitationMatch[1], email });
         return respond(response, 201, { invitation });
       }
       const durableInvitationMatch = url.pathname.match(/^\/api\/invitations\/([^/]+)\/accept$/);

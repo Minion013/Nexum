@@ -514,6 +514,12 @@ test('a verified user can complete first-time setup without choosing a local dem
 
 test('a verified Profile creates a Contract without Workspace access before explicitly sharing an exact-email invitation', async () => {
   const calls = [];
+  const publishable = validServiceEngagementDraft({
+    parties: {
+      ...validServiceEngagementDraft().parties,
+      counterparty_email: 'seller@example.com'
+    }
+  });
   const workflow = createContractWorkflow(
     { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example' },
     () => ({
@@ -522,7 +528,37 @@ test('a verified Profile creates a Contract without Workspace access before expl
         if (name === 'create_profile_owned_contract') return { data: 'contract-id', error: null };
         if (name === 'create_contract_invitation') return { data: 'invitation-id', error: null };
         return { data: null, error: { message: 'unexpected call' } };
-      }
+      },
+      from: table => ({
+        select: () => ({
+          eq: () => table === 'resolution_authorities'
+            ? Promise.resolve({ data: [{ id: '00000000-0000-4000-8000-000000000201', display_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' }], error: null })
+            : { single: async () => ({
+              data: {
+                id: 'contract-id',
+                status: 'private_draft',
+                contract_versions: [{
+                  id: 'version-id',
+                  version_number: 2,
+                  selected_authority_id: publishable.authorityId,
+                  authority_snapshot: { authority_name: 'PactFlow Simulation Authority', jurisdiction_label: 'Testnet simulation', ruleset_version: 'v1' },
+                  acceptance_ready_at: '2030-09-01T00:00:00.000Z',
+                  contract_sections: [
+                    { section_type: 'parties', position: 0, terms: publishable.parties },
+                    { section_type: 'scope', position: 1, terms: publishable.scope },
+                    { section_type: 'milestones', position: 2, terms: { items: publishable.milestones } },
+                    { section_type: 'payment', position: 3, terms: publishable.payment },
+                    { section_type: 'evidence', position: 4, terms: publishable.evidence },
+                    { section_type: 'intellectual_property', position: 5, terms: publishable.intellectualProperty },
+                    { section_type: 'change_control', position: 6, terms: publishable.changeControl },
+                    { section_type: 'notices', position: 8, terms: publishable.notices }
+                  ]
+                }]
+              },
+              error: null
+            }) }
+        })
+      })
     })
   );
 
@@ -907,6 +943,70 @@ test('a verified Contract Party can read and save a validated durable Contract d
     ]);
   } finally {
     await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the loopback test email can publish only a complete private draft to its exact saved counterparty email', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  const draft = validServiceEngagementDraft({
+    parties: {
+      ...validServiceEngagementDraft().parties,
+      counterparty_email: 'counterparty@example.com'
+    }
+  });
+  try {
+    const created = await request(origin, '/api/contracts', {
+      method: 'POST',
+      headers,
+      body: { name: draft.scope.title, scope: draft.scope.description, counterpartyEmail: draft.parties.counterparty_email, initiatorResponsibility: 'buyer' }
+    });
+    assert.equal(created.status, 201);
+    const contractId = (await created.json()).contract.id;
+
+    const incomplete = await request(origin, `/api/contracts/${contractId}/invitations`, { method: 'POST', headers, body: { email: draft.parties.counterparty_email } });
+    assert.equal(incomplete.status, 422);
+    assert.match((await incomplete.json()).error, /complete and save/i);
+    assert.equal((await (await request(origin, '/api/contracts', { headers })).json()).contracts[0].status, 'private_draft');
+
+    const saved = await request(origin, `/api/contracts/${contractId}`, { method: 'PUT', headers, body: draft });
+    assert.equal(saved.status, 200);
+    const mismatched = await request(origin, `/api/contracts/${contractId}/invitations`, { method: 'POST', headers, body: { email: 'other@example.com' } });
+    assert.equal(mismatched.status, 422);
+    assert.match((await mismatched.json()).error, /match the saved counterparty email/i);
+    assert.equal((await (await request(origin, '/api/contracts', { headers })).json()).contracts[0].status, 'private_draft');
+
+    const published = await request(origin, `/api/contracts/${contractId}/invitations`, { method: 'POST', headers, body: { email: ' COUNTERPARTY@example.com ' } });
+    assert.equal(published.status, 201);
+    assert.match((await published.json()).invitation.id, /^00000000-0000-4000-8000-0000000004\d{2}$/);
+    assert.equal((await (await request(origin, '/api/contracts', { headers })).json()).contracts[0].status, 'negotiation');
+    assert.equal((await request(origin, `/api/contracts/${contractId}/invitations`, { method: 'POST', body: { email: draft.parties.counterparty_email } })).status, 401);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('stale and forbidden Contract Draft reads remain unavailable to the Send workflow', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const local = await start({ localTestProfile });
+  try {
+    const stale = await request(local.origin, '/api/contracts/00000000-0000-4000-8000-000000000999', { headers: { 'x-pactflow-local-test-email': localTestProfile.email } });
+    assert.equal(stale.status, 422);
+  } finally {
+    await new Promise(resolve => local.server.close(resolve));
+  }
+
+  const forbidden = await start({
+    verifySupabaseSession: async token => token === 'party-jwt' ? { id: 'party-id', email: 'party@example.com' } : (() => { throw new Error('invalid token'); })(),
+    contractWorkflow: { getDraft: async () => { throw new AuthorizationError('Only a Contract Party can view this Contract Draft.'); } }
+  });
+  try {
+    const response = await request(forbidden.origin, '/api/contracts/contract-id', { token: 'party-jwt' });
+    assert.equal(response.status, 403);
+    assert.match((await response.json()).error, /Contract Party/);
+  } finally {
+    await new Promise(resolve => forbidden.server.close(resolve));
   }
 });
 

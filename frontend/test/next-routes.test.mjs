@@ -120,6 +120,15 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const reviewTermsMarkup = await reviewTerms.text();
     assert.match(reviewTermsMarkup, /Review terms/);
     assert.match(reviewTermsMarkup, /Milestones and payment/);
+    const send = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/send`);
+    assert.equal(send.status, 200);
+    assert.match(await send.text(), /Loading Contract Send/);
+    const newSend = await fetch(`${origin}/contracts/new/send`);
+    assert.equal(newSend.status, 200);
+    assert.match(await newSend.text(), /Contract Send/);
+    const newSendWithDraft = await fetch(`${origin}/contracts/new/send?contractId=00000000-0000-4000-8000-000000000300`);
+    assert.equal(newSendWithDraft.status, 200);
+    assert.match(await newSendWithDraft.text(), /Loading Contract Send/);
     const settings = await fetch(origin + '/settings');
     assert.equal(settings.status, 200);
     assert.match(await settings.text(), /Profile Settings/);
@@ -145,6 +154,15 @@ test('built Next routes render public landing/login and truthful invalid-route s
     await stop(next);
     await new Promise(resolve => backend.close(resolve));
   }
+});
+
+test('Send keeps private draft publishing controls full-width on narrow screens', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [contractAuthoringCss, contractsCss] = await Promise.all([
+    readFile(new URL('../public/contract-authoring.css', import.meta.url), 'utf8'),
+    readFile(new URL('../public/contracts.css', import.meta.url), 'utf8')
+  ]);
+  assert.match(contractAuthoringCss + contractsCss, /@media\(max-width:560px\).*\.contract-authoring-flow \.action-row>\*\{width:100%\}/s);
 });
 
 test('Authority Registry presentation renders loading, empty, populated, unavailable, and forbidden states', async () => {

@@ -1,6 +1,6 @@
 import type { DraftIssue } from './draft-model';
 
-export function DraftStepper({ current }: { current: 'Project details' | 'Review terms' }) {
+export function DraftStepper({ current }: { current: 'Project details' | 'Review terms' | 'Send' }) {
   const steps = ['Choose Person', 'Project details', 'Review terms', 'Send'];
   return <ol className="contract-stepper" aria-label="Contract Draft steps">{steps.map(step => <li key={step} className={step === 'Choose Person' ? 'done' : undefined} aria-current={step === current ? 'step' : undefined}>{step}</li>)}</ol>;
 }
