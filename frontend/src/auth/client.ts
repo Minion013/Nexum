@@ -5,6 +5,7 @@ export type AuthConfig = {
   publishableKey: string | null;
   privyAppId?: string;
   localTestEmail?: string;
+  localTestWallet?: { address: string; mockEusdBalance: string };
   mode?: 'supabase-auth';
 };
 

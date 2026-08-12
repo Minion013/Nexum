@@ -53,6 +53,35 @@ test('signed-in Dashboard uses typed shell and Home workflow without a static re
   assert.doesNotMatch(nextConfig, /source: '\/home'/);
 });
 
+test('Wallet uses a typed App Router route without a static page rewrite', async () => {
+  const route = await readFile(new URL('../../frontend/app/wallet/page.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(route, /SignedInShell/);
+  assert.match(route, /WalletPage/);
+  assert.doesNotMatch(nextConfig, /source: '\/wallet'/);
+});
+
+test('Wallet local-test configuration is loopback-only and excludes server-only credentials', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({
+    publicSupabaseConfig: { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example', privyAppId: 'privy-app-id', serviceRoleKey: 'must-not-reach-browser' },
+    localTestProfile
+  });
+  try {
+    const config = await request(origin, '/api/auth/config');
+    assert.equal(config.status, 200);
+    const payload = await config.json();
+    assert.deepEqual(payload, { url: 'https://project.supabase.co', publishableKey: 'sb_publishable_example', privyAppId: 'privy-app-id', localTestEmail: 'pactflow-wallet-test@local.invalid', mode: 'supabase-auth' });
+    assert.equal('serviceRoleKey' in payload, false);
+    const session = await request(origin, '/api/session', { headers: { 'x-pactflow-local-test-email': 'pactflow-wallet-test@local.invalid' } });
+    assert.equal(session.status, 200);
+    assert.equal((await session.json()).mode, 'local-test-auth');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('People and Contacts use typed routes and the authenticated connection workflow', async () => {
   const peopleRoute = await readFile(new URL('../../frontend/app/people/page.tsx', import.meta.url), 'utf8');
   const contactsRoute = await readFile(new URL('../../frontend/app/contacts/page.tsx', import.meta.url), 'utf8');

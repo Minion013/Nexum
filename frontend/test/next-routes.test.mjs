@@ -48,6 +48,20 @@ async function loadContractDetailPresentation() {
   return module.exports;
 }
 
+async function loadWalletPresentation() {
+  const result = await build({ entryPoints: ['./src/wallet/presentation.tsx'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', write: false, external: ['react', 'react/jsx-runtime'] });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
+async function loadWalletProvider() {
+  const result = await build({ entryPoints: ['./src/wallet/provider.ts'], absWorkingDir: frontendRoot, bundle: true, format: 'cjs', platform: 'node', write: false });
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, module, module.exports);
+  return module.exports;
+}
+
 async function unusedPort() {
   const listener = createTcpServer();
   await new Promise(resolve => listener.listen(0, resolve));
@@ -91,6 +105,7 @@ test('built Next routes render public landing/login and truthful invalid-route s
     stdio: 'ignore'
   });
   const origin = `http://127.0.0.1:${nextPort}`;
+  const backendOrigin = `http://127.0.0.1:${backend.address().port}`;
   try {
     await waitForNext(origin, next);
     const landing = await fetch(`${origin}/`);
@@ -102,6 +117,22 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const home = await fetch(`${origin}/home`);
     assert.equal(home.status, 200);
     assert.match(await home.text(), /Your work, with the next step clear/);
+    const wallet = await fetch(`${origin}/wallet`);
+    assert.equal(wallet.status, 200);
+    const walletMarkup = await wallet.text();
+    assert.match(walletMarkup, /Personal test funds, kept separate/);
+    assert.match(walletMarkup, /Contract Escrow Vault funds are separate locked pots/);
+    assert.match(walletMarkup, /Preparing the typed wallet connection boundary/);
+    const localConfig = await fetch(`${backendOrigin}/api/auth/config`);
+    const localConfigBody = await localConfig.text();
+    assert.equal(localConfig.status, 200, localConfigBody);
+    const localConfigPayload = JSON.parse(localConfigBody);
+    assert.equal(localConfigPayload.localTestEmail, 'pactflow-wallet-test@local.invalid');
+    assert.equal('serviceRoleKey' in localConfigPayload, false);
+    const localSession = await fetch(`${backendOrigin}/api/session`, { headers: { 'x-pactflow-local-test-email': 'pactflow-wallet-test@local.invalid' } });
+    assert.equal(localSession.status, 200);
+    assert.equal((await localSession.json()).mode, 'local-test-auth');
+    assert.equal((await fetch(`${backendOrigin}/api/session`, { headers: { 'x-pactflow-local-test-email': 'wrong@local.invalid' } })).status, 401);
     const people = await fetch(`${origin}/people`);
     assert.equal(people.status, 200);
     const peopleMarkup = await people.text();
@@ -164,6 +195,48 @@ test('built Next routes render public landing/login and truthful invalid-route s
     await stop(next);
     await new Promise(resolve => backend.close(resolve));
   }
+});
+
+test('Wallet presentation covers connection, local-test, error, and safe-balance states', async () => {
+  const route = await import('node:fs/promises').then(fs => fs.readFile(new URL('../app/wallet/page.tsx', import.meta.url), 'utf8'));
+  const nextConfig = await import('node:fs/promises').then(fs => fs.readFile(new URL('../next.config.ts', import.meta.url), 'utf8'));
+
+  assert.match(route, /SignedInShell/);
+  assert.match(route, /WalletPage/);
+  assert.doesNotMatch(nextConfig, /source: '\/wallet'/);
+
+  const { WalletLocalTest, WalletSummary, walletNetworkLabel, walletStateLabel } = await loadWalletPresentation();
+  const expectedLabels = { disconnected: 'Disconnected', connecting: 'Connecting', connected: 'Connected', 'local-test': 'Local test', 'safe-balance': 'Safe balance', error: 'Unavailable' };
+  for (const state of Object.keys(expectedLabels)) {
+    assert.equal(walletStateLabel(state), expectedLabels[state]);
+    assert.match(renderToStaticMarkup(WalletSummary({ state, address: '0x1111111111111111111111111111111111111111', balance: '1,250 MockEUSD', message: `${state} wallet state` })), new RegExp(`${state} wallet state`));
+  }
+  assert.equal(walletNetworkLabel('disconnected'), 'Not connected');
+  assert.equal(walletNetworkLabel('connecting'), 'Checking connection');
+  assert.equal(walletNetworkLabel('local-test'), 'Local test fixture');
+  assert.equal(walletNetworkLabel('error'), 'Not verified');
+  assert.match(renderToStaticMarkup(WalletSummary({ state: 'disconnected' })), /<dd>Not connected<\/dd>/);
+  assert.match(renderToStaticMarkup(WalletSummary({ state: 'error', message: 'Provider unavailable.' })), /<dd>Not verified<\/dd>/);
+  assert.match(renderToStaticMarkup(WalletLocalTest({})), /Real wallet connection is disabled/);
+  assert.match(renderToStaticMarkup(WalletLocalTest({ wallet: { address: '0x1111111111111111111111111111111111111111', mockEusdBalance: '1,250 MockEUSD' } })), /fixture data/);
+  assert.match(renderToStaticMarkup(WalletSummary({ state: 'safe-balance', address: '0x1111111111111111111111111111111111111111', balance: '1,250 MockEUSD' })), /personal test-token balance/);
+  assert.match(renderToStaticMarkup(WalletSummary({ state: 'error', message: 'Provider unavailable.' })), /Provider unavailable/);
+  assert.match(renderToStaticMarkup(WalletSummary({ state: 'disconnected' })), /No personal wallet connected/);
+});
+
+test('Wallet provider seam enforces Base Sepolia and reads only personal MockEUSD balance', async () => {
+  const { readMockEusdBalance, formatMockEusdBalance, baseSepoliaChainId } = await loadWalletProvider();
+  assert.equal(formatMockEusdBalance('1250000000'), '1250');
+  let switchedTo;
+  const wallet = {
+    address: '0x1111111111111111111111111111111111111111',
+    switchChain: async chainId => { switchedTo = chainId; },
+    getEthereumProvider: async () => ({ request: async ({ method }) => method === 'eth_chainId' ? '0x14a34' : '0x4a817c80' })
+  };
+  assert.equal(await readMockEusdBalance(wallet), '1250 MockEUSD');
+  assert.equal(switchedTo, baseSepoliaChainId);
+  await assert.rejects(readMockEusdBalance({ ...wallet, getEthereumProvider: async () => ({ request: async ({ method }) => method === 'eth_chainId' ? '0x1' : '0x0' }) }), /Switch to Base Sepolia/);
+  await assert.rejects(readMockEusdBalance({ ...wallet, getEthereumProvider: async () => ({ request: async ({ method }) => method === 'eth_chainId' ? '0x14a34' : {} }) }), /invalid MockEUSD balance/);
 });
 
 test('Send keeps private draft publishing controls full-width on narrow screens', async () => {
