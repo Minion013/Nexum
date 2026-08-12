@@ -5,13 +5,16 @@ PactFlow lets two people create and govern a custom digital-service **Contract**
 ## Run locally
 
 ```powershell
-npm.cmd --prefix web test
-npm.cmd --prefix web run typecheck
-npm.cmd --prefix web run contracts:check
-npm.cmd --prefix web start
+npm.cmd install
+npm.cmd test
+npm.cmd run typecheck
+npm.cmd --workspace backend run contracts:check
+npm.cmd run start
 ```
 
-Configure `SUPABASE_URL` and the publishable key in `web/.env`. The server does not expose a Supabase service-role key. Open `http://localhost:3000` and use the Supabase email sign-in flow; `GET /health` confirms the application boundary.
+Configure `SUPABASE_URL` and the publishable key in `backend/.env`. `npm run start` launches the Next.js frontend at `http://localhost:3000` and the Node.js API at `http://localhost:3001`; Next proxies browser `/api` and `/health` requests to the API. The server does not expose a Supabase service-role key.
+
+The client now lives in `frontend/`: route ownership, TypeScript browser modules, public assets, and the Next.js configuration are all there. The API and contract deployment scripts live in `backend/`.
 
 ## Current workflow
 

@@ -1,0 +1,34 @@
+{
+  "name": "@pactflow/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "npm --prefix ../frontend run build:legacy",
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "test:smoke": "node --test test/server.test.mjs",
+    "typecheck": "node --check src/server.mjs && node --check scripts/deploy-base-sepolia.mjs",
+    "contracts:check": "solcjs --optimize --base-path .. --include-path .. --bin --abi --output-dir ../.scratch/solc-output ../contracts/MockEUSD.sol ../contracts/EscrowVault.sol ../contracts/EscrowVaultFactory.sol",
+    "deploy:base-sepolia": "node scripts/deploy-base-sepolia.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "ethers": "^6.17.0",
+    "ganache": "^7.9.2",
+    "solc": "^0.8.30"
+  },
+  "dependencies": {
+    "@privy-io/js-sdk-core": "^0.69.0",
+    "@privy-io/node": "^0.28.0",
+    "@privy-io/react-auth": "^3.37.0",
+    "@supabase/supabase-js": "^2.112.1",
+    "dotenv": "^17.4.2",
+    "jose": "^6.2.8",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

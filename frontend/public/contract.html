@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Contract delivery, evidence, and activity in PactFlow." />
+    <title>Contract — PactFlow</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/signed-in.css" />
+    <link rel="stylesheet" href="/contract-detail.css" />
+  </head>
+  <body class="workspace-app" data-page="contracts">
+    <a class="skip-link" href="#main-content">Skip to Contract</a>
+    <main id="main-content" class="app-content contract-detail" tabindex="-1">
+      <p id="request-error" class="detail-error" role="alert" hidden></p>
+      <div id="contract-loading" class="detail-loading" aria-live="polite">Loading Contract…</div>
+      <div id="contract-page" hidden>
+        <section class="contract-header">
+          <a class="crumb" href="/contracts">Contracts <span aria-hidden="true">/</span></a>
+          <div class="contract-heading-row">
+            <div>
+              <div class="title-line"><h1 id="contract-title"></h1><span id="contract-status" class="contract-stage"></span></div>
+              <p id="contract-meta" class="contract-meta"></p>
+            </div>
+          </div>
+          </section>
+
+        <div class="contract-layout">
+          <section class="contract-main">
+            <div class="detail-tabs" role="tablist" aria-label="Contract details">
+              <button id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" type="button">Overview</button>
+              <button id="tab-deliverables" role="tab" aria-selected="false" aria-controls="panel-deliverables" type="button">Deliverables</button>
+            </div>
+
+            <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+              <div class="section-heading"><div><p class="eyebrow">Progress</p><h2>Milestones</h2></div><p id="milestone-progress" class="muted"></p></div>
+              <ol id="milestone-list" class="milestone-timeline"></ol>
+              <div class="activity-section"><div class="section-heading"><div><p class="eyebrow">Contract record</p><h2>Activity log</h2></div></div><ol id="activity-list" class="activity-list"></ol></div>
+            </section>
+
+            <section id="panel-deliverables" role="tabpanel" aria-labelledby="tab-deliverables" hidden>
+              <article class="deliverable-card"><div class="section-heading"><div><p class="eyebrow">Current milestone</p><h2 id="deliverable-title"></h2><p id="deliverable-description" class="muted"></p></div><span id="deliverable-state" class="contract-stage"></span></div><div id="deliverable-requirements" class="requirements"></div><p class="upload-note">Deliverable evidence will appear here when protected evidence storage is configured.</p></article>
+            </section>
+          </section>
+
+          <aside class="contract-rail" aria-label="Contract summary">
+            <section class="rail-panel payment-panel"><p class="eyebrow">Payment status</p><strong id="payment-total" class="payment-total"></strong><p id="payment-label" class="muted"></p><div class="payment-bar" aria-hidden="true"><span id="payment-bar-value"></span></div><p id="payment-progress" class="payment-progress"></p></section>
+            <section class="rail-panel"><p id="review-label" class="rail-kicker"></p><h2 id="review-title"></h2><p id="review-detail" class="muted"></p><div id="review-amount" class="rail-amount"></div><button id="review-action" class="button" type="button">View milestone</button></section>
+            <section class="rail-panel"><p class="rail-kicker">Next milestone</p><h2 id="next-title"></h2><p id="next-detail" class="muted"></p><button id="next-action" class="button primary" type="button">Open deliverables</button></section>
+            <section class="rail-panel"><p class="eyebrow">Project details</p><dl id="project-details" class="project-details"></dl><a class="text-link" href="#" id="contract-version-link">View Contract Version <span aria-hidden="true">→</span></a></section>
+          </aside>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/contract.bundle.js"></script>
+  </body>
+</html>

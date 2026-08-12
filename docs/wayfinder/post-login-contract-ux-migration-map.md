@@ -15,7 +15,7 @@ This is a planning map. Consult `CONTEXT.md`, `design-system/pactflow/MASTER.md`
 
 ## Decisions so far
 
-<!-- the index is populated as tickets resolve -->
+- [Dashboard and Contract experience delivery](tickets/038-dashboard-and-contract-experience-delivery.md) — superseded: targeted Contracts-list/Dashboard delivery is complete, and the former dense Contract Draft detail has been replaced by the permanent authenticated Contract detail.
 
 ## Not yet specified
 

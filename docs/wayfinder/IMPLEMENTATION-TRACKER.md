@@ -26,12 +26,13 @@ Ticket 02's Ticket 01 dependency is now satisfied; it is the next eligible conve
 9. [Contract publishing and authoring deep links](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/09-contract-publishing-and-authoring-deep-links.md) — blocked by 8.
 10. [Dynamic Contract detail and exact-version acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/10-dynamic-contract-detail-and-exact-version-acceptance.md) — blocked by 2.
 11. [Standalone Wallet](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/11-standalone-wallet.md) — blocked by 2.
-12. [Invitation acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/12-invitation-acceptance.md) — ready to select.
+12. [Invitation acceptance](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/12-invitation-acceptance.md) — **complete 2026-08-12**: typed route and protected invitation-state API render truthful eligibility, expiry, resolution, authentication, failure, and success states. Migration `20260812100000` and linked RLS regression evidence verify exact-invitee access and repeat-acceptance protection.
 13. [Remove interim frontend and verify route/API parity](../../wayfinder/tickets/complete-nextjs-typescript-backend-conversion/issues/13-remove-interim-frontend-and-verify-route-api-parity.md) — blocked by 3 through 6 and 9 through 12.
 
 ## Current evidence
 
 - Conversion Ticket 01 is complete: public landing/authentication now render through typed Next App Router pages, with the Node API retaining auth configuration, session, onboarding, and loopback fixture boundaries. Rendered route/API checks plus production build and full-suite evidence are recorded in the ticket.
+- Conversion Ticket 12 is complete: the typed invitation route surfaces eligible, expired, resolved, successful, unauthenticated, invalid, and failure states through a protected backend read/acceptance boundary. Migration `20260812100000` is applied, and the linked RLS regression suite verifies exact-invitee access, repeat-acceptance rejection, and non-invitee protection.
 
 - Durable Supabase Profile, Profile-owned Contract party/access, invitation, Contract-Version, Authority, case-access, and notification foundations have linked-project RLS coverage.
 - The responsive signed-in shell, People discovery/connection foundation, Profile Settings hydration, Contract Draft handoff, and standalone Wallet have committed browser and endpoint coverage. The permanent Contract detail has presentation and endpoint coverage and is backed by durable Profile-scoped simulator records for interaction checking; its simulated amounts and activity are not chain-authoritative settlement evidence.

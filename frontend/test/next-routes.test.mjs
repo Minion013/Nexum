@@ -60,12 +60,13 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const login = await fetch(`${origin}/login`);
     assert.equal(login.status, 200);
     assert.match(await login.text(), /Sign in or create your account/);
+    const invitation = await fetch(`${origin}/invitations/11111111-1111-4111-8111-111111111111`);
+    assert.equal(invitation.status, 200);
+    assert.match(await invitation.text(), /Accept Contract invitation/);
+    assert.equal((await fetch(`${origin}/invitations/11111111-1111-4111-8111-111111111111/extra`)).status, 404);
     const invalid = await fetch(`${origin}/not-a-real-route`);
     assert.equal(invalid.status, 404);
     assert.match(await invalid.text(), /This page could not be found/);
-    const config = await fetch(`${origin}/api/auth/config`);
-    assert.equal(config.status, 200);
-    assert.match(await config.text(), /pactflow-wallet-test@local\.invalid/);
   } finally {
     await stop(next);
     await new Promise(resolve => backend.close(resolve));

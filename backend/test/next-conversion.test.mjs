@@ -32,6 +32,20 @@ test('landing and login are typed App Router pages without public-page rewrites'
   assert.doesNotMatch(nextConfig, /source: '\/login'/);
 });
 
+test('the invitation URL is a typed dynamic route with protected state handling', async () => {
+  const invitation = await readFile(new URL('../../frontend/app/invitations/[invitationId]/page.tsx', import.meta.url), 'utf8');
+  const invitationClient = await readFile(new URL('../../frontend/src/invitations/acceptance.tsx', import.meta.url), 'utf8');
+  const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+
+  assert.match(invitation, /InvitationAcceptance/);
+  assert.match(invitationClient, /\/api\/invitations/);
+  assert.match(invitationClient, /eligible/);
+  assert.match(invitationClient, /expired/);
+  assert.match(invitationClient, /resolved/);
+  assert.match(invitationClient, /unauthenticated/);
+  assert.doesNotMatch(nextConfig, /source: '\/invitations\/:invitationId'/);
+});
+
 test('authentication boundary covers valid, expired, unauthenticated, unavailable, and invalid requests', async () => {
   const calls = [];
   const { server, origin } = await start({

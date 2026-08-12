@@ -24,8 +24,7 @@ const nextConfig: NextConfig = {
         { source: '/contacts', destination: '/people.html' },
         { source: '/notifications', destination: '/notifications.html' },
         { source: '/settings', destination: '/settings.html' },
-        { source: '/authorities', destination: '/authorities.html' },
-        { source: '/invitations/:invitationId', destination: '/invitation.html' }
+        { source: '/authorities', destination: '/authorities.html' }
       ]
     };
   }
