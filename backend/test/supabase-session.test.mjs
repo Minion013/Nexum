@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
-import { contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createNotificationWorkflow, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, isLoopbackAddress, localTestProfileFromEnvironment, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
+import { AuthorizationError, contractAcceptanceTypedData, createApp, createContractWorkflow, createHomeLoader, createNotificationLoader, createNotificationWorkflow, createPeopleLoader, createProfileLoader, createProfileSettingsWorkflow, isLoopbackAddress, localTestProfileFromEnvironment, runtimeConfigurationFromEnvironment, suggestContractDraft } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -905,6 +905,30 @@ test('a verified Contract Party can read and save a validated durable Contract d
       { operation: 'getDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id' } },
       { operation: 'saveDraft', input: { userId: 'party-id', accessToken: 'party-jwt', contractId: 'contract-id', ...changes } }
     ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a non-Contract-Party cannot save a draft through the authenticated API', async () => {
+  const { server, origin } = await start({
+    verifySupabaseSession: async token => {
+      if (token === 'non-party-jwt') return { id: 'unrelated-profile-id', email: 'unrelated@example.com' };
+      throw new Error('invalid token');
+    },
+    contractWorkflow: {
+      saveDraft: async ({ userId }) => {
+        if (userId !== 'party-id') throw new AuthorizationError('Only a Contract Party can edit this Contract Draft.');
+        return { id: 'contract-id' };
+      }
+    }
+  });
+  try {
+    const body = { authorityId: 'authority-id', parties: {}, scope: {}, milestones: [], payment: {}, evidence: {}, intellectualProperty: {}, changeControl: {}, notices: {} };
+    assert.equal((await request(origin, '/api/contracts/contract-id', { method: 'PUT', body })).status, 401);
+    const response = await request(origin, '/api/contracts/contract-id', { token: 'non-party-jwt', method: 'PUT', body });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: 'Only a Contract Party can edit this Contract Draft.' });
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

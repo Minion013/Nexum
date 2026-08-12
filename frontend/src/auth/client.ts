@@ -30,12 +30,14 @@ export type SessionPayload = {
 export class ApiError extends Error {
   readonly code?: string;
   readonly status: number;
+  readonly issues?: Array<{ sectionType?: string; fieldPath?: string; code?: string; message: string }>;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, issues?: Array<{ sectionType?: string; fieldPath?: string; code?: string; message: string }>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.issues = issues;
   }
 }
 
@@ -66,8 +68,8 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, aut
   if (auth.accessToken) headers.set('authorization', `Bearer ${auth.accessToken}`);
   if (auth.localTestEmail) headers.set('x-pactflow-local-test-email', auth.localTestEmail);
   const response = await fetch(path, { ...options, headers, cache: 'no-store' });
-  const payload = await readPayload<T & { error?: string; code?: string }>(response);
-  if (!response.ok) throw new ApiError(payload.error ?? 'The request failed.', response.status, payload.code);
+  const payload = await readPayload<T & { error?: string; code?: string; issues?: Array<{ sectionType?: string; fieldPath?: string; code?: string; message: string }> }>(response);
+  if (!response.ok) throw new ApiError(payload.error ?? 'The request failed.', response.status, payload.code, payload.issues);
   return payload;
 }
 

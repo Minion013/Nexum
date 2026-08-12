@@ -115,6 +115,11 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const projectDetails = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/project-details`);
     assert.equal(projectDetails.status, 200);
     assert.match(await projectDetails.text(), /persisted draft/);
+    const reviewTerms = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/review-terms`);
+    assert.equal(reviewTerms.status, 200);
+    const reviewTermsMarkup = await reviewTerms.text();
+    assert.match(reviewTermsMarkup, /Review terms/);
+    assert.match(reviewTermsMarkup, /Milestones and payment/);
     const settings = await fetch(origin + '/settings');
     assert.equal(settings.status, 200);
     assert.match(await settings.text(), /Profile Settings/);

@@ -313,6 +313,12 @@ function createLocalPeopleFixture() {
 function createLocalContractsFixture() {
   let sequence = 0;
   const contracts = [];
+  const authority = {
+    id: '00000000-0000-4000-8000-000000000201',
+    name: 'PactFlow Simulation Authority',
+    jurisdictionLabel: 'Testnet simulation',
+    rulesetVersion: 'v1'
+  };
   const find = contractId => contracts.find(contract => contract.id === contractId);
   const list = () => contracts.map(contract => ({
     id: contract.id,
@@ -321,9 +327,28 @@ function createLocalContractsFixture() {
     latestVersionNumber: contract.versionNumber,
     counterparty: contract.sections.parties.counterparty_email ?? 'Counterparty to be confirmed',
     responsibility: contract.sections.parties.initiator_responsibility === 'buyer' ? 'Buyer' : 'Service Provider',
-    milestoneCount: 0,
+    milestoneCount: contract.sections.milestones?.items?.length ?? 0,
     lastActivityAt: contract.updatedAt
   }));
+  const draftFor = contract => ({
+    id: contract.id,
+    status: contract.status,
+    versionNumber: contract.versionNumber,
+    sections: {
+      parties: contract.sections.parties ?? {},
+      scope: contract.sections.scope ?? {},
+      milestones: contract.sections.milestones?.items ?? [],
+      payment: contract.sections.payment ?? {},
+      evidence: contract.sections.evidence ?? {},
+      intellectualProperty: contract.sections.intellectual_property ?? {},
+      changeControl: contract.sections.change_control ?? {},
+      notices: contract.sections.notices ?? {}
+    },
+    authority,
+    authorities: [authority],
+    paymentAuthority: 'not configured',
+    shareReady: false
+  });
   return {
     load: async () => ({ contracts: list() }),
     create: async ({ name, scope, counterpartyEmail, initiatorResponsibility }) => {
@@ -344,16 +369,23 @@ function createLocalContractsFixture() {
     getDraft: async ({ contractId }) => {
       const contract = find(requiredText(contractId, 'Contract'));
       if (!contract) throw new ValidationError('This Contract is unavailable.');
-      return {
-        id: contract.id,
-        status: contract.status,
-        versionNumber: contract.versionNumber,
-        sections: { parties: contract.sections.parties, scope: contract.sections.scope, milestones: [], payment: {}, evidence: {}, intellectualProperty: {}, changeControl: {}, notices: {} },
-        authority: { id: null, name: '', jurisdictionLabel: '', rulesetVersion: '' },
-        authorities: [],
-        paymentAuthority: 'not configured',
-        shareReady: false
+      return draftFor(contract);
+    },
+    saveDraft: async ({ contractId, ...draft }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Contract is unavailable.');
+      const validated = validatedDraft(draft);
+      const originalParties = contract.sections.parties ?? {};
+      contract.sections = {
+        ...validated.sections,
+        parties: {
+          ...validated.sections.parties,
+          ...(originalParties.counterparty_email ? { counterparty_email: originalParties.counterparty_email } : {})
+        }
       };
+      contract.versionNumber += 1;
+      contract.updatedAt = new Date().toISOString();
+      return draftFor(contract);
     }
   };
 }
@@ -547,6 +579,7 @@ function validatedDraft(draft) {
   const parties = section(draft.parties, 'parties');
   const buyer = section(parties.buyer, 'parties');
   const serviceProvider = section(parties.serviceProvider, 'parties');
+  const counterpartyEmail = optionalEmail(parties.counterparty_email ?? parties.counterpartyEmail);
   const validatedParties = {
     buyer: {
       partyRef: enumValue(buyer.partyRef, ['initiating_party', 'counterparty'], 'parties', 'buyer.partyRef', 'Buyer party'),
@@ -555,7 +588,8 @@ function validatedDraft(draft) {
     serviceProvider: {
       partyRef: enumValue(serviceProvider.partyRef, ['initiating_party', 'counterparty'], 'parties', 'serviceProvider.partyRef', 'Service provider party'),
       responsibility: text(serviceProvider.responsibility, 'parties', 'serviceProvider.responsibility', 'Service provider responsibility', 500)
-    }
+    },
+    ...(counterpartyEmail ? { counterparty_email: counterpartyEmail } : {})
   };
   if (validatedParties.buyer.partyRef === validatedParties.serviceProvider.partyRef) invalid('parties', 'serviceProvider.partyRef', 'duplicate_party', 'Buyer and service provider must be different Contract Parties.');
 
@@ -770,7 +804,11 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
   };
   const call = async ({ accessToken }, name, args, unavailableMessage) => {
     const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc(name, args);
-    if (error || !data) throw new ValidationError(unavailableMessage);
+    if (error) {
+      if (/only a Contract Party can edit this draft|only a Contract Party can invite/i.test(error.message ?? '')) throw new AuthorizationError('Only a Contract Party can edit this Contract Draft.');
+      throw new ValidationError(unavailableMessage);
+    }
+    if (!data) throw new ValidationError(unavailableMessage);
     return data;
   };
   const getDraft = async ({ accessToken, contractId }) => {
@@ -980,7 +1018,9 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
       if (contractMatch && request.method === 'PUT') {
         const session = await authenticate();
         const payload = await json(request);
-        const contract = await contractWorkflow.saveDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1], ...payload });
+        const contract = session.localTest
+          ? await localContracts.saveDraft({ contractId: contractMatch[1], ...payload })
+          : await contractWorkflow.saveDraft({ userId: session.userId, accessToken: session.accessToken, contractId: contractMatch[1], ...payload });
         return respond(response, 200, { contract });
       }
       const contractReviewMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/review$/);

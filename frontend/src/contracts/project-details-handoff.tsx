@@ -1,27 +1,108 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { apiRequest, type ApiError } from '../auth/client';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { apiRequest, ApiError } from '../auth/client';
 import { useSignedInAuth } from '../signed-in/app-shell';
+import { DraftIssues, DraftStepper } from './draft-components';
+import {
+  editableDraftFromContract,
+  linesToList,
+  listToLines,
+  type ContractDraftResponse,
+  type DraftIssue,
+  type EditableContractDraft,
+  utcFromLocalDateTime,
+  localDateTimeValue
+} from './draft-model';
 
-type Draft = { id: string; status: string; sections?: { parties?: { counterparty_email?: string | null }; scope?: { title?: string | null } } };
+type DraftPayload = { contract: ContractDraftResponse };
 
-export function ProjectDetailsHandoffPage({ contractId }: { contractId: string }) {
-  const { status, auth } = useSignedInAuth();
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function LoadingDraft() {
+  return <section className="app-panel" aria-busy="true"><p className="eyebrow">Contract Draft</p><h1>Loading your persisted draft...</h1><p className="empty" role="status">Checking your authorised Project details.</p></section>;
+}
+
+function DraftUnavailable({ error }: { error: ApiError | Error | null }) {
+  const forbidden = error instanceof ApiError && error.status === 403;
+  return <section className="app-panel" aria-labelledby="project-details-error"><p className="eyebrow">Contract Draft</p><h1 id="project-details-error">{forbidden ? 'This Contract Draft is restricted.' : 'This Contract Draft is unavailable.'}</h1><p className="page-intro" role="alert">{forbidden ? 'Only a Contract Party can edit or view this draft.' : error?.message || 'The protected Contract Draft could not be loaded.'}</p><p><Link className="button" href="/contracts">Back to Contracts</Link></p></section>;
+}
+
+export function ProjectDetailsPage({ contractId }: { contractId: string }) {
+  const { status, auth, profile } = useSignedInAuth();
+  const router = useRouter();
+  const [draft, setDraft] = useState<EditableContractDraft | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<ApiError | Error | null>(null);
+  const [issues, setIssues] = useState<DraftIssue[]>([]);
+
+  const loadDraft = useCallback(async () => {
+    if (!auth) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiRequest<DraftPayload>(`/api/contracts/${encodeURIComponent(contractId)}`, {}, auth);
+      setDraft(editableDraftFromContract(response.contract, profile?.email ?? ''));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError : new Error('The protected Contract Draft could not be loaded.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [auth, contractId, profile?.email]);
 
   useEffect(() => {
-    if (status !== 'ready' || !auth) return;
-    void apiRequest<{ contract: Draft }>(`/api/contracts/${encodeURIComponent(contractId)}`, {}, auth)
-      .then(response => setDraft(response.contract))
-      .catch(requestError => setError((requestError as ApiError).message || 'This Contract Draft is unavailable.'));
-  }, [auth, contractId, status]);
+    if (status === 'ready') void loadDraft();
+  }, [loadDraft, status]);
 
-  if (status === 'loading' || (!draft && !error)) return <section className="app-panel" aria-busy="true"><p className="eyebrow">Contract Draft</p><h1>Loading the persisted draft...</h1><p className="empty" role="status">Checking your authorised Contract Draft.</p></section>;
-  if (error) return <section className="app-panel" aria-labelledby="project-details-error"><p className="eyebrow">Contract Draft</p><h1 id="project-details-error">This Contract Draft is unavailable.</h1><p className="page-intro" role="alert">{error}</p><Link className="button" href="/contracts">Back to Contracts</Link></section>;
+  function updateScope(field: keyof EditableContractDraft['scope'], value: string | string[]) {
+    setDraft(current => current ? { ...current, scope: { ...current.scope, [field]: value } } : current);
+    setIssues([]);
+  }
 
-  const counterparty = draft?.sections?.parties?.counterparty_email || 'No counterparty selected yet';
-  return <section className="contract-authoring-flow app-panel" aria-labelledby="project-details-handoff-title"><ol className="contract-stepper" aria-label="Contract Draft steps"><li className="done">1. Choose Person</li><li aria-current="step">2. Project details</li><li>3. Review terms</li><li>4. Send</li></ol><p className="eyebrow">Contract Draft saved</p><h1 id="project-details-handoff-title">Continue with Project details.</h1><p className="page-intro">Your private draft is now persisted and remains visible only to its Contract Party. The editable Project details form continues from this saved draft.</p><dl className="project-details"><dt>Draft</dt><dd>{draft?.sections?.scope?.title || 'Untitled Contract Draft'}</dd><dt>Counterparty</dt><dd>{counterparty}</dd><dt>Status</dt><dd>{draft?.status || 'private_draft'}</dd></dl><p className="notice">Full Project details and editable terms are the next conversion step. No invitation or Contract access has been created.</p><div className="action-row"><Link className="button" href="/contracts">Save and exit</Link></div></section>;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!draft || !auth || saving) return;
+    setSaving(true);
+    setError(null);
+    setIssues([]);
+    try {
+      const response = await apiRequest<DraftPayload>(`/api/contracts/${encodeURIComponent(contractId)}`, { method: 'PUT', body: JSON.stringify(draft) }, auth);
+      setDraft(editableDraftFromContract(response.contract, profile?.email ?? ''));
+      router.push(`/contracts/${encodeURIComponent(contractId)}/review-terms`);
+    } catch (requestError) {
+      const apiError = requestError as ApiError;
+      setError(apiError);
+      setIssues(apiError.issues ?? []);
+      setSaving(false);
+    }
+  }
+
+  if (status === 'loading' || loading) return <LoadingDraft />;
+  if (error && !draft) return <DraftUnavailable error={error} />;
+  if (!draft) return <DraftUnavailable error={new Error('The protected Contract Draft could not be loaded.')} />;
+
+  const counterparty = draft.parties.counterparty_email || 'Counterparty to be confirmed';
+  return <section className="contract-authoring-flow draft-editor app-panel" aria-labelledby="project-details-title">
+    <DraftStepper current="Project details" />
+    <div className="draft-heading"><div><p className="eyebrow">Step 2 of 4 · Project details</p><h1 id="project-details-title">Give the work a clear shape.</h1><p className="page-intro">Save the scope before reviewing responsibilities, payment, evidence, and the exact terms the other Contract Party will see.</p></div><span className="draft-status">Private draft</span></div>
+    <dl className="draft-context"><div><dt>Counterparty</dt><dd>{counterparty}</dd></div><div><dt>Access</dt><dd>Only Contract Parties</dd></div><div><dt>Authority</dt><dd>{draft.authorityId ? 'Selected registry authority' : 'Choose an authority'}</dd></div></dl>
+    {error && <div className="notice draft-error" role="alert"><strong>Project details could not be saved.</strong><span>{error.message}</span><DraftIssues issues={issues} /></div>}
+    <form className="draft-form" onSubmit={submit}>
+      <fieldset className="draft-card">
+        <legend>Project scope</legend>
+        <p className="muted">Describe the outcome both Contract Parties can recognise, including what is and is not included.</p>
+        <label htmlFor="project-title">Project title<input id="project-title" value={draft.scope.title} onChange={event => updateScope('title', event.target.value)} maxLength={160} required /></label>
+        <label htmlFor="project-description">What is the work?<textarea id="project-description" value={draft.scope.description} onChange={event => updateScope('description', event.target.value)} rows={4} maxLength={4000} required /></label>
+        <label htmlFor="project-outcome">What does done look like?<textarea id="project-outcome" value={draft.scope.outcome} onChange={event => updateScope('outcome', event.target.value)} rows={3} maxLength={1000} required /></label>
+        <label htmlFor="project-start">Project start<input id="project-start" type="datetime-local" value={localDateTimeValue(draft.scope.projectStartDateUtc)} onChange={event => updateScope('projectStartDateUtc', utcFromLocalDateTime(event.target.value))} required /></label>
+        <div className="draft-two-column"><label htmlFor="included-deliverables">Included deliverables<textarea id="included-deliverables" value={listToLines(draft.scope.includedDeliverables)} onChange={event => updateScope('includedDeliverables', linesToList(event.target.value))} rows={4} required /></label><label htmlFor="excluded-work">Excluded work<textarea id="excluded-work" value={listToLines(draft.scope.excludedWork)} onChange={event => updateScope('excludedWork', linesToList(event.target.value))} rows={4} required /></label></div>
+        <label htmlFor="client-dependencies">Client dependencies <span className="muted">(one per line)</span><textarea id="client-dependencies" value={listToLines(draft.scope.clientDependencies)} onChange={event => updateScope('clientDependencies', linesToList(event.target.value))} rows={3} /></label>
+      </fieldset>
+      <div className="draft-actions action-row"><Link className="button" href={`/contracts/${encodeURIComponent(contractId)}/choose-person`}>Back to Person</Link><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving Project details...' : 'Save and review terms'}</button></div>
+    </form>
+  </section>;
 }
+
+// Kept as a compatibility export for the prior typed handoff route and its tests.
+export const ProjectDetailsHandoffPage = ProjectDetailsPage;

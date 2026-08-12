@@ -82,6 +82,10 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   const newEntryRoute = await readFile(new URL('../../frontend/app/contracts/new/choose-person/page.tsx', import.meta.url), 'utf8');
   const existingEntryRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/choose-person/page.tsx', import.meta.url), 'utf8');
   const projectDetailsRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/project-details/page.tsx', import.meta.url), 'utf8');
+  const reviewTermsRoute = await readFile(new URL('../../frontend/app/contracts/[contractId]/review-terms/page.tsx', import.meta.url), 'utf8');
+  const projectDetailsClient = await readFile(new URL('../../frontend/src/contracts/project-details-handoff.tsx', import.meta.url), 'utf8');
+  const reviewTermsClient = await readFile(new URL('../../frontend/src/contracts/review-terms.tsx', import.meta.url), 'utf8');
+  const draftModel = await readFile(new URL('../../frontend/src/contracts/draft-model.ts', import.meta.url), 'utf8');
   const entryClient = await readFile(new URL('../../frontend/src/contracts/authoring-entry.tsx', import.meta.url), 'utf8');
   const nextConfig = await readFile(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
 
@@ -94,6 +98,15 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   assert.match(newEntryRoute, /AuthoringEntryPage/);
   assert.match(existingEntryRoute, /AuthoringEntryPage/);
   assert.match(projectDetailsRoute, /ProjectDetailsHandoffPage/);
+  assert.match(reviewTermsRoute, /ReviewTermsPage/);
+  assert.match(projectDetailsClient, /\/api\/contracts\/.*PUT|method: 'PUT'/s);
+  assert.match(projectDetailsClient, /Save and review terms/);
+  assert.match(reviewTermsClient, /Milestones and payment/);
+  assert.match(reviewTermsClient, /Required Acceptance Criterion/);
+  assert.match(reviewTermsClient, /Evidence and change control/);
+  assert.match(reviewTermsClient, /\/api\/contracts\/.*PUT|method: 'PUT'/s);
+  assert.match(draftModel, /editableDraftFromContract/);
+  assert.match(draftModel, /utcFromLocalDateTime/);
   assert.match(entryClient, /\/api\/people/);
   assert.match(entryClient, /\/api\/contracts/);
   assert.match(entryClient, /exact-email/);
@@ -101,6 +114,7 @@ test('Contracts and the initial authoring entry use typed routes, protected choi
   assert.match(entryClient, /project-details/);
   assert.doesNotMatch(entryClient, /counterpartyProfileId/);
   assert.doesNotMatch(nextConfig, /source: '\/contracts'/);
+  assert.doesNotMatch(nextConfig, /contract-author-review-terms\.html/);
 });
 
 test('Profile Settings uses a typed route and the protected private-avatar workflow', async () => {
@@ -220,6 +234,59 @@ test('the loopback test email can persist a private Contract Draft handoff witho
     assert.equal((await listed.json()).contracts[0].counterparty, 'person@example.com');
     const draft = await request(origin, `/api/contracts/${contractId}`, { headers });
     assert.equal((await draft.json()).contract.sections.parties.counterparty_email, 'person@example.com');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the loopback test email can save and reload a fully validated private Contract Draft', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  const body = {
+    authorityId: '00000000-0000-4000-8000-000000000201',
+    parties: {
+      counterparty_email: 'counterparty@example.com',
+      buyer: { partyRef: 'initiating_party', responsibility: 'Funds the agreed allocation.' },
+      serviceProvider: { partyRef: 'counterparty', responsibility: 'Delivers the agreed outcomes.' }
+    },
+    scope: {
+      title: 'Typed Contract conversion',
+      description: 'Convert the authoring flow to typed Next.js routes.',
+      outcome: 'A saved, reviewable Contract Version.',
+      includedDeliverables: ['Project details route', 'Review terms route'],
+      excludedWork: ['Settlement implementation'],
+      projectStartDateUtc: '2030-09-01T09:00:00.000Z',
+      clientDependencies: ['Access to the source repository']
+    },
+    milestones: [
+      { title: 'Project details', deliveryOutcome: 'Persist the agreed scope.', allocation: 400, evidenceRequirement: 'A private scope summary.', acceptanceCriteria: [{ description: 'The scope is saved.', required: true }], deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 },
+      { title: 'Review terms', deliveryOutcome: 'Persist the complete editable terms.', allocation: 600, evidenceRequirement: 'A private review record without secrets.', acceptanceCriteria: [{ description: 'Every required term is present.', required: true }], deliveryDeadlineUtc: '2030-09-24T09:00:00.000Z', reviewWindowHours: 72 }
+    ],
+    payment: { settlementToken: 'eUSD testnet demonstration token', network: 'Base Sepolia', totalAllocation: 1000, fundingDeadlineUtc: '2030-09-05T09:00:00.000Z', successFeeBps: 0, feeRecipient: '' },
+    evidence: { reviewDecision: 'Buyer records acceptance or a specific change request.', dependencyAcknowledgementRequired: false },
+    intellectualProperty: { outcome: 'client_owns_project_deliverables_on_final_settlement', licenseScope: '', confidentiality: 'not_requested', confidentialityDuration: '' },
+    changeControl: { proposalProcess: 'Either Party may propose a written change request.', bilateralAmendmentOnly: true },
+    notices: { buyerContact: 'buyer@example.com', serviceProviderContact: 'counterparty@example.com', exactVersionAcknowledgement: true }
+  };
+  try {
+    const created = await fetch(origin + '/api/contracts', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Typed Contract conversion', scope: 'Convert the authoring flow.', counterpartyEmail: body.parties.counterparty_email, initiatorResponsibility: 'buyer' }) });
+    const contractId = (await created.json()).contract.id;
+    const invalid = await fetch(origin + '/api/contracts/' + contractId, { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ ...body, milestones: [{ ...body.milestones[0], evidenceRequirement: 'https://example.com/private-key' }, body.milestones[1]] }) });
+    assert.equal(invalid.status, 422);
+    assert.equal((await invalid.json()).issues[0].code, 'unsafe_evidence_reference');
+    const saved = await fetch(origin + '/api/contracts/' + contractId, { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(saved.status, 200);
+    const savedContract = (await saved.json()).contract;
+    assert.equal(savedContract.sections.milestones.length, 2);
+    assert.equal(savedContract.sections.payment.totalAllocation, 1000);
+    assert.equal(savedContract.versionNumber, 2);
+    const reloaded = await request(origin, '/api/contracts/' + contractId, { headers });
+    assert.equal(reloaded.status, 200);
+    const reloadedContract = (await reloaded.json()).contract;
+    assert.equal(reloadedContract.sections.scope.title, 'Typed Contract conversion');
+    assert.equal(reloadedContract.sections.milestones[1].acceptanceCriteria[0].required, true);
+    assert.equal((await fetch(origin + '/api/contracts/' + contractId, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).status, 401);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
