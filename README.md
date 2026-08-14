@@ -83,6 +83,8 @@ The remaining testnet work includes Contract-specific Escrow Vault creation, wal
 - **Network:** Base Sepolia testnet.
 - **Repository shape:** npm workspaces for the `frontend` and `backend` applications.
 
+---
+
 ## Run locally
 
 ### Requirements
@@ -133,3 +135,9 @@ backend/    Node.js API, workflow boundaries, tests, and deployment scripts
 contracts/  Solidity sources for the testnet escrow foundation
 supabase/   Database migrations, authentication templates, and durable-access tests
 ```
+
+---
+
+### About
+
+Developed by **Jabier Ho Wei Le and Haley Tan Hui Xin** for the **NTU CCTF SNZ InnovateX 2026 Hackathon**.
