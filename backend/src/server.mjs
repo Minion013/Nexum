@@ -19,6 +19,8 @@ const coPilotFirstMilestoneOffsetDays = 14;
 const coPilotSecondMilestoneOffsetDays = 28;
 const coPilotMilestoneReviewWindowHours = 72;
 const coPilotAuthorityNotice = 'These are editable drafting suggestions. The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes.';
+const milestoneEvidenceResourceKinds = ['document', 'repository', 'design', 'other'];
+const milestoneEvidenceIntegrityPattern = /^sha(?:256|512):[a-f0-9]+$/;
 
 export function contractAcceptanceTypedData({ contractId, versionId, versionHash }) {
   return {
@@ -310,9 +312,33 @@ function createLocalPeopleFixture() {
     }
   };
 }
-function createLocalContractsFixture() {
+export function validateMilestoneEvidencePayload(payload = {}) {
+  const resource = payload?.resource;
+  if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new ValidationError('A protected evidence resource is required.');
+  const resourceName = requiredText(resource.name, 'Evidence resource name', 160);
+  const resourceKind = enumValue(resource.kind, milestoneEvidenceResourceKinds, 'evidence', 'resource.kind', 'Evidence resource kind');
+  const mediaType = requiredText(resource.mediaType, 'Evidence media type', 160);
+  const sizeBytes = Number(resource.sizeBytes);
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 50_000_000_000) throw new ValidationError('Evidence resource size must be a positive safe number of bytes.');
+  const protectedLocator = requiredText(resource.protectedLocator, 'Protected evidence locator', 500);
+  if (/\b(?:https?|ftp):\/\//i.test(protectedLocator)) throw new ValidationError('Protected evidence locators must not contain a raw private URL.');
+  if (/\b(?:password|private\s+key|api\s*key|secret|bearer\s+token|credential)\b/i.test(JSON.stringify(resource))) throw new ValidationError('Evidence metadata must not contain credentials or secrets.');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(protectedLocator)) throw new ValidationError('Protected evidence locator must be an opaque resource reference.');
+  const integrityReference = payload.integrityReference == null || payload.integrityReference === '' ? null : requiredText(payload.integrityReference, 'Evidence integrity reference', 256);
+  if (integrityReference && !milestoneEvidenceIntegrityPattern.test(integrityReference)) throw new ValidationError('Evidence integrity reference must use a supported sha256 or sha512 format.');
+  return { resource: { name: resourceName, kind: resourceKind, mediaType, sizeBytes, protectedLocator }, integrityReference };
+}
+
+function requiredMilestoneKey(value) {
+  const key = requiredText(value, 'Milestone');
+  if (!/^milestone-[1-9][0-9]*$/.test(key)) throw new ValidationError('Milestone identifiers must use the milestone-N format.');
+  return key;
+}
+
+function createLocalContractsFixture(localTestProfile = { id: '00000000-0000-4000-8000-000000000099', email: 'pactflow-wallet-test@local.invalid' }) {
   let sequence = 0;
   let invitationSequence = 0;
+  let evidenceSequence = 0;
   const contracts = [];
   const authority = {
     id: '00000000-0000-4000-8000-000000000201',
@@ -320,7 +346,27 @@ function createLocalContractsFixture() {
     jurisdictionLabel: 'Testnet simulation',
     rulesetVersion: 'v1'
   };
-  const find = contractId => contracts.find(contract => contract.id === contractId);
+  const reviewContractId = '00000000-0000-4000-8000-000000000901';
+  const reviewDeadline = new Date(Date.now() + 7 * oneDayInMilliseconds).toISOString();
+  const reviewContract = {
+    id: reviewContractId,
+    status: 'active',
+    versionNumber: 1,
+    shareReady: true,
+    updatedAt: new Date().toISOString(),
+    sections: {
+      parties: { buyer: { partyRef: 'counterparty', responsibility: 'Funds the agreed Contract milestones.' }, serviceProvider: { partyRef: 'initiating_party', responsibility: 'Delivers the agreed Contract milestones.' } },
+      scope: { title: 'Local milestone review', description: 'A local-only active Contract for protected review acceptance.' },
+      milestones: { items: [{ title: 'Research', deliveryOutcome: 'Annotated research findings', allocation: 400, evidenceRequirement: 'Private annotated findings.', acceptanceCriteria: [{ description: 'Research findings are documented.', required: true }], deliveryDeadlineUtc: reviewDeadline, reviewWindowHours: 72 }] },
+      payment: { settlementToken: 'eUSD testnet demonstration token', totalAllocation: 400, paymentAuthority: 'not_configured' },
+      evidence: { reviewDecision: 'Buyer records a review decision from the protected Milestone Review.' },
+      change_control: { bilateralAmendmentOnly: true },
+      notices: { buyerContact: 'buyer@example.test', serviceProviderContact: localTestProfile.email }
+    },
+    milestoneEvidence: [],
+    activity: [{ id: 'local-activity-1', milestoneKey: 'milestone-1', type: 'contract_activated', occurredAt: new Date(Date.now() - 60_000).toISOString(), detail: 'Contract milestone review is available.' }]
+  };
+  const find = contractId => contracts.find(contract => contract.id === contractId) ?? (contractId === reviewContractId ? reviewContract : undefined);
   const list = () => contracts.map(contract => ({
     id: contract.id,
     title: contract.sections.scope.title,
@@ -365,7 +411,26 @@ function createLocalContractsFixture() {
         evidence: draft.sections.evidence,
         changeControl: draft.sections.changeControl
       },
-      paymentAuthority: 'not configured'
+      paymentAuthority: 'not configured',
+      ...(contract.activity ? { activity: contract.activity } : {})
+    };
+  };
+  const milestoneReviewFor = (contract, milestoneKey) => {
+    const match = /^milestone-(\d+)$/.exec(requiredText(milestoneKey, 'Milestone'));
+    const number = Number(match?.[1]);
+    const milestone = contract.sections.milestones?.items?.[number - 1];
+    if (!match || !Number.isSafeInteger(number) || !milestone) throw new ValidationError('This Milestone Review is unavailable.');
+    const evidence = (contract.milestoneEvidence ?? []).filter(item => item.milestoneKey === milestoneKey);
+    const activity = (contract.activity ?? []).filter(item => item.milestoneKey === milestoneKey);
+    return {
+      id: contract.id,
+      status: contract.status,
+      version: { id: `${contract.id}-version-${contract.versionNumber}`, number: contract.versionNumber },
+      milestone: { key: milestoneKey, number, ...milestone },
+      responsibility: contract.id === reviewContractId ? 'Service Provider' : 'Buyer',
+      canSubmitEvidence: contract.id === reviewContractId && contract.status === 'active' && evidence.length === 0 && Date.parse(milestone.deliveryDeadlineUtc) > Date.now(),
+      evidence,
+      activity
     };
   };
   const reviewFor = contract => {
@@ -424,6 +489,22 @@ function createLocalContractsFixture() {
       const contract = find(requiredText(contractId, 'Contract'));
       if (!contract) throw new ValidationError('This Contract is unavailable.');
       return detailFor(contract);
+    },
+    getMilestoneReview: async ({ contractId, milestoneKey }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Milestone Review is unavailable.');
+      return milestoneReviewFor(contract, milestoneKey);
+    },
+    submitMilestoneEvidence: async ({ contractId, milestoneKey, resource, integrityReference }) => {
+      const contract = find(requiredText(contractId, 'Contract'));
+      if (!contract) throw new ValidationError('This Milestone Review is unavailable.');
+      const review = milestoneReviewFor(contract, milestoneKey);
+      if (review.responsibility !== 'Service Provider' || !review.canSubmitEvidence) throw new ValidationError('This milestone is not eligible for evidence submission.');
+      const submittedAt = new Date().toISOString();
+      const evidence = { id: `local-evidence-${String(901 + evidenceSequence++)}`, contractVersionId: `${contract.id}-version-${contract.versionNumber}`, milestoneKey, submittedByProfileId: localTestProfile.id, submittedAt, resource, integrityReference };
+      contract.milestoneEvidence.push(evidence);
+      contract.activity.push({ id: `local-activity-${String(contract.activity.length + 1)}`, contractVersionId: `${contract.id}-version-${contract.versionNumber}`, milestoneKey, type: 'evidence_submitted', occurredAt: submittedAt, detail: 'Private evidence was submitted for review.' });
+      return milestoneReviewFor(contract, milestoneKey);
     },
     getReview: async ({ contractId }) => {
       const contract = find(requiredText(contractId, 'Contract'));
@@ -883,6 +964,50 @@ function mapContractReview(contract) {
     paymentAuthority: 'not configured'
   };
 }
+
+export function mapMilestoneReview({ contract, milestoneKey, evidence = [], activity = [], userId, now = new Date() }) {
+  const version = [...(contract.contract_versions ?? [])].sort((left, right) => right.version_number - left.version_number)[0];
+  if (!version) throw new ValidationError('This Milestone Review has no readable Contract Version.');
+  const sections = new Map((version.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
+  const milestones = sections.get('milestones')?.items ?? [];
+  const milestoneNumber = Number(requiredMilestoneKey(milestoneKey).slice('milestone-'.length));
+  const sourceMilestone = milestones[milestoneNumber - 1];
+  if (!sourceMilestone) throw new ValidationError('This Milestone Review is unavailable.');
+  const parties = sections.get('parties') ?? {};
+  const creatorProfileId = contract.created_by_profile_id;
+  const isInitiatingParty = userId === creatorProfileId;
+  const serviceProviderRef = parties.serviceProvider?.partyRef ?? (parties.initiator_responsibility === 'service_provider' ? 'initiating_party' : 'counterparty');
+  const isServiceProvider = serviceProviderRef === 'initiating_party' ? isInitiatingParty : !isInitiatingParty;
+  const isParty = (contract.contract_parties ?? []).some(party => party.profile_id === userId);
+  const versionEvidence = evidence.filter(item => !item.contract_version_id || item.contract_version_id === version.id);
+  const versionActivity = activity.filter(item => !item.contract_version_id || item.contract_version_id === version.id);
+  const priorMilestonesComplete = milestones.slice(0, milestoneNumber - 1).every((_, index) => versionEvidence.some(item => item.milestone_key === `milestone-${index + 1}`));
+  const mappedEvidence = evidence
+    .filter(item => (!item.contract_version_id || item.contract_version_id === version.id) && item.milestone_key === milestoneKey)
+    .map(item => ({ id: item.id, milestoneKey: item.milestone_key, submittedByProfileId: item.submitted_by_profile_id, submittedAt: item.submitted_at, resource: item.resource_metadata ?? {}, integrityReference: item.integrity_reference ?? null }));
+  const mappedActivity = versionActivity
+    .filter(item => item.milestone_key === milestoneKey)
+    .map(item => ({ id: item.id, milestoneKey: item.milestone_key, type: item.event_type, actorProfileId: item.actor_profile_id, occurredAt: item.occurred_at, detail: item.payload?.detail ?? null }));
+  const firstEvidenceAt = mappedEvidence[0]?.submittedAt ? Date.parse(mappedEvidence[0].submittedAt) : NaN;
+  const reviewWindowMs = Number(sourceMilestone.reviewWindowHours) * oneDayInMilliseconds / 24;
+  const reviewWindow = Number.isFinite(firstEvidenceAt) && Number.isFinite(reviewWindowMs) ? {
+    submittedAt: mappedEvidence[0].submittedAt,
+    expiresAt: new Date(firstEvidenceAt + reviewWindowMs).toISOString(),
+    state: firstEvidenceAt + reviewWindowMs <= now.getTime() ? 'expired' : 'open'
+  } : null;
+  return {
+    id: contract.id,
+    status: contract.status,
+    version: { id: version.id, number: version.version_number },
+    milestone: { key: milestoneKey, number: milestoneNumber, ...sourceMilestone },
+    responsibility: isServiceProvider ? 'Service Provider' : 'Buyer',
+    canSubmitEvidence: isParty && isServiceProvider && contract.status === 'active' && mappedEvidence.length === 0 && priorMilestonesComplete && Date.parse(sourceMilestone.deliveryDeadlineUtc) > now.getTime(),
+    evidence: mappedEvidence,
+    activity: mappedActivity,
+    reviewWindow
+  };
+}
+
 export function createContractWorkflow(config = publicSupabaseConfigFromEnvironment(), createSupabaseClient = createClient) {
   if (!config.url || !config.publishableKey) return {
     create: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
@@ -891,6 +1016,8 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     getInvitation: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getDetail: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    getMilestoneReview: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
+    submitMilestoneEvidence: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     suggest: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     saveDraft: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
     getReview: async () => { throw new AuthenticationError('Supabase authentication is not configured.'); },
@@ -932,6 +1059,35 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     if (error || !data) throw new ValidationError('This Contract is unavailable.');
     return mapContractDetail(data, userId);
   };
+  const getMilestoneReview = async ({ userId, accessToken, contractId, milestoneKey }) => {
+    const targetContractId = requiredText(contractId, 'Contract');
+    const targetMilestoneKey = requiredMilestoneKey(milestoneKey);
+    const supabase = authenticatedSupabaseClient(config, createSupabaseClient, accessToken);
+    const [contractResult, evidenceResult, activityResult] = await Promise.all([
+      supabase.from('contracts').select('id, status, created_by_profile_id, contract_parties(id, profile_id, profiles!contract_parties_profile_id_fkey(display_name, email)), contract_versions(id, version_number, contract_sections(section_type, position, terms))').eq('id', targetContractId).single(),
+      supabase.from('milestone_evidence_submissions').select('id, contract_id, contract_version_id, milestone_key, submitted_by_profile_id, submitted_at, resource_metadata, integrity_reference, dispute_case_id').eq('contract_id', targetContractId).order('submitted_at', { ascending: true }),
+      supabase.from('milestone_activity').select('id, contract_id, contract_version_id, milestone_key, event_type, actor_profile_id, occurred_at, payload, dispute_case_id').eq('contract_id', targetContractId).order('occurred_at', { ascending: true }).order('id', { ascending: true })
+    ]);
+    if (contractResult.error || !contractResult.data || evidenceResult.error || activityResult.error) throw new ValidationError('This Milestone Review is unavailable.');
+    return mapMilestoneReview({ contract: contractResult.data, milestoneKey: targetMilestoneKey, evidence: evidenceResult.data ?? [], activity: activityResult.data ?? [], userId });
+  };
+  const submitMilestoneEvidence = async ({ userId, accessToken, contractId, milestoneKey, resource, integrityReference }) => {
+    const targetContractId = requiredText(contractId, 'Contract');
+    const targetMilestoneKey = requiredMilestoneKey(milestoneKey);
+    const validated = validateMilestoneEvidencePayload({ resource, integrityReference });
+    const { data, error } = await authenticatedSupabaseClient(config, createSupabaseClient, accessToken).rpc('submit_milestone_evidence', {
+      target_contract_id: targetContractId,
+      target_milestone_key: targetMilestoneKey,
+      resource_metadata: validated.resource,
+      integrity_reference: validated.integrityReference
+    });
+    if (error) {
+      if (/only an authorised Contract Party|only the authorised Service Provider/i.test(error.message ?? '')) throw new AuthorizationError(error.message);
+      throw new ValidationError(error.message || 'This milestone is not eligible for evidence submission.');
+    }
+    if (!data) throw new ValidationError('This milestone evidence could not be recorded.');
+    return getMilestoneReview({ userId, accessToken, contractId: targetContractId, milestoneKey: targetMilestoneKey });
+  };
   return {
     create: async ({ accessToken, name, scope, counterpartyEmail, initiatorResponsibility }) => ({ id: await call({ accessToken }, 'create_profile_owned_contract', {
       contract_name: requiredText(name, 'Contract name', 160),
@@ -963,6 +1119,8 @@ export function createContractWorkflow(config = publicSupabaseConfigFromEnvironm
     },
     getDraft,
     getDetail,
+    getMilestoneReview,
+    submitMilestoneEvidence,
     suggest: async ({ accessToken, contractId, brief }) => suggestContractDraft({ brief, draft: await getDraft({ accessToken, contractId }) }),
     getReview,
     acceptVersion: async ({ userId, accessToken, contractId, versionId, walletAddress, walletSignature, versionHash }) => {
@@ -1009,7 +1167,7 @@ function sessionPayload(session, profile) { return { user: { id: session.userId,
 export function createApp({ verifySupabaseSession = createSupabaseSessionVerifier(), loadProfile = createProfileLoader(), loadHome = createHomeLoader(), loadContracts = createContractsLoader(), loadPeople = createPeopleLoader(), loadNotifications = createNotificationLoader(), loadAuthorities = createAuthorityRegistryLoader(), notificationWorkflow = createNotificationWorkflow(), peopleWorkflow = createPeopleWorkflow(), profileSettingsWorkflow = createProfileSettingsWorkflow(), contractWorkflow = createContractWorkflow(), completeProfileOnboarding = createProfileOnboardingCompleter(), publicSupabaseConfig = publicSupabaseConfigFromEnvironment(), localTestProfile = null } = {}) {
   const { serviceRoleKey: _serviceRoleKey, ...browserSupabaseConfig } = publicSupabaseConfig;
   const localPeople = localTestProfile ? createLocalPeopleFixture() : null;
-  const localContracts = localTestProfile ? createLocalContractsFixture() : null;
+  const localContracts = localTestProfile ? createLocalContractsFixture(localTestProfile) : null;
   const localNotifications = localTestProfile ? createLocalNotificationsFixture() : null;
   const localAuthorities = localTestProfile ? createLocalAuthorityRegistryFixture() : null;
   return createServer(async (request, response) => {
@@ -1107,6 +1265,23 @@ export function createApp({ verifySupabaseSession = createSupabaseSessionVerifie
           ? await localContracts.getDetail({ contractId: contractDetailMatch[1] })
           : await contractWorkflow.getDetail({ userId: session.userId, accessToken: session.accessToken, contractId: contractDetailMatch[1] });
         return respond(response, 200, { contract });
+      }
+      const milestoneReviewMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/milestones\/([^/]+)\/review$/);
+      if (milestoneReviewMatch && request.method === 'GET') {
+        const session = await authenticate();
+        const review = session.localTest
+          ? await localContracts.getMilestoneReview({ contractId: milestoneReviewMatch[1], milestoneKey: milestoneReviewMatch[2] })
+          : await contractWorkflow.getMilestoneReview({ userId: session.userId, accessToken: session.accessToken, contractId: milestoneReviewMatch[1], milestoneKey: milestoneReviewMatch[2] });
+        return respond(response, 200, { review });
+      }
+      const milestoneEvidenceMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/milestones\/([^/]+)\/evidence$/);
+      if (milestoneEvidenceMatch && request.method === 'POST') {
+        const session = await authenticate();
+        const validated = validateMilestoneEvidencePayload(await json(request));
+        const review = session.localTest
+          ? await localContracts.submitMilestoneEvidence({ contractId: milestoneEvidenceMatch[1], milestoneKey: milestoneEvidenceMatch[2], ...validated })
+          : await contractWorkflow.submitMilestoneEvidence({ userId: session.userId, accessToken: session.accessToken, contractId: milestoneEvidenceMatch[1], milestoneKey: milestoneEvidenceMatch[2], ...validated });
+        return respond(response, 201, { review });
       }
       const contractMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)$/);
       if (contractMatch && request.method === 'GET') {

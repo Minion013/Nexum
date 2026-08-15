@@ -136,6 +136,9 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const contractDetail = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300`);
     assert.equal(contractDetail.status, 200);
     assert.match(await contractDetail.text(), /Loading Contract detail/);
+    const milestoneReview = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/milestones/milestone-1`);
+    assert.equal(milestoneReview.status, 200);
+    assert.match(await milestoneReview.text(), /Loading Milestone Review/);
     const contractAcceptance = await fetch(`${origin}/contracts/00000000-0000-4000-8000-000000000300/accept`);
     assert.equal(contractAcceptance.status, 200);
     assert.match(await contractAcceptance.text(), /Loading Version review/);

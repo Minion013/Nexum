@@ -27,6 +27,7 @@ const routeInventory = [
   { url: '/contracts/:contractId/review-terms', route: 'app/contracts/[contractId]/review-terms/page.tsx', client: 'src/contracts/review-terms.tsx', api: ['/api/contracts/'], primary: 'Save exact terms', rendered: 'Review terms' },
   { url: '/contracts/:contractId/send', route: 'app/contracts/[contractId]/send/page.tsx', client: 'src/contracts/send.tsx', api: ['/api/contracts/', '/invitations'], primary: 'Send invitation', rendered: 'Loading Contract Send' },
   { url: '/contracts/:contractId', route: 'app/contracts/[contractId]/page.tsx', client: 'src/contracts/detail.tsx', api: ['/api/contracts/', '/detail', '/review'], primary: 'Sign and accept exact Version', rendered: 'Loading Contract detail' },
+  { url: '/contracts/:contractId/milestones/:milestoneKey', route: 'app/contracts/[contractId]/milestones/[milestoneKey]/page.tsx', client: 'src/contracts/milestone-review.tsx', support: ['src/contracts/milestone-review-presentation.ts'], api: ['/api/contracts/', '/milestones/', '/review', '/evidence'], primary: 'Submit final evidence', rendered: 'Loading Milestone Review' },
   { url: '/contracts/:contractId/accept', route: 'app/contracts/[contractId]/accept/page.tsx', client: 'src/contracts/acceptance.tsx', support: ['src/contracts/wallet-acceptance.tsx'], api: ['/api/contracts/', '/review', '/acceptances'], primary: 'Sign and accept exact Version', rendered: 'Loading Version review' },
   { url: '/wallet', route: 'app/wallet/page.tsx', client: 'src/wallet/wallet.tsx', support: ['src/auth/client.ts'], api: ['/api/auth/config'], primary: 'Connect external wallet', rendered: 'Personal test funds, kept separate' },
   { url: '/people', route: 'app/people/page.tsx', client: 'src/people/people.tsx', api: ['/api/people', '/api/people/connections'], primary: 'Discover People', rendered: 'Professional connections, kept separate from access' },
@@ -72,7 +73,7 @@ async function stop(process) {
 }
 
 function routePath(url) {
-  return url.replace(':contractId', sampleContractId).replace(':invitationId', sampleInvitationId);
+  return url.replace(':contractId', sampleContractId).replace(':milestoneKey', 'milestone-1').replace(':invitationId', sampleInvitationId);
 }
 
 const apiBoundaryByRoute = new Map([
@@ -88,6 +89,7 @@ const apiBoundaryByRoute = new Map([
   ['/contracts/:contractId/review-terms', `/api/contracts/${sampleContractId}`],
   ['/contracts/:contractId/send', `/api/contracts/${sampleContractId}`],
   ['/contracts/:contractId', `/api/contracts/${sampleContractId}/detail`],
+  ['/contracts/:contractId/milestones/:milestoneKey', `/api/contracts/${sampleContractId}/milestones/milestone-1/review`],
   ['/contracts/:contractId/accept', `/api/contracts/${sampleContractId}/review`],
   ['/wallet', '/api/auth/config'],
   ['/people', '/api/people'],
@@ -136,7 +138,7 @@ test('inventory API boundaries reject anonymous callers and accept the configure
     stdio: 'ignore'
   });
   const origin = `http://127.0.0.1:${nextPort}`;
-  const reads = ['/api/session', '/api/home', '/api/contracts', '/api/people', '/api/notifications', '/api/authorities', '/api/contracts/00000000-0000-4000-8000-000000000300/detail', '/api/contracts/00000000-0000-4000-8000-000000000300/review', '/api/invitations/11111111-1111-4111-8111-111111111111'];
+  const reads = ['/api/session', '/api/home', '/api/contracts', '/api/people', '/api/notifications', '/api/authorities', '/api/contracts/00000000-0000-4000-8000-000000000300/detail', '/api/contracts/00000000-0000-4000-8000-000000000300/review', '/api/contracts/00000000-0000-4000-8000-000000000300/milestones/milestone-1/review', '/api/invitations/11111111-1111-4111-8111-111111111111'];
   try {
     await waitForNext(origin, next);
     for (const entry of routeInventory) {
