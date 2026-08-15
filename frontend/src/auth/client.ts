@@ -43,11 +43,27 @@ export class ApiError extends Error {
   }
 }
 
+const AUTH_CONFIG_CACHE: { request: Promise<AuthConfig> | null } = { request: null };
+const API_GET_CACHE_TTL_MS = 15_000;
+const apiGetCache = new Map<string, { expiresAt: number; value: Promise<unknown> }>();
+
+export function clearApiRequestCache(): void {
+  apiGetCache.clear();
+}
+
 export async function getAuthConfig(): Promise<AuthConfig> {
-  const response = await fetch('/api/auth/config', { cache: 'no-store' });
-  const payload = await readPayload<AuthConfig & { error?: string }>(response);
-  if (!response.ok) throw new ApiError(payload.error ?? 'Sign-in configuration is unavailable.', response.status);
-  return payload;
+  if (!AUTH_CONFIG_CACHE.request) {
+    AUTH_CONFIG_CACHE.request = (async () => {
+      const response = await fetch('/api/auth/config', { cache: 'no-store' });
+      const payload = await readPayload<AuthConfig & { error?: string }>(response);
+      if (!response.ok) throw new ApiError(payload.error ?? 'Sign-in configuration is unavailable.', response.status);
+      return payload;
+    })().catch(error => {
+      AUTH_CONFIG_CACHE.request = null;
+      throw error;
+    });
+  }
+  return AUTH_CONFIG_CACHE.request;
 }
 
 export function createBrowserSupabase(config: AuthConfig): SupabaseClient {
@@ -69,10 +85,34 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, aut
   if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (auth.accessToken) headers.set('authorization', `Bearer ${auth.accessToken}`);
   if (auth.localTestEmail) headers.set('x-pactflow-local-test-email', auth.localTestEmail);
-  const response = await fetch(path, { ...options, headers, cache: 'no-store' });
-  const payload = await readPayload<T & { error?: string; code?: string; issues?: Array<{ sectionType?: string; fieldPath?: string; code?: string; message: string }> }>(response);
-  if (!response.ok) throw new ApiError(payload.error ?? 'The request failed.', response.status, payload.code, payload.issues);
-  return payload;
+  const method = (options.method ?? 'GET').toUpperCase();
+  const cacheKey = method === 'GET' ? `${path}\n${auth.localTestEmail ?? auth.accessToken ?? 'anonymous'}` : null;
+  if (cacheKey) {
+    const cached = apiGetCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value as Promise<T>;
+    if (cached) apiGetCache.delete(cacheKey);
+  } else {
+    clearApiRequestCache();
+  }
+
+  const request = (async () => {
+    const response = await fetch(path, { ...options, headers, cache: 'no-store' });
+    const payload = await readPayload<T & { error?: string; code?: string; issues?: Array<{ sectionType?: string; fieldPath?: string; code?: string; message: string }> }>(response);
+    if (!response.ok) throw new ApiError(payload.error ?? 'The request failed.', response.status, payload.code, payload.issues);
+    return payload;
+  })();
+
+  if (cacheKey) {
+    const entry = { expiresAt: Date.now() + API_GET_CACHE_TTL_MS, value: request as Promise<unknown> };
+    apiGetCache.set(cacheKey, entry);
+    try {
+      return await request;
+    } catch (error) {
+      if (apiGetCache.get(cacheKey) === entry) apiGetCache.delete(cacheKey);
+      throw error;
+    }
+  }
+  return request;
 }
 
 async function readPayload<T>(response: Response): Promise<T> {

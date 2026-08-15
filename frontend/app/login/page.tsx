@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { apiRequest, createBrowserSupabase, getAuthConfig, localFixtureEmail, type AuthConfig, type Profile, type SessionPayload } from '../../src/auth/client';
+import { apiRequest, clearApiRequestCache, createBrowserSupabase, getAuthConfig, localFixtureEmail, type AuthConfig, type Profile, type SessionPayload } from '../../src/auth/client';
 import { NexumLogo } from '../../src/branding/logo';
 
 type Step = 'email' | 'code' | 'account' | 'onboarding';
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [cooldown, setCooldown] = useState(0);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [restoringSession, setRestoringSession] = useState(false);
   const [busy, setBusy] = useState(false);
   const localFixture = useRef<string | null>(null);
 
@@ -45,14 +46,25 @@ export default function LoginPage() {
         if (!active) return;
         setConfig(nextConfig);
         setSupabase(client);
-        if (client) {
+        const localTestEmail = window.sessionStorage.getItem('pactflow-local-test-email');
+        if (localTestEmail) {
+          localFixture.current = localTestEmail;
+          setRestoringSession(true);
+          await loadAuthenticatedSession(null, localTestEmail);
+        } else if (client) {
           const { data: { session } } = await client.auth.getSession();
-          if (session?.access_token) await loadAuthenticatedSession(session.access_token);
+          if (session?.access_token) {
+            setRestoringSession(true);
+            await loadAuthenticatedSession(session.access_token);
+          }
         }
       } catch (error) {
         if (active) showError(error);
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setRestoringSession(false);
+        }
       }
     })();
     return () => { active = false; };
@@ -141,6 +153,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await supabase?.auth.signOut();
+      clearApiRequestCache();
       window.sessionStorage.removeItem('pactflow-local-test-email');
       localFixture.current = null;
       setProfile(null);
@@ -159,7 +172,8 @@ export default function LoginPage() {
       <header className="auth-header"><a className="brand" href="/" aria-label="NEXUM home"><NexumLogo /></a><a className="back-link" href="/">← Back to home</a></header>
       <main className="auth-main">
         <section className="auth-card" aria-labelledby="login-title">
-          {step === 'email' && <>
+          {restoringSession && <ExistingAccountLoading />}
+          {!restoringSession && step === 'email' && <>
             <p className="eyebrow">NEXUM account</p>
             <h1 id="login-title">Sign in or create your account.</h1>
             <p className="auth-intro">Use the same six-digit email code whether you are new here or returning.</p>
@@ -171,7 +185,7 @@ export default function LoginPage() {
             <p className="auth-assurance">No password to remember. We never reveal whether an email already has an account.</p>
           </>}
 
-          {step === 'code' && <section className="email-sent" aria-labelledby="email-sent-title">
+          {!restoringSession && step === 'code' && <section className="email-sent" aria-labelledby="email-sent-title">
             <div className="email-icon" aria-hidden="true">@</div>
             <p className="eyebrow">One more step</p>
             <h1 id="email-sent-title">Check your inbox.</h1>
@@ -181,7 +195,7 @@ export default function LoginPage() {
             <p className="auth-assurance">The code works for both new and returning NEXUM accounts.</p>
           </section>}
 
-          {step === 'account' && <section className="access-choice" aria-labelledby="account-choice-title">
+          {!restoringSession && step === 'account' && <section className="access-choice" aria-labelledby="account-choice-title">
             <p className="eyebrow">Signed in</p>
             <h1 id="account-choice-title">Continue as {profile?.displayName || 'your NEXUM account'}?</h1>
             <p className="auth-intro">This account is signed in on this device. Continue only if it is yours.</p>
@@ -189,7 +203,7 @@ export default function LoginPage() {
             <button className="text-button" type="button" disabled={busy} onClick={() => void useDifferentAccount()}>Use a different account</button>
           </section>}
 
-          {step === 'onboarding' && <section className="access-choice" aria-labelledby="onboarding-title">
+          {!restoringSession && step === 'onboarding' && <section className="access-choice" aria-labelledby="onboarding-title">
             <p className="eyebrow">Welcome to NEXUM</p>
             <h1 id="onboarding-title">Your NEXUM Profile is ready.</h1>
             <p className="auth-intro">Start a private Contract or join one by invitation. What you can do is defined by each Contract—not by an account role.</p>
@@ -203,4 +217,13 @@ export default function LoginPage() {
       </main>
     </div>
   );
+}
+
+function ExistingAccountLoading() {
+  return <section className="existing-account-loading" aria-live="polite" aria-busy="true">
+    <span className="loading-orbit" aria-hidden="true" />
+    <p className="eyebrow">NEXUM account</p>
+    <h1>Checking your existing account.</h1>
+    <p className="auth-intro">We found a sign-in session on this device. Loading your Profile securely...</p>
+  </section>;
 }

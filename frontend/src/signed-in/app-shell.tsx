@@ -8,6 +8,7 @@ import { getBrowserAuth, resolvePrivateAvatar, signOutBrowser } from '../auth/br
 import { NexumLogo } from '../branding/logo';
 import { avatarAppearance, profileInitials, profileLabel } from '../profile/presentation';
 import { signedInNavigation } from './navigation';
+import { createPromiseCache } from './promise-cache';
 
 type AuthStatus = 'loading' | 'ready' | 'error';
 type NotificationSummary = { unreadCount: number };
@@ -24,8 +25,27 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue>({ status: 'loading', auth: null, profile: null, updateProfile: () => undefined, markNotificationRead: () => undefined, notifications: null, notificationError: false, error: null });
 
+const signedInBootstrap = createPromiseCache(async () => {
+  const auth = await getBrowserAuth();
+  const session = await apiRequest<SessionPayload>('/api/session', {}, auth);
+  return { auth, profile: session.user.profile };
+});
+
+export function resetSignedInBootstrap(): void {
+  signedInBootstrap.clear();
+}
+
 export function useSignedInAuth(): AuthContextValue {
   return useContext(AuthContext);
+}
+
+function isPublicRoute(pathname: string): boolean {
+  return pathname === '/' || pathname === '/login' || pathname === '/invitations' || pathname.startsWith('/invitations/');
+}
+
+export function SignedInRouteBoundary({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? '/';
+  return isPublicRoute(pathname) ? children : <SignedInShell>{children}</SignedInShell>;
 }
 
 type NavigationIcon = 'dashboard' | 'contracts' | 'wallet' | 'people' | 'bell' | 'settings';
@@ -60,7 +80,7 @@ function Navigation({ label, pathname, className = 'app-nav' }: { label: string;
   return (
     <nav className={className} aria-label={label}>
       {navigation.map(item => (
-        <Link key={item.href} href={item.href} aria-current={isActive(pathname, item.href) ? 'page' : undefined}><span className="nav-icon"><NavigationIconSvg icon={item.icon} /></span><span>{item.label}</span></Link>
+        <Link key={item.href} href={item.href} prefetch aria-current={isActive(pathname, item.href) ? 'page' : undefined}><span className="nav-icon"><NavigationIconSvg icon={item.icon} /></span><span>{item.label}</span></Link>
       ))}
     </nav>
   );
@@ -163,22 +183,11 @@ export function SignedInShell({ children }: { children: ReactNode }) {
     let active = true;
     void (async () => {
       try {
-        const nextAuth = await getBrowserAuth();
-        const session = await apiRequest<SessionPayload>('/api/session', {}, nextAuth);
+        const nextBootstrap = await signedInBootstrap.load();
         if (!active) return;
-        setAuth(nextAuth);
-        setProfile(session.user.profile);
+        setAuth(nextBootstrap.auth);
+        setProfile(nextBootstrap.profile);
         setStatus('ready');
-        void apiRequest<{ notifications: NotificationSummary }>('/api/notifications', {}, nextAuth)
-          .then(notificationResult => {
-            if (!active) return;
-            setNotifications(notificationResult.notifications);
-            setNotificationError(false);
-          })
-          .catch(() => {
-            if (!active) return;
-            setNotificationError(true);
-          });
       } catch (requestError) {
         if (!active) return;
         setError(requestError instanceof Error ? requestError.message : 'Your sign-in session is unavailable. Please sign in again.');
@@ -187,6 +196,22 @@ export function SignedInShell({ children }: { children: ReactNode }) {
     })();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (status !== 'ready' || !auth) return;
+    let active = true;
+    void apiRequest<{ notifications: NotificationSummary }>('/api/notifications', {}, auth)
+      .then(notificationResult => {
+        if (!active) return;
+        setNotifications(notificationResult.notifications);
+        setNotificationError(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setNotificationError(true);
+      });
+    return () => { active = false; };
+  }, [auth, status]);
 
   const updateProfile = useCallback((nextProfile: Profile) => setProfile(nextProfile), []);
   const markNotificationRead = useCallback(() => setNotifications(current => current ? { unreadCount: Math.max(0, current.unreadCount - 1) } : current), []);

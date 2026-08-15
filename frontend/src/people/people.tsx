@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { apiRequest, type ApiError, type AuthHeaders } from '../auth/client';
 import { useSignedInAuth } from '../signed-in/app-shell';
 
@@ -108,6 +108,7 @@ export function PeoplePage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyProfileId, setBusyProfileId] = useState<string | null>(null);
+  const initialLoad = useRef(true);
 
   const loadPeople = useCallback(async (search: string, currentAuth: AuthHeaders) => {
     setLoading(true);
@@ -125,7 +126,9 @@ export function PeoplePage() {
 
   useEffect(() => {
     if (status !== 'ready' || !auth) return;
-    const timer = window.setTimeout(() => { void loadPeople(query, auth); }, 220);
+    const delay = initialLoad.current ? 0 : 220;
+    initialLoad.current = false;
+    const timer = window.setTimeout(() => { void loadPeople(query, auth); }, delay);
     return () => window.clearTimeout(timer);
   }, [auth, loadPeople, query, status]);
 

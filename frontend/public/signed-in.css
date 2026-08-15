@@ -457,6 +457,61 @@ select { width: 100%; border: 1px solid #d3d8e3; border-radius: 8px; background:
 .bottom-nav,
 .drawer { display: none; }
 
+.route-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  background: var(--pf-paper);
+  color: var(--pf-muted);
+  font-size: 13px;
+}
+
+.navigation-loading {
+  position: fixed;
+  z-index: 1000;
+  top: 16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border: 1px solid var(--pf-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 8px 26px rgba(29, 41, 57, .14);
+  color: var(--pf-muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.navigation-loading-spinner {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #dfe3ee;
+  border-top-color: var(--pf-accent);
+  border-radius: 50%;
+  animation: nexum-spin 720ms linear infinite;
+}
+
+.loading-orbit {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #dfe3ee;
+  border-top-color: var(--pf-accent);
+  border-radius: 50%;
+  animation: nexum-spin 720ms linear infinite;
+}
+
+@keyframes nexum-spin {
+  to { transform: rotate(360deg); }
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,

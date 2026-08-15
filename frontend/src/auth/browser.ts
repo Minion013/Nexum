@@ -1,9 +1,10 @@
-import { createBrowserSupabase, getAuthConfig, type AuthHeaders } from './client';
+import { clearApiRequestCache, createBrowserSupabase, getAuthConfig, type AuthHeaders } from './client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { privateAvatarUrl } from '../profile/private-avatar';
 
 const localFixtureStorageKey = 'pactflow-local-test-email';
 let browserClient: SupabaseClient | null = null;
+const avatarCache = new Map<string, { expiresAt: number; url: string | null }>();
 
 export async function getBrowserSupabase(): Promise<SupabaseClient> {
   if (browserClient) return browserClient;
@@ -26,6 +27,7 @@ export async function getBrowserAuth(): Promise<AuthHeaders> {
 export async function signOutBrowser(auth: AuthHeaders): Promise<void> {
   if (typeof window === 'undefined') return;
   window.sessionStorage.removeItem(localFixtureStorageKey);
+  clearApiRequestCache();
   if (auth.accessToken) {
     await (await getBrowserSupabase()).auth.signOut();
   }
@@ -33,7 +35,11 @@ export async function signOutBrowser(auth: AuthHeaders): Promise<void> {
 
 export async function resolvePrivateAvatar(profile: { avatarPath?: string | null }, auth: AuthHeaders): Promise<string | null> {
   if (!profile.avatarPath || auth.localTestEmail) return null;
-  return privateAvatarUrl(profile, await getBrowserSupabase());
+  const cached = avatarCache.get(profile.avatarPath);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
+  const url = await privateAvatarUrl(profile, await getBrowserSupabase());
+  avatarCache.set(profile.avatarPath, { expiresAt: Date.now() + 50 * 60 * 1000, url });
+  return url;
 }
 
 export async function uploadPrivateAvatar(file: File, profileId: string, auth: AuthHeaders): Promise<string> {
@@ -44,5 +50,6 @@ export async function uploadPrivateAvatar(file: File, profileId: string, auth: A
   const path = `${profileId}/avatar.${extension}`;
   const { error } = await (await getBrowserSupabase()).storage.from('profile-images').upload(path, file, { upsert: true, contentType: file.type });
   if (error) throw new Error('Your profile image was not uploaded. Your existing avatar remains unchanged.');
+  avatarCache.delete(path);
   return path;
 }

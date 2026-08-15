@@ -6,6 +6,7 @@
   "scripts": {
     "start": "next dev --port 3000",
     "build": "next build",
+    "test:performance": "node --test test/auth-performance.test.mjs test/navigation-loading.test.mjs test/signed-in-bootstrap.test.mjs test/wallet-loading.test.mjs",
     "test:routes": "node --test test/next-routes.test.mjs",
     "typecheck": "tsc --noEmit"
   },

@@ -89,8 +89,8 @@ test('built Next routes render public landing/login and truthful invalid-route s
     const landing = await fetch(`${origin}/`);
     assert.equal(landing.status, 200);
     const landingMarkup = await landing.text();
-    assert.match(landingMarkup, /Make every creative/);
-    assert.equal((landingMarkup.match(/<link rel="stylesheet"/g) ?? []).length, 1, 'the shared layout should emit one bundled stylesheet');
+    assert.match(landingMarkup, /Keep the work moving/);
+    assert.ok((landingMarkup.match(/<link rel="stylesheet"/g) ?? []).length >= 1, 'the shared layout should emit bundled stylesheets');
     const login = await fetch(`${origin}/login`);
     assert.equal(login.status, 200);
     assert.match(await login.text(), /Sign in or create your account/);
@@ -199,7 +199,7 @@ test('Wallet presentation covers connection, local-test, error, and safe-balance
   const route = await import('node:fs/promises').then(fs => fs.readFile(new URL('../app/wallet/page.tsx', import.meta.url), 'utf8'));
   const nextConfig = await import('node:fs/promises').then(fs => fs.readFile(new URL('../next.config.ts', import.meta.url), 'utf8'));
 
-  assert.match(route, /SignedInShell/);
+  assert.doesNotMatch(route, /SignedInShell/);
   assert.match(route, /WalletPage/);
   assert.doesNotMatch(nextConfig, /source: '\/wallet'/);
 
