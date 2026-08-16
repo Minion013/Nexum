@@ -14,7 +14,7 @@ const review = {
     title: 'Research',
     deliveryOutcome: 'Annotated research findings',
     evidenceRequirement: 'Private annotated findings.',
-    acceptanceCriteria: [{ description: 'Research findings are documented.', required: true }],
+    acceptanceCriteria: [{ id: 1, description: 'Research findings are documented.', required: true, checked: false }],
     deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z',
     reviewWindowHours: 72
   },
@@ -28,13 +28,15 @@ const review = {
 test('Milestone Review presentation exposes Evidence and Activity without implying payment authority', () => {
   const presentation = milestoneReviewPresentation(review, new Date('2030-09-03T09:00:00.000Z'));
 
-  assert.deepEqual(presentation.tabs.map(tab => tab.id), ['evidence', 'activity']);
+  assert.deepEqual(presentation.tabs.map(tab => tab.id), ['evidence', 'criteria', 'activity']);
   assert.equal(presentation.status.label, 'Evidence submitted');
   assert.equal(presentation.reviewWindow.label, 'Review window open');
   assert.equal(presentation.evidence[0].resourceLabel, 'research-notes.pdf');
   assert.equal(presentation.evidence[0].protectedReference, 'Protected resource reference');
   assert.match(presentation.activity[0].detail, /submitted/i);
   assert.match(presentation.paymentBoundary, /does not move funds|not a payment/i);
+  assert.equal(presentation.criteria[0].checked, false);
+  assert.equal(presentation.canAccept, false);
 });
 
 test('an unsubmitted Service Provider review keeps the final evidence action available only inside the delivery window', () => {

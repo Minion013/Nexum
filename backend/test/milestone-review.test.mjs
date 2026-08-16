@@ -53,6 +53,10 @@ test('Milestone Review API preserves Contract Party access and rejects non-parti
         calls.push({ operation: 'submit', input });
         if (input.userId !== 'provider-id') throw new AuthorizationError('Only the authorised Service Provider can submit milestone evidence.');
         return { ...review, evidence: [{ id: 'evidence-1', submittedByProfileId: 'provider-id', submittedAt: '2030-09-02T09:00:00.000Z', resource: input.resource, integrityReference: input.integrityReference }], canSubmitEvidence: false };
+      },
+      recordMilestoneReviewDecision: async input => {
+        calls.push({ operation: 'decision', input });
+        throw new AuthorizationError('Only the authorised Buyer can make milestone review decisions.');
       }
     }
   });
@@ -79,8 +83,78 @@ test('Milestone Review API preserves Contract Party access and rejects non-parti
     });
     assert.equal(submitted.status, 201);
     assert.equal((await submitted.json()).review.evidence[0].resource.protectedLocator, 'contracts/contract-id/milestone-1/private.zip');
-    assert.deepEqual(calls.map(call => call.operation), ['review', 'review', 'submit']);
+    const decision = await request(origin, '/api/contracts/contract-id/milestones/milestone-1/decisions', {
+      token: 'party-jwt',
+      method: 'POST',
+      body: { action: 'accept' }
+    });
+    assert.equal(decision.status, 403);
+    assert.deepEqual(calls.map(call => call.operation), ['review', 'review', 'submit', 'decision']);
     assert.equal(calls[1].input.milestoneKey, 'milestone-1');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('the tracker local test email can record buyer review decisions with criteria gating', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  const reviewUrl = '/api/contracts/00000000-0000-0000-0000-000000000902/milestones/milestone-1/review';
+  const decisionsUrl = '/api/contracts/00000000-0000-0000-0000-000000000902/milestones/milestone-1/decisions';
+  try {
+    const initial = await request(origin, reviewUrl, { headers });
+    assert.equal(initial.status, 200);
+    const initialReview = (await initial.json()).review;
+    assert.equal(initialReview.responsibility, 'Buyer');
+    assert.deepEqual(initialReview.criteria, [{ id: 1, description: 'Research findings are documented.', required: true, checked: false }]);
+    assert.equal(initialReview.canAccept, false);
+    assert.equal(initialReview.canRequestRevision, true);
+    assert.equal(initialReview.canRaiseDispute, true);
+
+    const prematureAcceptance = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'accept' } });
+    assert.equal(prematureAcceptance.status, 422);
+    assert.match((await prematureAcceptance.json()).error, /every required Acceptance Criterion/i);
+
+    const revision = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'request_revision', reason: 'Please add the missing source notes.' } });
+    assert.equal(revision.status, 201);
+    const afterRevision = (await revision.json()).review;
+    assert.equal(afterRevision.activity.at(-1).type, 'revision_requested');
+    assert.equal(afterRevision.activity.at(-1).detail, 'Please add the missing source notes.');
+    assert.equal(afterRevision.canAccept, false);
+
+    const checked = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'check_criterion', criterionId: 1, checked: true } });
+    assert.equal(checked.status, 201);
+    const afterCheck = (await checked.json()).review;
+    assert.equal(afterCheck.criteria[0].checked, true);
+    assert.equal(afterCheck.activity.at(-1).type, 'criterion_checked');
+    assert.equal(afterCheck.canAccept, true);
+
+    const accepted = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'accept' } });
+    assert.equal(accepted.status, 201);
+    const afterAcceptance = (await accepted.json()).review;
+    assert.equal(afterAcceptance.activity.at(-1).type, 'accepted');
+    assert.equal(afterAcceptance.decisionState.accepted, true);
+    assert.equal(afterAcceptance.canAccept, false);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('a Buyer can open a dispute without completing criteria, and the activity is protected', async () => {
+  const localTestProfile = localTestProfileFromEnvironment({ PACTFLOW_LOCAL_TEST_EMAIL: 'pactflow-wallet-test@local.invalid' });
+  const { server, origin } = await start({ localTestProfile });
+  const headers = { 'x-pactflow-local-test-email': localTestProfile.email };
+  const decisionsUrl = '/api/contracts/00000000-0000-0000-0000-000000000902/milestones/milestone-1/decisions';
+  try {
+    const dispute = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'open_dispute', reason: 'The submitted outcome does not match the agreed scope.' } });
+    assert.equal(dispute.status, 201);
+    const review = (await dispute.json()).review;
+    assert.equal(review.criteria[0].checked, false);
+    assert.equal(review.activity.at(-1).type, 'dispute_opened');
+    assert.equal(review.activity.at(-1).detail, 'The submitted outcome does not match the agreed scope.');
+    assert.equal(review.decisionState.disputeOpen, true);
+    assert.equal(review.canAccept, false);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
@@ -145,4 +219,6 @@ test('the durable workflow reads the protected review model and submits through 
   const submitted = await workflow.submitMilestoneEvidence({ userId: 'provider-id', accessToken: 'provider-jwt', contractId: 'contract-id', milestoneKey: 'milestone-1', resource: { name: 'findings.pdf', kind: 'document', mediaType: 'application/pdf', sizeBytes: 100, protectedLocator: 'contracts/contract-id/milestone-1/findings.pdf' }, integrityReference: 'sha256:' + '2'.repeat(64) });
   assert.equal(submitted.id, 'contract-id');
   assert.deepEqual(calls.find(call => call.operation === 'rpc'), { operation: 'rpc', name: 'submit_milestone_evidence', args: { target_contract_id: 'contract-id', target_milestone_key: 'milestone-1', resource_metadata: { name: 'findings.pdf', kind: 'document', mediaType: 'application/pdf', sizeBytes: 100, protectedLocator: 'contracts/contract-id/milestone-1/findings.pdf' }, integrity_reference: 'sha256:' + '2'.repeat(64) } });
+  await workflow.recordMilestoneReviewDecision({ userId: 'buyer-id', accessToken: 'buyer-jwt', contractId: 'contract-id', milestoneKey: 'milestone-1', action: 'check_criterion', criterionId: 1, checked: true });
+  assert.deepEqual(calls.find(call => call.operation === 'rpc' && call.name === 'record_milestone_review_decision'), { operation: 'rpc', name: 'record_milestone_review_decision', args: { target_contract_id: 'contract-id', target_milestone_key: 'milestone-1', decision_action: 'check_criterion', criterion_id: 1, criterion_checked: true, decision_reason: null } });
 });
