@@ -6,15 +6,11 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { apiRequest, type ApiError, type AuthHeaders } from '../auth/client';
 import { useSignedInAuth } from '../signed-in/app-shell';
 import { acceptedCounterparties, normalizeExactEmail, type CounterpartyConnection } from './authoring-entry-presentation';
+import { DraftStepper } from './draft-components';
 
 type PeoplePayload = { people: { connections: Connection[] } };
 type DraftPayload = { contract: { id: string; sections?: { parties?: { counterparty_email?: string | null } }; status: string } };
 type Connection = CounterpartyConnection;
-
-function Stepper({ existing }: { existing: boolean }) {
-  const steps = ['Choose Person', 'Project details', 'Review terms', 'Send'];
-  return <ol className="contract-stepper" aria-label="Contract Draft steps">{steps.map((step, index) => <li key={step} aria-current={index === 0 ? 'step' : undefined}><span>{index + 1}. </span>{step}{existing && index > 0 ? ' · available next' : ''}</li>)}</ol>;
-}
 
 function LoadingState({ existing }: { existing: boolean }) {
   return <section className="app-panel" aria-busy="true"><p className="eyebrow">Contract Draft</p><h1>Loading {existing ? 'the authorised draft' : 'counterparty choices'}...</h1><p className="empty" role="status">Preparing the protected authoring entry.</p></section>;
@@ -113,7 +109,7 @@ export function AuthoringEntryPage({ contractId }: { contractId?: string }) {
   if (status === 'loading' || loading) return <LoadingState existing={existing} />;
   if (error && existing && !savedEmail) return <section className="app-panel" aria-labelledby="authoring-error-title"><p className="eyebrow">Contract Draft</p><h1 id="authoring-error-title">This authoring entry is unavailable.</h1><p className="page-intro" role="alert">{error}</p><Link className="button" href="/contracts">Back to Contracts</Link></section>;
 
-  return <section className="contract-authoring-flow app-panel" aria-labelledby="authoring-title"><Stepper existing={existing} /><p className="eyebrow">Contract Draft</p><h1 id="authoring-title">Who should be part of this Contract?</h1><p className="page-intro">Choose the Contract Party, invite someone by exact email, or continue with a private draft. You can add additional viewers later; access is granted only when you send an invitation.</p>
+  return <section className="contract-authoring-flow app-panel" aria-labelledby="authoring-title"><DraftStepper current="Choose Person" /><p className="eyebrow">Step 1 of 4 · Choose Person</p><h1 id="authoring-title">Who should be part of this Contract?</h1><p className="page-intro">Choose the Contract Party, invite someone by exact email, or continue with a private draft. You can add additional viewers later; access is granted only when you send an invitation.</p>
     {savedEmail && <p className="notice" role="status">This authorised draft already names <strong>{savedEmail}</strong>. Continue to Project details when you are ready.</p>}
     <form onSubmit={submit}>
       {!existing && <fieldset><legend>Choose an accepted Person</legend>{connections.length ? <><label className="sr-only" htmlFor="person-search">Search people</label><input id="person-search" type="search" value={personSearch} onChange={event => setPersonSearch(event.target.value)} placeholder="Search contacts by name or email" autoComplete="off" /><div className="person-list">{filteredConnections.length ? filteredConnections.map(connection => <button className="person-choice" type="button" key={connection.other_profile_id} aria-pressed={selectedPersonId === connection.other_profile_id} onClick={() => choosePerson(connection)}><span className="person-avatar" aria-hidden="true">{(connection.display_name?.trim() || 'P').slice(0, 1).toUpperCase()}</span><span><strong>{connection.display_name?.trim() || 'NEXUM Profile'}</strong><small>{connection.email}</small></span></button>) : <p className="empty">No people match that search.</p>}</div></> : <p className="empty">No accepted People are available yet. Use an exact email below.</p>}</fieldset>}

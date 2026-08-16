@@ -279,7 +279,7 @@
 .contract-authoring-flow > .draft-form,
 .contract-authoring-flow > .send-card,
 .contract-authoring-flow > .draft-actions,
-.contract-authoring-flow > p:not(.eyebrow) { width: min(100%, 760px); margin-inline: auto; }
+.contract-authoring-flow > p:not(.eyebrow):not(.sr-only) { width: min(100%, 760px); margin-inline: auto; }
 
 .contract-authoring-flow > .eyebrow { width: min(100%, 760px); margin-inline: auto; }
 .contract-authoring-flow > h1 { width: min(100%, 760px); margin-inline: auto; }

@@ -48,6 +48,19 @@ export type MilestoneReview = {
   canRelease?: boolean;
 };
 
+export type MilestoneReviewTab = 'evidence' | 'criteria' | 'activity';
+
+const milestoneReviewTabOrder: MilestoneReviewTab[] = ['evidence', 'criteria', 'activity'];
+
+export function nextMilestoneReviewTab(current: MilestoneReviewTab, key: string): MilestoneReviewTab | null {
+  const index = milestoneReviewTabOrder.indexOf(current);
+  if (key === 'Home') return milestoneReviewTabOrder[0];
+  if (key === 'End') return milestoneReviewTabOrder.at(-1) ?? null;
+  if (key !== 'ArrowRight' && key !== 'ArrowLeft') return null;
+  const offset = key === 'ArrowRight' ? 1 : -1;
+  return milestoneReviewTabOrder[(index + offset + milestoneReviewTabOrder.length) % milestoneReviewTabOrder.length];
+}
+
 const dateFormatter = new Intl.DateTimeFormat('en-SG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
 const numberFormatter = new Intl.NumberFormat('en-US');
 
