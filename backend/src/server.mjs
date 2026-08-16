@@ -21,6 +21,7 @@ const coPilotMilestoneReviewWindowHours = 72;
 const coPilotAuthorityNotice = 'These are editable drafting suggestions. The co-pilot cannot approve terms, move funds, release funds, judge quality, or resolve disputes.';
 const milestoneEvidenceResourceKinds = ['document', 'repository', 'design', 'other'];
 const milestoneEvidenceIntegrityPattern = /^sha(?:256|512):[a-f0-9]+$/;
+const chainSettlementStatuses = ['secured', 'paid', 'released'];
 
 export function contractAcceptanceTypedData({ contractId, versionId, versionHash }) {
   return {
@@ -468,10 +469,11 @@ function createLocalContractsFixture(localTestProfile = { id: '00000000-0000-400
       revisionRequested: activity.some(item => item.type === 'revision_requested'),
       disputeOpen: activity.some(item => item.type === 'dispute_opened')
     };
-    const reviewWindow = evidence[0]?.submittedAt ? { submittedAt: evidence[0].submittedAt, expiresAt: new Date(Date.parse(evidence[0].submittedAt) + Number(milestone.reviewWindowHours) * 60 * 60 * 1_000).toISOString(), state: Date.parse(evidence[0].submittedAt) + Number(milestone.reviewWindowHours) * 60 * 60 * 1_000 <= Date.now() ? 'expired' : 'open' } : null;
+    const reviewWindow = evidence[0]?.submittedAt ? { submittedAt: evidence[0].submittedAt, expiresAt: new Date(Date.parse(evidence[0].submittedAt) + Number(milestone.reviewWindowHours) * 60 * 60 * 1_000).toISOString(), state: Date.parse(evidence[0].submittedAt) + Number(milestone.reviewWindowHours) * 60 * 60 * 1_000 <= Date.now() ? 'expired' : 'open', durationHours: Number(milestone.reviewWindowHours) } : null;
     const canReviewDecisions = isBuyer && contract.status === 'active' && evidence.length > 0 && !decisionState.accepted && !decisionState.disputeOpen;
     const requiredCriteria = criteria.filter(criterion => criterion.required !== false);
     const allRequiredCriteriaChecked = requiredCriteria.length > 0 && requiredCriteria.every(criterion => criterion.checked);
+    const releaseEligible = reviewWindow?.state === 'expired';
     return {
       id: contract.id,
       status: contract.status,
@@ -483,6 +485,15 @@ function createLocalContractsFixture(localTestProfile = { id: '00000000-0000-400
       activity,
       criteria,
       reviewWindow,
+      releaseEligible,
+      settlement: {
+        status: 'proposed',
+        source: 'draft_contract_version',
+        chainAuthoritative: false,
+        ...(Number.isSafeInteger(Number(milestone.allocation)) ? { proposedAllocation: Number(milestone.allocation) } : {}),
+        ...(typeof contract.sections.payment?.settlementToken === 'string' ? { proposedToken: contract.sections.payment.settlementToken } : {}),
+        detail: 'This is a proposed Contract term only; it is not secured, paid, released, or personal wallet funds.'
+      },
       decisionState,
       canCheckCriteria: canReviewDecisions,
       canAccept: canReviewDecisions && allRequiredCriteriaChecked && reviewWindow?.state === 'open',
@@ -1043,13 +1054,49 @@ function mapContractReview(contract) {
   };
 }
 
-export function mapMilestoneReview({ contract, milestoneKey, evidence = [], activity = [], userId, now = new Date() }) {
+function mapMilestoneSettlement({ paymentTerms, milestone, version, approvedVersion, chainSettlement }) {
+  const proposedAllocation = Number(milestone.allocation);
+  const proposedTerms = {
+    ...(Number.isSafeInteger(proposedAllocation) && proposedAllocation > 0 ? { proposedAllocation } : {}),
+    ...(typeof paymentTerms?.settlementToken === 'string' && paymentTerms.settlementToken.trim() ? { proposedToken: paymentTerms.settlementToken.trim() } : {})
+  };
+  const isApprovedVersion = approvedVersion?.id === version.id;
+  const hasAuthoritativeChainState = isApprovedVersion
+    && chainSettlement?.chainAuthoritative === true
+    && chainSettlement.contractVersionId === version.id
+    && chainSettlementStatuses.includes(chainSettlement.status);
+  if (hasAuthoritativeChainState) {
+    return {
+      status: chainSettlement.status,
+      source: 'chain',
+      chainAuthoritative: true,
+      ...proposedTerms,
+      ...(typeof chainSettlement.vaultAddress === 'string' && chainSettlement.vaultAddress.trim() ? { vaultAddress: chainSettlement.vaultAddress.trim() } : {}),
+      ...(chainSettlement.securedAmount !== undefined ? { securedAmount: chainSettlement.securedAmount } : {}),
+      ...(chainSettlement.paidAmount !== undefined ? { paidAmount: chainSettlement.paidAmount } : {}),
+      ...(chainSettlement.releasedAmount !== undefined ? { releasedAmount: chainSettlement.releasedAmount } : {}),
+      detail: 'This value is supplied by the approved Contract Version and chain-authoritative Escrow Vault state.'
+    };
+  }
+  return {
+    status: isApprovedVersion ? 'not_available' : 'proposed',
+    source: isApprovedVersion ? 'accepted_contract_version' : 'draft_contract_version',
+    chainAuthoritative: false,
+    ...proposedTerms,
+    detail: isApprovedVersion
+      ? 'The approved Contract Version is recorded, but no chain-authoritative Contract Escrow Vault state is available.'
+      : 'This is a proposed Contract term only; it is not secured, paid, released, or personal wallet funds.'
+  };
+}
+
+export function mapMilestoneReview({ contract, milestoneKey, evidence = [], activity = [], userId, now = new Date(), chainSettlement }) {
   const versions = [...(contract.contract_versions ?? [])].sort((left, right) => right.version_number - left.version_number);
   const acceptedVersion = versions.find(version => Array.isArray(version.contract_acceptances) && version.contract_acceptances.length >= 2);
   const version = acceptedVersion ?? versions[0];
   if (!version) throw new ValidationError('This Milestone Review has no readable Contract Version.');
   const sections = new Map((version.contract_sections ?? []).map(section => [section.section_type, section.terms ?? {}]));
   const milestones = sections.get('milestones')?.items ?? [];
+  const paymentTerms = sections.get('payment') ?? {};
   const milestoneNumber = Number(requiredMilestoneKey(milestoneKey).slice('milestone-'.length));
   const sourceMilestone = milestones[milestoneNumber - 1];
   if (!sourceMilestone) throw new ValidationError('This Milestone Review is unavailable.');
@@ -1073,7 +1120,8 @@ export function mapMilestoneReview({ contract, milestoneKey, evidence = [], acti
   const reviewWindow = Number.isFinite(firstEvidenceAt) && Number.isFinite(reviewWindowMs) ? {
     submittedAt: mappedEvidence[0].submittedAt,
     expiresAt: new Date(firstEvidenceAt + reviewWindowMs).toISOString(),
-    state: firstEvidenceAt + reviewWindowMs <= now.getTime() ? 'expired' : 'open'
+    state: firstEvidenceAt + reviewWindowMs <= now.getTime() ? 'expired' : 'open',
+    durationHours: Number(sourceMilestone.reviewWindowHours)
   } : null;
   const criteria = (sourceMilestone.acceptanceCriteria ?? []).map((criterion, index) => {
     const latestCheck = [...mappedActivity].filter(item => item.type === 'criterion_checked' && Number(item.criterionId) === index + 1).sort((left, right) => Date.parse(left.occurredAt || '') - Date.parse(right.occurredAt || '') || String(left.id).localeCompare(String(right.id))).at(-1);
@@ -1089,6 +1137,7 @@ export function mapMilestoneReview({ contract, milestoneKey, evidence = [], acti
   const canReviewDecisions = isParty && isBuyer && contract.status === 'active' && mappedEvidence.length > 0 && !decisionState.accepted && !decisionState.disputeOpen;
   const requiredCriteria = criteria.filter(criterion => criterion.required);
   const allRequiredCriteriaChecked = requiredCriteria.length > 0 && requiredCriteria.every(criterion => criterion.checked);
+  const releaseEligible = reviewWindow?.state === 'expired';
   return {
     id: contract.id,
     status: contract.status,
@@ -1100,6 +1149,8 @@ export function mapMilestoneReview({ contract, milestoneKey, evidence = [], acti
     activity: mappedActivity,
     criteria,
     reviewWindow,
+    releaseEligible,
+    settlement: mapMilestoneSettlement({ paymentTerms, milestone: sourceMilestone, version, approvedVersion: acceptedVersion, chainSettlement }),
     decisionState,
     canCheckCriteria: canReviewDecisions,
     canAccept: canReviewDecisions && allRequiredCriteriaChecked && reviewWindow?.state === 'open',

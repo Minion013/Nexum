@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AuthorizationError, createApp, createContractWorkflow, localTestProfileFromEnvironment } from '../src/server.mjs';
+import { AuthorizationError, createApp, createContractWorkflow, localTestProfileFromEnvironment, mapMilestoneReview } from '../src/server.mjs';
 
 async function start(options) {
   const server = createApp(options);
@@ -34,6 +34,64 @@ const review = {
   evidence: [],
   activity: [{ id: 'activity-1', type: 'contract_activated', occurredAt: '2030-09-01T09:00:00.000Z', detail: 'Contract milestone review is available.' }]
 };
+
+const settlementReviewContract = {
+  id: 'contract-id',
+  status: 'active',
+  created_by_profile_id: 'buyer-id',
+  contract_parties: [{ id: 'buyer-party', profile_id: 'buyer-id' }, { id: 'provider-party', profile_id: 'provider-id' }],
+  contract_versions: [{
+    id: 'version-id',
+    version_number: 2,
+    contract_acceptances: [{ contract_party_id: 'buyer-party' }, { contract_party_id: 'provider-party' }],
+    contract_sections: [
+      { section_type: 'parties', position: 0, terms: { buyer: { partyRef: 'initiating_party' }, serviceProvider: { partyRef: 'counterparty' } } },
+      { section_type: 'milestones', position: 1, terms: { items: [{ title: 'Research', allocation: 400, acceptanceCriteria: [{ description: 'Findings are complete.', required: true }], deliveryDeadlineUtc: '2030-09-10T09:00:00.000Z', reviewWindowHours: 72 }] } },
+      { section_type: 'payment', position: 2, terms: { settlementToken: 'MockEUSD', totalAllocation: 400 } }
+    ]
+  }]
+};
+
+const settlementReviewEvidence = [{ contract_version_id: 'version-id', milestone_key: 'milestone-1', id: 'evidence-id', submitted_by_profile_id: 'provider-id', submitted_at: '2030-09-02T09:00:00.000Z', resource_metadata: { name: 'findings.pdf' }, integrity_reference: null }];
+
+test('Milestone Review derives countdown and release eligibility from versioned evidence timing, while withholding non-authoritative payment values', () => {
+  const expired = mapMilestoneReview({ contract: settlementReviewContract, milestoneKey: 'milestone-1', evidence: settlementReviewEvidence, userId: 'buyer-id', now: new Date('2030-09-06T09:00:00.000Z') });
+
+  assert.deepEqual(expired.reviewWindow, { submittedAt: '2030-09-02T09:00:00.000Z', expiresAt: '2030-09-05T09:00:00.000Z', state: 'expired', durationHours: 72 });
+  assert.equal(expired.releaseEligible, true);
+  assert.equal(expired.canRelease, false);
+  assert.deepEqual(expired.settlement, {
+    status: 'not_available',
+    source: 'accepted_contract_version',
+    chainAuthoritative: false,
+    proposedAllocation: 400,
+    proposedToken: 'MockEUSD',
+    detail: 'The approved Contract Version is recorded, but no chain-authoritative Contract Escrow Vault state is available.'
+  });
+
+  const chainBacked = mapMilestoneReview({
+    contract: settlementReviewContract,
+    milestoneKey: 'milestone-1',
+    evidence: settlementReviewEvidence,
+    userId: 'buyer-id',
+    now: new Date('2030-09-03T09:00:00.000Z'),
+    chainSettlement: { contractVersionId: 'version-id', chainAuthoritative: true, status: 'secured', vaultAddress: '0xvault', securedAmount: 400 }
+  });
+  assert.equal(chainBacked.settlement.status, 'secured');
+  assert.equal(chainBacked.settlement.vaultAddress, '0xvault');
+  assert.equal(chainBacked.settlement.securedAmount, 400);
+
+  const mismatched = mapMilestoneReview({
+    contract: settlementReviewContract,
+    milestoneKey: 'milestone-1',
+    evidence: settlementReviewEvidence,
+    userId: 'buyer-id',
+    chainSettlement: { contractVersionId: 'another-version-id', chainAuthoritative: true, status: 'secured', vaultAddress: '0xuntrusted', securedAmount: 400 }
+  });
+  assert.equal(mismatched.settlement.chainAuthoritative, false);
+  assert.equal('vaultAddress' in mismatched.settlement, false);
+  assert.equal('securedAmount' in mismatched.settlement, false);
+});
 
 test('Milestone Review API preserves Contract Party access and rejects non-parties and unsafe evidence', async () => {
   const calls = [];
@@ -111,6 +169,8 @@ test('the tracker local test email can record buyer review decisions with criter
     assert.equal(initialReview.canAccept, false);
     assert.equal(initialReview.canRequestRevision, true);
     assert.equal(initialReview.canRaiseDispute, true);
+    assert.equal(initialReview.releaseEligible, false);
+    assert.equal(initialReview.settlement.status, 'proposed');
 
     const prematureAcceptance = await request(origin, decisionsUrl, { method: 'POST', headers, body: { action: 'accept' } });
     assert.equal(prematureAcceptance.status, 422);
